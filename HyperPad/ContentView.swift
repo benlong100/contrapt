@@ -20,6 +20,8 @@ struct ContentView: View {
     @State private var messageBoxText: String?
     @State private var scriptErrorText: String?
     @State private var undoFlushTask: Task<Void, Never>?
+    /// Editing habit, not document data — persists across stacks.
+    @AppStorage("snapToGuides") private var isSnappingEnabled = true
 
     /// The mutation choke point: every edit anywhere in the view tree —
     /// drags, typing, inspector fields, script effects — writes through
@@ -50,6 +52,7 @@ struct ContentView: View {
                     stack: stack,
                     cardIndex: cardIndex,
                     isEditing: isEditing,
+                    isSnappingEnabled: isSnappingEnabled,
                     selectedPartID: $selectedPartID,
                     onButtonTap: runMouseUp,
                     onOpenInspector: { isInspectorPresented = true }
@@ -108,6 +111,10 @@ struct ContentView: View {
                         }
                         .disabled(document.stack.cards.count <= 1)
                     }
+                    Toggle(isOn: $isSnappingEnabled) {
+                        Label("Snap to Guides", systemImage: "grid")
+                    }
+                    .toggleStyle(.button)
                     Button("Part Info", systemImage: "slider.horizontal.3") {
                         isInspectorPresented = true
                     }

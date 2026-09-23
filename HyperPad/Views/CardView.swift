@@ -13,6 +13,7 @@ struct CardView: View {
     @Binding var stack: Stack
     let cardIndex: Int
     var isEditing: Bool = false
+    var isSnappingEnabled: Bool = true
     @Binding var selectedPartID: UUID?
     var onButtonTap: (Part) -> Void
     var onOpenInspector: () -> Void = {}
@@ -64,7 +65,7 @@ struct CardView: View {
             parts += stack.backgrounds[backgroundIndex].parts.map { ($0.id, $0.frame) }
         }
         parts += stack.cards[cardIndex].parts.map { ($0.id, $0.frame) }
-        return SnapContext(cardSize: stack.cardSize, parts: parts)
+        return SnapContext(cardSize: stack.cardSize, parts: parts, isEnabled: isSnappingEnabled)
     }
 
     private func partViews(for parts: Binding<[Part]>) -> some View {
@@ -130,6 +131,7 @@ struct AlignmentGuides: Equatable {
 struct SnapContext {
     let cardSize: CardSize
     let parts: [(id: UUID, frame: PartFrame)]
+    var isEnabled = true
 
     static let gridSpacing: Double = 8
     static let alignmentTolerance: Double = 6
@@ -158,6 +160,7 @@ struct SnapContext {
     /// Snaps a proposed origin, considering the part's leading edge,
     /// center, and trailing edge against all targets.
     func snapPosition(raw: Double, length: Double, axis: Axis, excluding id: UUID, guides: inout AlignmentGuides) -> Double {
+        guard isEnabled else { return raw }
         var best: (delta: Double, target: Double)?
         for target in targets(axis: axis, excluding: id) {
             for offset in [0, length / 2, length] {
@@ -179,6 +182,7 @@ struct SnapContext {
 
     /// Snaps a proposed length so the far edge aligns or lands on the grid.
     func snapLength(raw: Double, origin: Double, axis: Axis, excluding id: UUID, guides: inout AlignmentGuides) -> Double {
+        guard isEnabled else { return raw }
         let rawEdge = origin + raw
         var best: (delta: Double, target: Double)?
         for target in targets(axis: axis, excluding: id) {
