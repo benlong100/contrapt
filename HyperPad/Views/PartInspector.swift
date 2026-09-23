@@ -6,45 +6,34 @@
 import SwiftUI
 
 /// Edits one part: identity, kind-specific text, geometry, and its script.
+/// Presented as a trailing inspector column so the card stays visible.
 struct PartInspector: View {
     @Binding var part: Part
     var onDelete: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Part") {
-                    TextField("Name", text: $part.name)
-                    LabeledContent("Kind", value: kindName)
-                }
-                kindSection
-                Section("Position and Size") {
-                    geometryRow("X", value: $part.frame.x)
-                    geometryRow("Y", value: $part.frame.y)
-                    geometryRow("Width", value: $part.frame.width)
-                    geometryRow("Height", value: $part.frame.height)
-                }
-                Section("Script") {
-                    TextEditor(text: $part.script)
-                        .font(.system(.callout, design: .monospaced))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .frame(minHeight: 220)
-                }
-                Section {
-                    Button("Delete Part", role: .destructive) {
-                        dismiss()
-                        onDelete()
-                    }
-                }
+        Form {
+            Section("Part") {
+                TextField("Name", text: $part.name)
+                LabeledContent("Kind", value: kindName)
             }
-            .navigationTitle(part.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+            kindSection
+            Section("Position and Size") {
+                geometryRow("X", value: $part.frame.x)
+                geometryRow("Y", value: $part.frame.y)
+                geometryRow("Width", value: $part.frame.width)
+                geometryRow("Height", value: $part.frame.height)
+            }
+            Section("Script") {
+                TextEditor(text: $part.script)
+                    .font(.system(.callout, design: .monospaced))
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .frame(minHeight: 220)
+            }
+            Section {
+                Button("Delete Part", role: .destructive) {
+                    onDelete()
                 }
             }
         }

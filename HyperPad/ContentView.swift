@@ -28,7 +28,8 @@ struct ContentView: View {
                     cardIndex: cardIndex,
                     isEditing: isEditing,
                     selectedPartID: $selectedPartID,
-                    onButtonTap: runMouseUp
+                    onButtonTap: runMouseUp,
+                    onOpenInspector: { isInspectorPresented = true }
                 )
                 .padding()
             }
@@ -50,12 +51,17 @@ struct ContentView: View {
         } message: {
             Text(scriptErrorText ?? "")
         }
-        .sheet(isPresented: $isInspectorPresented) {
-            if let selectedPartID, let partBinding = partBinding(for: selectedPartID) {
-                PartInspector(part: partBinding) {
-                    deletePart(id: selectedPartID)
+        .inspector(isPresented: $isInspectorPresented) {
+            Group {
+                if let selectedPartID, let partBinding = partBinding(for: selectedPartID) {
+                    PartInspector(part: partBinding) {
+                        deletePart(id: selectedPartID)
+                    }
+                } else {
+                    ContentUnavailableView("No Part Selected", systemImage: "cursorarrow.click")
                 }
             }
+            .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -85,7 +91,10 @@ struct ContentView: View {
                     .disabled(selectedPartID == nil)
                 }
                 Button(isEditing ? "Done" : "Edit") {
-                    if isEditing { selectedPartID = nil }
+                    if isEditing {
+                        selectedPartID = nil
+                        isInspectorPresented = false
+                    }
                     isEditing.toggle()
                 }
             }

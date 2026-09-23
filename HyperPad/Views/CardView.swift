@@ -15,6 +15,7 @@ struct CardView: View {
     var isEditing: Bool = false
     @Binding var selectedPartID: UUID?
     var onButtonTap: (Part) -> Void
+    var onOpenInspector: () -> Void = {}
 
     /// Named coordinate space on the logical-size canvas, so gesture math
     /// works in card coordinates regardless of display scale.
@@ -60,7 +61,8 @@ struct CardView: View {
                     EditablePart(
                         part: $part,
                         isSelected: selectedPartID == part.id,
-                        onSelect: { selectedPartID = part.id }
+                        onSelect: { selectedPartID = part.id },
+                        onOpenInspector: onOpenInspector
                     )
                 } else {
                     PartView(part: $part, onButtonTap: { onButtonTap(part) })
@@ -81,6 +83,7 @@ private struct EditablePart: View {
     @Binding var part: Part
     let isSelected: Bool
     var onSelect: () -> Void
+    var onOpenInspector: () -> Void
 
     @State private var frameAtGestureStart: PartFrame?
 
@@ -90,6 +93,10 @@ private struct EditablePart: View {
         PartView(part: $part, onButtonTap: {})
             .allowsHitTesting(false)
             .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                onSelect()
+                onOpenInspector()
+            }
             .onTapGesture { onSelect() }
             .gesture(moveGesture)
             .overlay {
@@ -106,15 +113,18 @@ private struct EditablePart: View {
     }
 
     private var resizeHandle: some View {
+        // Visible knob inside a larger invisible touch target.
         Circle()
             .fill(Color.accentColor)
-            .frame(width: 22, height: 22)
+            .frame(width: 32, height: 32)
             .overlay {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.white)
             }
-            .offset(x: 11, y: 11)
+            .frame(width: 56, height: 56)
+            .contentShape(Rectangle())
+            .offset(x: 20, y: 20)
             .gesture(resizeGesture)
     }
 
