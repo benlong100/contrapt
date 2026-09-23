@@ -5,48 +5,60 @@
 
 import SwiftUI
 
-/// Phase 1 placeholder document view: proves the document round-trip
-/// (open, edit, autosave) works. Replaced by the card view in Phase 2.
+/// Browse mode: shows the current card with card-to-card navigation.
+/// Edit mode arrives in Phase 3.
 struct ContentView: View {
     @Binding var document: StackDocument
+    @State private var currentCardIndex = 0
 
     var body: some View {
-        List {
-            Section("Stack") {
-                LabeledContent("Cards", value: "\(document.stack.cards.count)")
-                LabeledContent(
-                    "Card Size",
-                    value: "\(Int(document.stack.cardSize.width)) × \(Int(document.stack.cardSize.height))"
+        Group {
+            if document.stack.cards.isEmpty {
+                ContentUnavailableView("No Cards", systemImage: "rectangle.on.rectangle.slash")
+            } else {
+                CardView(
+                    stack: $document.stack,
+                    cardIndex: cardIndex,
+                    goToNextCard: goToNextCard
                 )
-                LabeledContent("Format", value: "v\(document.stack.formatVersion)")
+                .padding()
             }
-            Section("Cards") {
-                ForEach(document.stack.cards) { card in
-                    Text(card.name)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .toolbar {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button("Previous Card", systemImage: "chevron.left") {
+                    goToPreviousCard()
                 }
-                .onDelete(perform: deleteCards)
-                Button("Add Card", systemImage: "plus") {
-                    addCard()
+                Spacer()
+                Text("Card \(cardIndex + 1) of \(document.stack.cards.count)")
+                    .font(.callout)
+                    .monospacedDigit()
+                    .fixedSize()
+                Spacer()
+                Button("Next Card", systemImage: "chevron.right") {
+                    goToNextCard()
                 }
             }
         }
     }
 
-    private func addCard() {
-        // Every stack keeps at least one background (see Stack.makeNew).
-        guard let backgroundID = document.stack.backgrounds.first?.id else { return }
-        let card = Card(
-            id: UUID(),
-            name: "Card \(document.stack.cards.count + 1)",
-            backgroundID: backgroundID,
-            script: "",
-            parts: []
-        )
-        document.stack.cards.append(card)
+    /// Clamped so a shorter reopened stack can't strand the index.
+    private var cardIndex: Int {
+        min(currentCardIndex, document.stack.cards.count - 1)
     }
 
-    private func deleteCards(at offsets: IndexSet) {
-        document.stack.cards.remove(atOffsets: offsets)
+    private func goToNextCard() {
+        let count = document.stack.cards.count
+        guard count > 0 else { return }
+        currentCardIndex = (cardIndex + 1) % count
+    }
+
+    private func goToPreviousCard() {
+        let count = document.stack.cards.count
+        guard count > 0 else { return }
+        currentCardIndex = (cardIndex + count - 1) % count
     }
 }
 

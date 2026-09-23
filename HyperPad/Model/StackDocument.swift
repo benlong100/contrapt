@@ -68,10 +68,61 @@ nonisolated extension Stack {
         return try encoder.encode(self)
     }
 
-    /// A new stack: one background, one card — the invariant every stack keeps.
+    /// A new stack: one background and two starter cards demonstrating a
+    /// shared background part, a label, and a field. Every stack keeps at
+    /// least one background and one card.
     static func makeNew() -> Stack {
-        let background = Background(id: UUID(), name: "Background 1", script: "", parts: [])
-        let card = Card(id: UUID(), name: "Card 1", backgroundID: background.id, script: "", parts: [])
+        let background = Background(
+            id: UUID(),
+            name: "Background 1",
+            script: "",
+            parts: [
+                Part(
+                    id: UUID(),
+                    name: "Next Card Button",
+                    frame: PartFrame(x: 824, y: 668, width: 160, height: 60),
+                    script: "",
+                    kind: .button(ButtonPart(title: "Next Card"))
+                )
+            ]
+        )
+        let firstCard = Card(
+            id: UUID(),
+            name: "Card 1",
+            backgroundID: background.id,
+            script: "",
+            parts: [
+                Part(
+                    id: UUID(),
+                    name: "Welcome Label",
+                    frame: PartFrame(x: 64, y: 64, width: 640, height: 60),
+                    script: "",
+                    kind: .label(LabelPart(text: "Welcome to your new stack"))
+                ),
+                Part(
+                    id: UUID(),
+                    name: "Scratch Field",
+                    frame: PartFrame(x: 64, y: 160, width: 520, height: 56),
+                    script: "",
+                    kind: .field(FieldPart(text: "", placeholder: "Type something…"))
+                ),
+            ]
+        )
+        let secondCard = Card(
+            id: UUID(),
+            name: "Card 2",
+            backgroundID: background.id,
+            script: "",
+            parts: [
+                Part(
+                    id: UUID(),
+                    name: "Card 2 Label",
+                    frame: PartFrame(x: 64, y: 64, width: 640, height: 60),
+                    script: "",
+                    kind: .label(LabelPart(text: "This is the second card"))
+                )
+            ]
+        )
         return Stack(
             formatVersion: StackFormat.currentVersion,
             id: UUID(),
@@ -79,7 +130,7 @@ nonisolated extension Stack {
             cardSize: CardSize(width: 1024, height: 768),
             script: "",
             backgrounds: [background],
-            cards: [card]
+            cards: [firstCard, secondCard]
         )
     }
 }
