@@ -12,10 +12,20 @@ Maximally permissive, zero App Store friction, fits the tribute spirit.
 GPL was rejected due to its documented conflicts with App Store distribution
 terms (e.g. VLC's removal).
 
-### D2. Platform: iPad-only, iOS 26 minimum
-Leanest possible v1: one screen class, latest SDK only (Liquid Glass and
-current SwiftUI APIs for free, no back-compat testing). iPhone support comes
-later as a stack *viewer* — authoring is designed for iPad.
+### D2. Platform: iPad-first, iOS 26 minimum; native Mac as fast-follow
+*(revised 2026-09-23 — originally iPad-only)*
+iPad remains the v1 development focus, but a native macOS destination
+(same SwiftUI codebase) is planned once browse + edit modes stabilize —
+before public release. Rationale: the HyperCard-nostalgic audience is
+Mac-centric, legacy stacks live on Macs (see N4), and a Mac with pointer +
+hardware keyboard is arguably the better authoring environment.
+
+Consequences:
+- All code stays multiplatform-clean from now on: platform-agnostic colors
+  and styles, `#if os` only at genuine chrome differences (e.g. `.bottomBar`
+  toolbar placement).
+- Apple Silicon Macs run the iPad app in compatibility mode in the interim.
+- iPhone support remains later-and-viewer-only; authoring targets iPad/Mac.
 
 ### D3. Card layout: fixed logical card size, free-form placement
 Faithful to HyperCard. Cards have a fixed logical size in points, objects are
@@ -53,6 +63,15 @@ Scripts from untrusted stacks run inside the interpreter sandbox with
 runaway protection (instruction budgets/timeouts) and capability gating for
 anything sensitive.
 
+### D9. Scripting language: HyperTalk-compatible core
+Refines D6. The language is real HyperTalk at its core — original syntax and
+message names (`on mouseUp`, `go to card 3`, `put x into field "Name"`) —
+so that simple scripts from converted legacy stacks (N4) run unmodified,
+and decades of HyperCard books and documentation remain valid learning
+material. Modern additions are layered on without breaking old syntax.
+This constrains Phase 3+ too: template stacks and editor examples use
+authentic HyperTalk message names from the start.
+
 ### D8. Skinnable app chrome, following the Note-O-Tron pattern
 The editor/app UI is skinnable, reusing the architecture from Note-O-Tron's
 `Skin.swift`: a `SkinID` enum persisted as a raw string in `@AppStorage`, a
@@ -87,9 +106,21 @@ deliberately alongside N1.
 ### N3. Possible v2 ideas (explicitly out of scope for v1)
 - Adaptive/anchored card layout for varying screen sizes
 - iPhone viewer app
-- Mac support
 - "Protect my stack" author option (review-risk under 2.5.2; needs care)
 - Any cloud/gallery service for sharing stacks
+
+### N4. Legacy HyperCard stack import — gate: post-v1, after Mac target
+A translator from original HyperCard `.stack` binaries to our format.
+Old stacks store their data mostly in the data fork, so files that survived
+migration to modern filesystems are usually intact. Prior art: Uli
+Kusterer's `stackimport` (format parsing), Internet Archive's emulation.
+Fidelity tiers, in order of feasibility:
+1. Structure — cards, backgrounds, buttons, fields, text → clean conversion
+2. Paint layers — 1-bit graphics → images
+3. Scripts — carried over as-is; D9's HyperTalk-compatible core means
+   simple handlers run unmodified, complex ones degrade to viewable source
+The translator should be a standalone Swift package usable by both the Mac
+and iPad apps.
 
 ## Roadmap reference
 
