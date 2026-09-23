@@ -10,8 +10,8 @@ import SwiftUI
 @main
 struct HyperPadApp: App {
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        DocumentGroup(newDocument: StackDocument()) { file in
+            ContentView(document: file.$document)
         }
     }
 }
