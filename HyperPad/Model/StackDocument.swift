@@ -199,7 +199,11 @@ nonisolated extension Stack {
             id: UUID(),
             name: "Card 2",
             backgroundID: background.id,
-            script: "",
+            script: """
+            on openCard
+              put "You've arrived at card 2"
+            end openCard
+            """,
             parts: [
                 Part(
                     id: UUID(),

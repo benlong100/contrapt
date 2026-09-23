@@ -84,10 +84,17 @@ struct ContentView: View {
                         deletePart(id: selectedPartID)
                     }
                 } else {
-                    ContentUnavailableView("No Part Selected", systemImage: "cursorarrow.click")
+                    ObjectScriptsInspector(stack: stack, cardIndex: cardIndex)
                 }
             }
             .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
+        }
+        .onChange(of: cardIndex) { _, newIndex in
+            sendSystemMessage("openCard", toCardAt: newIndex)
+        }
+        .task {
+            sendSystemMessage("openStack", toCardAt: cardIndex)
+            sendSystemMessage("openCard", toCardAt: cardIndex)
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -115,10 +122,9 @@ struct ContentView: View {
                         Label("Snap to Guides", systemImage: "grid")
                     }
                     .toggleStyle(.button)
-                    Button("Part Info", systemImage: "slider.horizontal.3") {
+                    Button("Inspector", systemImage: "slider.horizontal.3") {
                         isInspectorPresented = true
                     }
-                    .disabled(selectedPartID == nil)
                 }
                 Button(isEditing ? "Done" : "Edit") {
                     if isEditing {
@@ -163,14 +169,55 @@ struct ContentView: View {
 
     // MARK: - Script dispatch
 
-    private func runMouseUp(on part: Part) {
-        let host = DocumentScriptHost(
+    @State private var isSendingSystemMessage = false
+
+    private func makeHost() -> DocumentScriptHost {
+        DocumentScriptHost(
             stack: stack,
             currentCardIndex: $currentCardIndex,
             onMessage: { messageBoxText = $0 }
         )
+    }
+
+    /// The HyperCard message path for an object on the given card:
+    /// part → card → background → stack.
+    private func scriptPath(cardAt index: Int, part: Part?) -> [ScriptLayer] {
+        guard document.stack.cards.indices.contains(index) else { return [] }
+        let card = document.stack.cards[index]
+        var layers: [ScriptLayer] = []
+        if let part {
+            let kind = switch part.kind {
+            case .button: "button"
+            case .field: "field"
+            case .label: "label"
+            }
+            layers.append(ScriptLayer(name: "\(kind) \"\(part.name)\" script", source: part.script))
+        }
+        layers.append(ScriptLayer(name: "card \"\(card.name)\" script", source: card.script))
+        if let background = document.stack.backgrounds.first(where: { $0.id == card.backgroundID }) {
+            layers.append(ScriptLayer(name: "background script", source: background.script))
+        }
+        layers.append(ScriptLayer(name: "stack script", source: document.stack.script))
+        return layers
+    }
+
+    private func runMouseUp(on part: Part) {
         do {
-            try HyperTalk.run(handler: "mouseUp", in: part.script, host: host)
+            try HyperTalk.send("mouseUp", along: scriptPath(cardAt: cardIndex, part: part), host: makeHost())
+        } catch {
+            scriptErrorText = error.localizedDescription
+        }
+    }
+
+    /// System messages go to the card and up. Suppressed while editing,
+    /// and while another system message is running (so an openCard that
+    /// navigates can't cascade within one dispatch).
+    private func sendSystemMessage(_ message: String, toCardAt index: Int) {
+        guard !isEditing, !isSendingSystemMessage else { return }
+        isSendingSystemMessage = true
+        defer { isSendingSystemMessage = false }
+        do {
+            try HyperTalk.send(message, along: scriptPath(cardAt: index, part: nil), host: makeHost())
         } catch {
             scriptErrorText = error.localizedDescription
         }

@@ -64,6 +64,46 @@ struct ScriptEditor: View {
     }
 }
 
+/// A form section holding a script editor plus the Check Script button,
+/// shared by the part inspector and the object-scripts inspector.
+struct ScriptFormSection: View {
+    let title: String
+    @Binding var script: String
+
+    @State private var checkResult: CheckResult?
+
+    private struct CheckResult: Equatable {
+        let isValid: Bool
+        let message: String
+    }
+
+    var body: some View {
+        Section(title) {
+            ScriptEditor(script: $script)
+            Button("Check Script", systemImage: "checkmark.seal") {
+                checkScript()
+            }
+            if let checkResult {
+                Label(checkResult.message, systemImage: checkResult.isValid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(checkResult.isValid ? .green : .red)
+            }
+        }
+        .onChange(of: script) {
+            checkResult = nil
+        }
+    }
+
+    private func checkScript() {
+        do {
+            try HyperTalk.check(script)
+            checkResult = CheckResult(isValid: true, message: "No problems found.")
+        } catch {
+            checkResult = CheckResult(isValid: false, message: error.localizedDescription)
+        }
+    }
+}
+
 #Preview {
     @Previewable @State var script = """
     on mouseUp -- greet the user
