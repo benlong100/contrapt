@@ -61,15 +61,17 @@ enum SyntaxScanner {
             let character = source[index]
             let start = index
 
-            if character == "-",
-               source.index(after: index) < source.endIndex,
-               source[source.index(after: index)] == "-" {
+            let next: Character? = {
+                let after = source.index(after: index)
+                return after < source.endIndex ? source[after] : nil
+            }()
+            if Tokenizer.startsComment(character, next: next) {
                 while index < source.endIndex, source[index] != "\n" { advance() }
                 spans.append(SyntaxSpan(kind: .comment, range: start..<index))
-            } else if character == "\"" {
+            } else if Tokenizer.isQuote(character) {
                 advance()
-                while index < source.endIndex, source[index] != "\"", source[index] != "\n" { advance() }
-                if index < source.endIndex, source[index] == "\"" { advance() }
+                while index < source.endIndex, !Tokenizer.isQuote(source[index]), source[index] != "\n" { advance() }
+                if index < source.endIndex, Tokenizer.isQuote(source[index]) { advance() }
                 spans.append(SyntaxSpan(kind: .string, range: start..<index))
             } else if character.isNumber {
                 while index < source.endIndex, source[index].isNumber { advance() }

@@ -73,7 +73,7 @@ struct Tokenizer {
             return try next()
         }
 
-        if character == "\"" {
+        if Self.isQuote(character) {
             return try stringLiteral()
         }
 
@@ -88,11 +88,23 @@ struct Tokenizer {
         return try symbol(character)
     }
 
+    /// Straight or curly double quotes both delimit strings — iPad smart
+    /// quotes (and scripts pasted from anywhere) must not break scripts.
+    static func isQuote(_ character: Character) -> Bool {
+        character == "\"" || character == "\u{201C}" || character == "\u{201D}"
+    }
+
+    /// `--` starts a comment; so do en/em dashes, which is what iOS smart
+    /// dashes turn a typed `--` into.
+    static func startsComment(_ character: Character, next: Character?) -> Bool {
+        (character == "-" && next == "-") || character == "\u{2013}" || character == "\u{2014}"
+    }
+
     private mutating func skipSpacesAndComments() {
         while let character = current {
             if character == " " || character == "\t" {
                 advance()
-            } else if character == "-" && peekAhead == "-" {
+            } else if Self.startsComment(character, next: peekAhead) {
                 while let c = current, c != "\n" { advance() }
             } else {
                 break
@@ -105,7 +117,7 @@ struct Tokenizer {
         advance() // opening quote
         var text = ""
         while let character = current {
-            if character == "\"" {
+            if Self.isQuote(character) {
                 advance()
                 return Token(kind: .string(text), line: startLine)
             }
