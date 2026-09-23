@@ -68,9 +68,9 @@ nonisolated extension Stack {
         return try encoder.encode(self)
     }
 
-    /// A new stack: one background and two starter cards demonstrating a
-    /// shared background part, a label, and a field. Every stack keeps at
-    /// least one background and one card.
+    /// A new stack: one background and two starter cards whose parts carry
+    /// real HyperTalk (D9) — the template doubles as a first lesson.
+    /// Every stack keeps at least one background and one card.
     static func makeNew() -> Stack {
         let background = Background(
             id: UUID(),
@@ -81,7 +81,11 @@ nonisolated extension Stack {
                     id: UUID(),
                     name: "Next Card Button",
                     frame: PartFrame(x: 824, y: 668, width: 160, height: 60),
-                    script: "",
+                    script: """
+                    on mouseUp
+                      go to next card
+                    end mouseUp
+                    """,
                     kind: .button(ButtonPart(title: "Next Card"))
                 )
             ]
@@ -101,10 +105,32 @@ nonisolated extension Stack {
                 ),
                 Part(
                     id: UUID(),
-                    name: "Scratch Field",
+                    name: "Name",
                     frame: PartFrame(x: 64, y: 160, width: 520, height: 56),
                     script: "",
-                    kind: .field(FieldPart(text: "", placeholder: "Type something…"))
+                    kind: .field(FieldPart(text: "", placeholder: "Type your name…"))
+                ),
+                Part(
+                    id: UUID(),
+                    name: "Greet Button",
+                    frame: PartFrame(x: 64, y: 240, width: 160, height: 56),
+                    script: """
+                    on mouseUp
+                      if field "Name" is empty then
+                        put "Hello, stranger!" into field "Greeting"
+                      else
+                        put "Hello," && field "Name" & "!" into field "Greeting"
+                      end if
+                    end mouseUp
+                    """,
+                    kind: .button(ButtonPart(title: "Greet"))
+                ),
+                Part(
+                    id: UUID(),
+                    name: "Greeting",
+                    frame: PartFrame(x: 64, y: 320, width: 520, height: 56),
+                    script: "",
+                    kind: .field(FieldPart(text: "", placeholder: ""))
                 ),
             ]
         )
@@ -120,7 +146,18 @@ nonisolated extension Stack {
                     frame: PartFrame(x: 64, y: 64, width: 640, height: 60),
                     script: "",
                     kind: .label(LabelPart(text: "This is the second card"))
-                )
+                ),
+                Part(
+                    id: UUID(),
+                    name: "Back Button",
+                    frame: PartFrame(x: 64, y: 160, width: 180, height: 56),
+                    script: """
+                    on mouseUp
+                      go to first card
+                    end mouseUp
+                    """,
+                    kind: .button(ButtonPart(title: "Back to Start"))
+                ),
             ]
         )
         return Stack(

@@ -11,9 +11,9 @@ import SwiftUI
 struct CardView: View {
     @Binding var stack: Stack
     let cardIndex: Int
-    /// Scaffolding until the interpreter arrives (Phase 4): every button
-    /// advances to the next card.
-    var goToNextCard: () -> Void
+    /// Invoked when a button part is tapped; the owner dispatches the
+    /// part's mouseUp handler.
+    var onButtonTap: (Part) -> Void
 
     var body: some View {
         GeometryReader { proxy in
@@ -46,7 +46,7 @@ struct CardView: View {
 
     private func partViews(for parts: Binding<[Part]>) -> some View {
         ForEach(parts) { $part in
-            PartView(part: $part, onButtonTap: goToNextCard)
+            PartView(part: $part, onButtonTap: { onButtonTap(part) })
                 .frame(width: part.frame.width, height: part.frame.height)
                 .position(
                     x: part.frame.x + part.frame.width / 2,

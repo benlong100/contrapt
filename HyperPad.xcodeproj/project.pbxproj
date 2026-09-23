@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		481EF61830647B7100A417DA /* HyperTalk in Frameworks */ = {isa = PBXBuildFile; productRef = 481EF61730647B7100A417DA /* HyperTalk */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		481EF5DA306447CB00A417DA /* HyperPad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HyperPad.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				481EF61830647B7100A417DA /* HyperTalk in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +70,7 @@
 			);
 			name = HyperPad;
 			packageProductDependencies = (
+				481EF61730647B7100A417DA /* HyperTalk */,
 			);
 			productName = HyperPad;
 			productReference = 481EF5DA306447CB00A417DA /* HyperPad.app */;
@@ -94,6 +100,9 @@
 			);
 			mainGroup = 481EF5D1306447CB00A417DA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				481EF61630647B7100A417DA /* XCLocalSwiftPackageReference "HyperTalk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 481EF5DB306447CB00A417DA /* Products */;
 			projectDirPath = "";
@@ -338,6 +347,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		481EF61630647B7100A417DA /* XCLocalSwiftPackageReference "HyperTalk" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = HyperTalk;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		481EF61730647B7100A417DA /* HyperTalk */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HyperTalk;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 481EF5D2306447CB00A417DA /* Project object */;
 }
