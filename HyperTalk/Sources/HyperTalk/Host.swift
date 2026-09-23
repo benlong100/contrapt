@@ -39,11 +39,21 @@ public struct HostError: Error, Sendable {
 public struct ScriptError: Error, LocalizedError, Sendable, Equatable {
     public let line: Int
     public let message: String
+    /// Which script raised it (e.g. `card "Card 1" script`) when the
+    /// message traveled a multi-layer path; nil for standalone scripts.
+    public internal(set) var context: String?
 
-    public init(line: Int, message: String) {
+    public init(line: Int, message: String, context: String? = nil) {
         self.line = line
         self.message = message
+        self.context = context
     }
 
-    public var errorDescription: String? { "Line \(line): \(message)" }
+    public var errorDescription: String? {
+        if let context {
+            "Line \(line) of the \(context): \(message)"
+        } else {
+            "Line \(line): \(message)"
+        }
+    }
 }

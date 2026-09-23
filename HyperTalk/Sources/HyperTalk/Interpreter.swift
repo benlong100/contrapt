@@ -5,12 +5,21 @@
 
 import Foundation
 
-/// Public entry point.
+/// One script along the message path, named for error reporting
+/// (e.g. `button "Greet" script`, `card "Card 1" script`).
+public struct ScriptLayer: Sendable, Equatable {
+    public let name: String
+    public let source: String
+
+    public init(name: String, source: String) {
+        self.name = name
+        self.source = source
+    }
+}
+
+/// Public entry points.
 public enum HyperTalk {
-    /// Parses `scriptSource` and runs the named handler, reaching the world
-    /// through `host`. Returns false if the script has no such handler
-    /// (the message goes unhandled). `maxSteps` is the runaway-script
-    /// budget (D7): every statement and loop iteration costs one step.
+    /// Convenience for a single, standalone script.
     @discardableResult
     public static func run(
         handler handlerName: String,
@@ -18,13 +27,27 @@ public enum HyperTalk {
         host: HyperTalkHost,
         maxSteps: Int = 100_000
     ) throws -> Bool {
-        let script = try Parser.parse(scriptSource)
-        guard let handler = script.handlers[handlerName.lowercased()] else {
-            return false
-        }
-        let runtime = Runtime(host: host, stepsRemaining: maxSteps)
-        _ = try runtime.execute(handler.body)
-        return true
+        try send(handlerName, along: [ScriptLayer(name: "script", source: scriptSource)], host: host, maxSteps: maxSteps)
+    }
+
+    /// Sends a message along the HyperCard message path: the first layer
+    /// whose script defines a matching handler receives it. Handlers can
+    /// send further messages (unknown commands travel the path from their
+    /// own layer onward), with arguments bound to handler parameters.
+    /// Returns false if nothing along the path handles the message.
+    /// `maxSteps` is the runaway-script budget (D7): every statement and
+    /// loop iteration costs one step.
+    @discardableResult
+    public static func send(
+        _ message: String,
+        arguments: [String] = [],
+        along path: [ScriptLayer],
+        host: HyperTalkHost,
+        maxSteps: Int = 100_000
+    ) throws -> Bool {
+        guard !path.isEmpty else { return false }
+        let runtime = Runtime(host: host, path: path, stepsRemaining: maxSteps)
+        return try runtime.send(message, arguments: arguments, fromLayer: 0, line: 0)
     }
 }
 
@@ -64,9 +87,21 @@ enum Value {
 
 final class Runtime {
     private let host: HyperTalkHost
+    private let path: [ScriptLayer]
     private var stepsRemaining: Int
-    /// Case-insensitive variable store, pre-seeded with HyperTalk constants.
-    private var variables: [String: String] = [
+    private var parsedLayers: [Int: ParsedScript] = [:]
+
+    /// One frame per handler invocation: HyperTalk variables are local,
+    /// pre-seeded with the built-in constants.
+    private struct Frame {
+        var variables: [String: String]
+        let layerIndex: Int
+    }
+
+    private var frames: [Frame] = []
+
+    private static let maxMessageDepth = 64
+    private static let constants: [String: String] = [
         "empty": "",
         "quote": "\"",
         "space": " ",
@@ -84,9 +119,74 @@ final class Runtime {
         case exitHandler
     }
 
-    init(host: HyperTalkHost, stepsRemaining: Int) {
+    init(host: HyperTalkHost, path: [ScriptLayer], stepsRemaining: Int) {
         self.host = host
+        self.path = path
         self.stepsRemaining = stepsRemaining
+    }
+
+    // MARK: Message dispatch
+
+    /// Walks the path from `fromLayer` looking for a handler. Scripts parse
+    /// lazily — a syntax error in the stack script can't break a button
+    /// whose own script handles the message.
+    func send(_ message: String, arguments: [String], fromLayer: Int, line: Int) throws -> Bool {
+        let key = message.lowercased()
+        for index in fromLayer..<path.count {
+            let script: ParsedScript
+            do {
+                script = try parsedScript(at: index)
+            } catch let error as ScriptError {
+                throw annotated(error, layerIndex: index)
+            }
+            guard let handler = script.handlers[key] else { continue }
+            guard frames.count < Self.maxMessageDepth else {
+                throw ScriptError(line: line, message: "Too many messages within messages — is a handler calling itself?")
+            }
+            var variables = Self.constants
+            for (offset, parameter) in handler.parameters.enumerated() {
+                variables[parameter] = offset < arguments.count ? arguments[offset] : ""
+            }
+            frames.append(Frame(variables: variables, layerIndex: index))
+            defer { frames.removeLast() }
+            do {
+                _ = try execute(handler.body)
+            } catch let error as ScriptError {
+                throw annotated(error, layerIndex: index)
+            }
+            return true
+        }
+        return false
+    }
+
+    private func parsedScript(at index: Int) throws -> ParsedScript {
+        if let cached = parsedLayers[index] { return cached }
+        let parsed = try Parser.parse(path[index].source)
+        parsedLayers[index] = parsed
+        return parsed
+    }
+
+    /// Names the offending layer in errors when the path has several.
+    private func annotated(_ error: ScriptError, layerIndex: Int) -> ScriptError {
+        guard path.count > 1, error.context == nil else { return error }
+        var annotated = error
+        annotated.context = path[layerIndex].name
+        return annotated
+    }
+
+    // MARK: Variables
+
+    private func variableValue(_ name: String) -> String? {
+        frames.last?.variables[name]
+    }
+
+    private func setVariable(_ name: String, to value: String) {
+        guard !frames.isEmpty else { return }
+        frames[frames.count - 1].variables[name] = value
+    }
+
+    private var currentLayerIndex: Int {
+        frames.last?.layerIndex ?? 0
     }
 
     // MARK: Statements
@@ -126,6 +226,14 @@ final class Runtime {
 
         case .exitHandler:
             return .exitHandler
+
+        case .send(let name, let argumentExpressions):
+            let arguments = try argumentExpressions.map { try evaluate($0, line: statement.line) }
+            let handled = try send(name, arguments: arguments, fromLayer: currentLayerIndex, line: statement.line)
+            guard handled else {
+                throw ScriptError(line: statement.line, message: "Can't understand '\(name)'.")
+            }
+            return .normal
         }
     }
 
@@ -138,7 +246,7 @@ final class Runtime {
         let existing: String
         switch container {
         case .variable(let name):
-            existing = variables[name] ?? ""
+            existing = variableValue(name) ?? ""
         case .field(let nameExpression):
             let fieldName = try evaluate(nameExpression, line: line)
             existing = try hostCall(line: line) { try host.fieldText(named: fieldName) }
@@ -152,7 +260,7 @@ final class Runtime {
 
         switch container {
         case .variable(let name):
-            variables[name] = combined
+            setVariable(name, to: combined)
         case .field(let nameExpression):
             let fieldName = try evaluate(nameExpression, line: line)
             try hostCall(line: line) { try host.setFieldText(named: fieldName, to: combined) }
@@ -215,7 +323,7 @@ final class Runtime {
             let end = try Value.number(from: try evaluate(toExpression, line: line), line: line)
             var counter = start
             while descending ? counter >= end : counter <= end {
-                variables[variable] = Value.string(from: counter)
+                setVariable(variable, to: Value.string(from: counter))
                 if let flow = try runBody() { return flow }
                 counter += descending ? -1 : 1
             }
@@ -236,7 +344,7 @@ final class Runtime {
         case .variable(let name):
             // An unassigned variable evaluates to its own name — HyperTalk's
             // unquoted literal behavior.
-            return variables[name] ?? name
+            return variableValue(name) ?? name
 
         case .field(let nameExpression):
             let fieldName = try evaluate(nameExpression, line: line)

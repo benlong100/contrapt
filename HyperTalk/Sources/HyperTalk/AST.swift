@@ -30,6 +30,9 @@ indirect enum StmtKind {
     case exitRepeat
     case nextRepeat
     case exitHandler
+    /// An unknown command: a message that travels the message path at run
+    /// time, e.g. `greet "Bill", 3`.
+    case send(String, [Expr])
 }
 
 enum PutMode {

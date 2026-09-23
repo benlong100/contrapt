@@ -187,7 +187,21 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .nextRepeat, line: line)
         default:
-            throw ScriptError(line: line, message: "Can't understand '\(word)'.")
+            // An unknown word is a message send: it travels the message
+            // path at run time (HyperCard semantics), so `doGreeting "Bill"`
+            // can reach a handler defined on the card, background, or stack.
+            advance()
+            var arguments: [Expr] = []
+            if current.kind != .newline, current.kind != .endOfScript {
+                repeat {
+                    arguments.append(try parseExpression())
+                } while consumeSymbol(",")
+            }
+            guard current.kind == .newline || current.kind == .endOfScript else {
+                throw ScriptError(line: line, message: "Can't understand '\(word)'.")
+            }
+            try expectNewline()
+            return Stmt(kind: .send(word, arguments), line: line)
         }
     }
 
