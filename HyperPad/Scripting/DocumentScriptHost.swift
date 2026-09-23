@@ -12,21 +12,21 @@ import HyperTalk
 /// sandbox, and this host is its only door).
 @MainActor
 final class DocumentScriptHost: HyperTalkHost {
-    private let document: Binding<StackDocument>
+    private let stackBinding: Binding<Stack>
     private let currentCardIndex: Binding<Int>
     private let onMessage: (String) -> Void
 
     init(
-        document: Binding<StackDocument>,
+        stack: Binding<Stack>,
         currentCardIndex: Binding<Int>,
         onMessage: @escaping (String) -> Void
     ) {
-        self.document = document
+        self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
         self.onMessage = onMessage
     }
 
-    private var stack: Stack { document.wrappedValue.stack }
+    private var stack: Stack { stackBinding.wrappedValue }
 
     private var cardIndex: Int {
         min(currentCardIndex.wrappedValue, stack.cards.count - 1)
@@ -121,9 +121,9 @@ final class DocumentScriptHost: HyperTalkHost {
     private func setKind(_ kind: PartKind, at location: FieldLocation) {
         switch location {
         case .card(let partIndex):
-            document.wrappedValue.stack.cards[cardIndex].parts[partIndex].kind = kind
+            stackBinding.wrappedValue.cards[cardIndex].parts[partIndex].kind = kind
         case .background(let backgroundIndex, let partIndex):
-            document.wrappedValue.stack.backgrounds[backgroundIndex].parts[partIndex].kind = kind
+            stackBinding.wrappedValue.backgrounds[backgroundIndex].parts[partIndex].kind = kind
         }
     }
 }

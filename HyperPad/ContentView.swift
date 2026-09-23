@@ -10,13 +10,36 @@ import HyperTalk
 /// button taps dispatch mouseUp through the interpreter. Edit mode makes
 /// parts selectable, movable, and resizable, with a property inspector.
 struct ContentView: View {
-    @Binding var document: StackDocument
+    @ObservedObject var document: StackDocument
+    @Environment(\.undoManager) private var undoManager
+
     @State private var currentCardIndex = 0
     @State private var isEditing = false
     @State private var selectedPartID: UUID?
     @State private var isInspectorPresented = false
     @State private var messageBoxText: String?
     @State private var scriptErrorText: String?
+    @State private var undoFlushTask: Task<Void, Never>?
+
+    /// The mutation choke point: every edit anywhere in the view tree —
+    /// drags, typing, inspector fields, script effects — writes through
+    /// this binding, which arranges undo and marks the document dirty.
+    /// The restartable task ends the current coalescing burst after a
+    /// quiet period, turning a whole drag or typing run into one undo step.
+    private var stack: Binding<Stack> {
+        Binding(
+            get: { document.stack },
+            set: { newValue in
+                document.replaceStack(newValue, undoManager: undoManager)
+                undoFlushTask?.cancel()
+                undoFlushTask = Task {
+                    try? await Task.sleep(for: .seconds(0.9))
+                    guard !Task.isCancelled else { return }
+                    document.flushPendingUndo(with: undoManager)
+                }
+            }
+        )
+    }
 
     var body: some View {
         Group {
@@ -24,7 +47,7 @@ struct ContentView: View {
                 ContentUnavailableView("No Cards", systemImage: "rectangle.on.rectangle.slash")
             } else {
                 CardView(
-                    stack: $document.stack,
+                    stack: stack,
                     cardIndex: cardIndex,
                     isEditing: isEditing,
                     selectedPartID: $selectedPartID,
@@ -135,7 +158,7 @@ struct ContentView: View {
 
     private func runMouseUp(on part: Part) {
         let host = DocumentScriptHost(
-            document: $document,
+            stack: stack,
             currentCardIndex: $currentCardIndex,
             onMessage: { messageBoxText = $0 }
         )
@@ -151,13 +174,14 @@ struct ContentView: View {
     /// The selected part may live on the current card or its background.
     private func partBinding(for id: UUID) -> Binding<Part>? {
         let index = cardIndex
-        if let partIndex = document.stack.cards[index].parts.firstIndex(where: { $0.id == id }) {
-            return $document.stack.cards[index].parts[partIndex]
+        let current = document.stack
+        if let partIndex = current.cards[index].parts.firstIndex(where: { $0.id == id }) {
+            return stack.cards[index].parts[partIndex]
         }
-        let card = document.stack.cards[index]
-        if let backgroundIndex = document.stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
-           let partIndex = document.stack.backgrounds[backgroundIndex].parts.firstIndex(where: { $0.id == id }) {
-            return $document.stack.backgrounds[backgroundIndex].parts[partIndex]
+        let card = current.cards[index]
+        if let backgroundIndex = current.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+           let partIndex = current.backgrounds[backgroundIndex].parts.firstIndex(where: { $0.id == id }) {
+            return stack.backgrounds[backgroundIndex].parts[partIndex]
         }
         return nil
     }
@@ -185,7 +209,7 @@ struct ContentView: View {
             script: script,
             kind: kind
         )
-        document.stack.cards[cardIndex].parts.append(part)
+        stack.wrappedValue.cards[cardIndex].parts.append(part)
         selectedPartID = part.id
     }
 
@@ -200,12 +224,14 @@ struct ContentView: View {
     }
 
     private func deletePart(id: UUID) {
+        var updated = document.stack
         let index = cardIndex
-        document.stack.cards[index].parts.removeAll { $0.id == id }
-        let card = document.stack.cards[index]
-        if let backgroundIndex = document.stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }) {
-            document.stack.backgrounds[backgroundIndex].parts.removeAll { $0.id == id }
+        updated.cards[index].parts.removeAll { $0.id == id }
+        let card = updated.cards[index]
+        if let backgroundIndex = updated.backgrounds.firstIndex(where: { $0.id == card.backgroundID }) {
+            updated.backgrounds[backgroundIndex].parts.removeAll { $0.id == id }
         }
+        stack.wrappedValue = updated
         selectedPartID = nil
     }
 
@@ -218,14 +244,14 @@ struct ContentView: View {
             script: "",
             parts: []
         )
-        document.stack.cards.insert(card, at: cardIndex + 1)
+        stack.wrappedValue.cards.insert(card, at: cardIndex + 1)
         currentCardIndex = cardIndex + 1
         selectedPartID = nil
     }
 
     private func deleteCurrentCard() {
         guard document.stack.cards.count > 1 else { return }
-        document.stack.cards.remove(at: cardIndex)
+        stack.wrappedValue.cards.remove(at: cardIndex)
         currentCardIndex = min(cardIndex, document.stack.cards.count - 1)
         selectedPartID = nil
     }
@@ -251,5 +277,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView(document: .constant(StackDocument()))
+    ContentView(document: StackDocument())
 }

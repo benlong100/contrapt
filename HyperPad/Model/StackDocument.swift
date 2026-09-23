@@ -3,6 +3,7 @@
 //  HyperPad
 //
 
+import Combine // required for @Published / ReferenceFileDocument's ObservableObject
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -12,11 +13,20 @@ nonisolated extension UTType {
     static let cardStack = UTType(exportedAs: "com.trompingmarmots.cardstack")
 }
 
-/// The SwiftUI document wrapper around a `Stack`. Value-semantic; the zip
-/// container for media assets arrives in Phase 6 — until then a stack file
-/// is the JSON manifest alone.
-nonisolated struct StackDocument: FileDocument {
-    var stack: Stack
+/// The document wrapper around a `Stack`. A reference document so edits
+/// register undo actions — which is also how SwiftUI learns the document
+/// is dirty. The zip container for media assets arrives in Phase 6; until
+/// then a stack file is the JSON manifest alone.
+nonisolated final class StackDocument: ReferenceFileDocument {
+    @Published var stack: Stack
+
+    /// Bursts of changes (a drag, a typing run) coalesce into one undo step:
+    /// the burst's opening snapshot is stashed here and registered when the
+    /// burst ends — either because a gap opens between changes, or because
+    /// the owning view's quiet-period flush fires.
+    private var pendingUndoSnapshot: Stack?
+    private var lastChangeAt: Date?
+    private static let coalescingWindow: TimeInterval = 0.8
 
     static var readableContentTypes: [UTType] { [.cardStack] }
 
@@ -31,8 +41,59 @@ nonisolated struct StackDocument: FileDocument {
         stack = try Stack(fileData: data)
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: try stack.fileData())
+    func snapshot(contentType: UTType) throws -> Stack {
+        stack
+    }
+
+    func fileWrapper(snapshot: Stack, configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: try snapshot.fileData())
+    }
+
+    // MARK: - Mutation choke point
+
+    /// Every edit flows through here: assigns the new stack and arranges
+    /// undo. Rapid successive changes coalesce into a single undo step that
+    /// restores the state at the start of the burst. Because every undo
+    /// action restores a complete document snapshot, interleavings stay
+    /// self-consistent even in edge cases.
+    func replaceStack(_ newStack: Stack, undoManager: UndoManager?) {
+        guard newStack != stack else { return }
+        let before = stack
+        stack = newStack
+        guard let undoManager else { return }
+
+        // Undo and redo re-enter here; their registrations are what make
+        // redo (and re-undo) work, and must never be coalesced.
+        if undoManager.isUndoing || undoManager.isRedoing {
+            pendingUndoSnapshot = nil
+            undoManager.registerUndo(withTarget: self) { document in
+                document.replaceStack(before, undoManager: undoManager)
+            }
+            return
+        }
+
+        let now = Date()
+        if let lastChangeAt, now.timeIntervalSince(lastChangeAt) < Self.coalescingWindow {
+            // Mid-burst: keep the burst's opening snapshot.
+            if pendingUndoSnapshot == nil { pendingUndoSnapshot = before }
+        } else {
+            // A gap ended any previous burst; this change starts a new one.
+            flushPendingUndo(with: undoManager)
+            pendingUndoSnapshot = before
+        }
+        lastChangeAt = now
+    }
+
+    /// Registers the pending burst's opening snapshot as one undo action.
+    /// The owning view calls this after a quiet period; it is also called
+    /// when a new burst begins.
+    func flushPendingUndo(with undoManager: UndoManager?) {
+        guard let before = pendingUndoSnapshot else { return }
+        pendingUndoSnapshot = nil
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { document in
+            document.replaceStack(before, undoManager: undoManager)
+        }
     }
 }
 
