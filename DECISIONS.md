@@ -53,6 +53,22 @@ Scripts from untrusted stacks run inside the interpreter sandbox with
 runaway protection (instruction budgets/timeouts) and capability gating for
 anything sensitive.
 
+### D8. Skinnable app chrome, following the Note-O-Tron pattern
+The editor/app UI is skinnable, reusing the architecture from Note-O-Tron's
+`Skin.swift`: a `SkinID` enum persisted as a raw string in `@AppStorage`, a
+value-type `Skin` struct where every field is optional and `nil` means
+"system default" (the default skin is `Skin()` — zero overhead, fully
+native/Liquid Glass), a `SkinFont` abstraction for bundled + system fonts,
+a `@CurrentSkin` property wrapper reading AppStorage directly (not the
+environment — stale-value issues in split views/toolbars), and opt-in
+`.skinned*` view modifiers.
+
+Open question (decide by Phase 2): whether skins ever affect *stack*
+rendering. Leaning: card appearance belongs to the stack author (document
+data, travels in the file), not the viewer's skin — with one possible
+exception, a "Classic" viewer skin rendering stacks in 1-bit original-Mac
+style as a tribute option.
+
 ## Deferred (with decision gates)
 
 ### N1. Real product name — gate: first external distribution
