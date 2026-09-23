@@ -21,6 +21,38 @@ struct Parser {
         return try parser.parseScript()
     }
 
+    /// Parses loose statements outside any handler — a message box line.
+    static func parseLooseStatements(_ source: String) throws -> [Stmt] {
+        var parser = Parser(tokens: try Tokenizer.tokenize(source))
+        return try parser.parseLooseStatements()
+    }
+
+    /// Parses the whole source as a single expression — a message box line
+    /// like `2 + 3` or `field "Name"` that evaluates to a displayed value.
+    static func parseSoleExpression(_ source: String) throws -> Expr {
+        var parser = Parser(tokens: try Tokenizer.tokenize(source))
+        return try parser.parseSoleExpression()
+    }
+
+    private mutating func parseLooseStatements() throws -> [Stmt] {
+        var statements: [Stmt] = []
+        while true {
+            skipNewlines()
+            if current.kind == .endOfScript { return statements }
+            statements.append(try parseStatement(handlerName: "messageBox"))
+        }
+    }
+
+    private mutating func parseSoleExpression() throws -> Expr {
+        skipNewlines()
+        let expression = try parseExpression()
+        skipNewlines()
+        guard current.kind == .endOfScript else {
+            throw ScriptError(line: current.line, message: "Expected the end of the line here, but found \(describe(current)).")
+        }
+        return expression
+    }
+
     // MARK: - Token access
 
     private var current: Token { tokens[index] }

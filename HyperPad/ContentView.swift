@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var selectedPartID: UUID?
     @State private var isInspectorPresented = false
     @State private var messageBoxText: String?
+    @State private var isMessageBoxVisible = false
     @State private var scriptErrorText: String?
     @State private var undoFlushTask: Task<Void, Never>?
     /// Editing habit, not document data — persists across stacks.
@@ -63,9 +64,12 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.secondarySystemBackground))
         .overlay(alignment: .bottom) {
-            messageBox
+            if isMessageBoxVisible {
+                MessageBoxView(output: messageBoxText, onCommand: runMessageBoxCommand)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .animation(.default, value: messageBoxText)
+        .animation(.default, value: isMessageBoxVisible)
         .alert(
             "Script Error",
             isPresented: Binding(
@@ -126,6 +130,9 @@ struct ContentView: View {
                         isInspectorPresented = true
                     }
                 }
+                Button("Message Box", systemImage: "text.and.command.macwindow") {
+                    isMessageBoxVisible.toggle()
+                }
                 Button(isEditing ? "Done" : "Edit") {
                     if isEditing {
                         selectedPartID = nil
@@ -151,22 +158,6 @@ struct ContentView: View {
         }
     }
 
-    /// HyperCard's message box, minimally: `put` with no destination lands
-    /// here. Tap to dismiss.
-    @ViewBuilder
-    private var messageBox: some View {
-        if let messageBoxText {
-            Text(messageBoxText)
-                .font(.callout)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.regularMaterial, in: Capsule())
-                .padding(.bottom, 16)
-                .onTapGesture { self.messageBoxText = nil }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
     // MARK: - Script dispatch
 
     @State private var isSendingSystemMessage = false
@@ -175,8 +166,25 @@ struct ContentView: View {
         DocumentScriptHost(
             stack: stack,
             currentCardIndex: $currentCardIndex,
-            onMessage: { messageBoxText = $0 }
+            onMessage: { text in
+                // `put` with no destination opens the message box, as in
+                // HyperCard.
+                messageBoxText = text
+                isMessageBoxVisible = true
+            }
         )
+    }
+
+    /// Runs a line typed into the message box in the current card's
+    /// context; bare expressions display their value as output.
+    private func runMessageBoxCommand(_ line: String) {
+        do {
+            if let value = try HyperTalk.execute(messageLine: line, along: scriptPath(cardAt: cardIndex, part: nil), host: makeHost()) {
+                messageBoxText = value
+            }
+        } catch {
+            scriptErrorText = error.localizedDescription
+        }
     }
 
     /// The HyperCard message path for an object on the given card:

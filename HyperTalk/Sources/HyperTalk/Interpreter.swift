@@ -49,6 +49,34 @@ public enum HyperTalk {
         let runtime = Runtime(host: host, path: path, stepsRemaining: maxSteps)
         return try runtime.send(message, arguments: arguments, fromLayer: 0, line: 0)
     }
+
+    /// Executes one line typed into the message box, in the context of the
+    /// given path. Commands run (and unknown words dispatch as messages
+    /// along the path); a line that doesn't work as a statement but parses
+    /// as an expression — `2 + 3`, `field "Name"` — evaluates instead, and
+    /// its value is returned for display.
+    @discardableResult
+    public static func execute(
+        messageLine line: String,
+        along path: [ScriptLayer],
+        host: HyperTalkHost,
+        maxSteps: Int = 100_000
+    ) throws -> String? {
+        let effectivePath = path.isEmpty ? [ScriptLayer(name: "message box", source: "")] : path
+        let runtime = Runtime(host: host, path: effectivePath, stepsRemaining: maxSteps)
+        do {
+            let statements = try Parser.parseLooseStatements(line)
+            try runtime.runLoose(statements)
+            return nil
+        } catch let statementError as ScriptError {
+            // If it reads as a bare expression, evaluate it — preferring the
+            // expression's own (more specific) error if evaluation fails.
+            guard let expression = try? Parser.parseSoleExpression(line) else {
+                throw statementError
+            }
+            return try runtime.evaluateLoose(expression)
+        }
+    }
 }
 
 // MARK: - Values
@@ -157,6 +185,21 @@ final class Runtime {
             return true
         }
         return false
+    }
+
+    /// Runs loose statements (a message box line) in a fresh frame rooted
+    /// at the first layer, so message sends search the whole path.
+    func runLoose(_ statements: [Stmt]) throws {
+        frames.append(Frame(variables: Self.constants, layerIndex: 0))
+        defer { frames.removeLast() }
+        _ = try execute(statements)
+    }
+
+    /// Evaluates a bare expression (a message box line) in a fresh frame.
+    func evaluateLoose(_ expression: Expr) throws -> String {
+        frames.append(Frame(variables: Self.constants, layerIndex: 0))
+        defer { frames.removeLast() }
+        return try evaluate(expression, line: 1)
     }
 
     private func parsedScript(at index: Int) throws -> ParsedScript {
