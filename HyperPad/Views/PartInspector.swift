@@ -4,12 +4,20 @@
 //
 
 import SwiftUI
+import HyperTalk
 
 /// Edits one part: identity, kind-specific text, geometry, and its script.
 /// Presented as a trailing inspector column so the card stays visible.
 struct PartInspector: View {
     @Binding var part: Part
     var onDelete: () -> Void
+
+    @State private var checkResult: CheckResult?
+
+    private struct CheckResult: Equatable {
+        let isValid: Bool
+        let message: String
+    }
 
     var body: some View {
         Form {
@@ -25,17 +33,36 @@ struct PartInspector: View {
                 geometryRow("Height", value: $part.frame.height)
             }
             Section("Script") {
-                TextEditor(text: $part.script)
-                    .font(.system(.callout, design: .monospaced))
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .frame(minHeight: 220)
+                ScriptEditor(script: $part.script)
+                Button("Check Script", systemImage: "checkmark.seal") {
+                    checkScript()
+                }
+                if let checkResult {
+                    Label(checkResult.message, systemImage: checkResult.isValid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(checkResult.isValid ? .green : .red)
+                }
             }
             Section {
                 Button("Delete Part", role: .destructive) {
                     onDelete()
                 }
             }
+        }
+        .onChange(of: part.id) {
+            checkResult = nil
+        }
+        .onChange(of: part.script) {
+            checkResult = nil
+        }
+    }
+
+    private func checkScript() {
+        do {
+            try HyperTalk.check(part.script)
+            checkResult = CheckResult(isValid: true, message: "No problems found.")
+        } catch {
+            checkResult = CheckResult(isValid: false, message: error.localizedDescription)
         }
     }
 

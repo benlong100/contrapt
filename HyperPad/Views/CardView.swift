@@ -8,7 +8,7 @@ import SwiftUI
 /// Renders one card: background parts beneath card parts, laid out in
 /// logical card coordinates (D3) and scaled to fit the available space.
 /// In browse mode parts are live controls; in edit mode they render inert
-/// with selection chrome and move/resize gestures.
+/// with selection chrome, move/resize gestures, and alignment snapping.
 struct CardView: View {
     @Binding var stack: Stack
     let cardIndex: Int
@@ -16,6 +16,8 @@ struct CardView: View {
     @Binding var selectedPartID: UUID?
     var onButtonTap: (Part) -> Void
     var onOpenInspector: () -> Void = {}
+
+    @State private var guides = AlignmentGuides()
 
     /// Named coordinate space on the logical-size canvas, so gesture math
     /// works in card coordinates regardless of display scale.
@@ -47,11 +49,22 @@ struct CardView: View {
                 partViews(for: $stack.backgrounds[backgroundIndex].parts)
             }
             partViews(for: $stack.cards[cardIndex].parts)
+            guideLines
         }
     }
 
     private var backgroundIndex: Int? {
         stack.backgrounds.firstIndex { $0.id == stack.cards[cardIndex].backgroundID }
+    }
+
+    /// Everything a drag can snap against on this card.
+    private var snapContext: SnapContext {
+        var parts: [(id: UUID, frame: PartFrame)] = []
+        if let backgroundIndex {
+            parts += stack.backgrounds[backgroundIndex].parts.map { ($0.id, $0.frame) }
+        }
+        parts += stack.cards[cardIndex].parts.map { ($0.id, $0.frame) }
+        return SnapContext(cardSize: stack.cardSize, parts: parts)
     }
 
     private func partViews(for parts: Binding<[Part]>) -> some View {
@@ -61,6 +74,8 @@ struct CardView: View {
                     EditablePart(
                         part: $part,
                         isSelected: selectedPartID == part.id,
+                        snap: snapContext,
+                        guides: $guides,
                         onSelect: { selectedPartID = part.id },
                         onOpenInspector: onOpenInspector
                     )
@@ -75,6 +90,112 @@ struct CardView: View {
             )
         }
     }
+
+    @ViewBuilder
+    private var guideLines: some View {
+        ForEach(guides.verticalLines, id: \.self) { x in
+            Rectangle()
+                .fill(Color.orange)
+                .frame(width: 1, height: stack.cardSize.height)
+                .position(x: x, y: stack.cardSize.height / 2)
+                .allowsHitTesting(false)
+        }
+        ForEach(guides.horizontalLines, id: \.self) { y in
+            Rectangle()
+                .fill(Color.orange)
+                .frame(width: stack.cardSize.width, height: 1)
+                .position(x: stack.cardSize.width / 2, y: y)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+/// Guide lines lit during a drag, in card coordinates.
+struct AlignmentGuides: Equatable {
+    var verticalLines: [Double] = []
+    var horizontalLines: [Double] = []
+
+    mutating func addVertical(_ x: Double) {
+        if !verticalLines.contains(x) { verticalLines.append(x) }
+    }
+
+    mutating func addHorizontal(_ y: Double) {
+        if !horizontalLines.contains(y) { horizontalLines.append(y) }
+    }
+}
+
+/// Snapping for edit-mode drags: alignment targets (card edges and center,
+/// other parts' edges and centers) win within a tolerance and light a
+/// guide; otherwise positions fall to an 8-point grid.
+struct SnapContext {
+    let cardSize: CardSize
+    let parts: [(id: UUID, frame: PartFrame)]
+
+    static let gridSpacing: Double = 8
+    static let alignmentTolerance: Double = 6
+
+    enum Axis {
+        case horizontal
+        case vertical
+    }
+
+    private func targets(axis: Axis, excluding id: UUID) -> [Double] {
+        var targets: [Double] = switch axis {
+        case .horizontal: [0, cardSize.width / 2, cardSize.width]
+        case .vertical: [0, cardSize.height / 2, cardSize.height]
+        }
+        for (partID, frame) in parts where partID != id {
+            switch axis {
+            case .horizontal:
+                targets += [frame.x, frame.x + frame.width / 2, frame.x + frame.width]
+            case .vertical:
+                targets += [frame.y, frame.y + frame.height / 2, frame.y + frame.height]
+            }
+        }
+        return targets
+    }
+
+    /// Snaps a proposed origin, considering the part's leading edge,
+    /// center, and trailing edge against all targets.
+    func snapPosition(raw: Double, length: Double, axis: Axis, excluding id: UUID, guides: inout AlignmentGuides) -> Double {
+        var best: (delta: Double, target: Double)?
+        for target in targets(axis: axis, excluding: id) {
+            for offset in [0, length / 2, length] {
+                let delta = target - (raw + offset)
+                if abs(delta) <= Self.alignmentTolerance, abs(delta) < abs(best?.delta ?? .infinity) {
+                    best = (delta, target)
+                }
+            }
+        }
+        if let best {
+            switch axis {
+            case .horizontal: guides.addVertical(best.target)
+            case .vertical: guides.addHorizontal(best.target)
+            }
+            return raw + best.delta
+        }
+        return (raw / Self.gridSpacing).rounded() * Self.gridSpacing
+    }
+
+    /// Snaps a proposed length so the far edge aligns or lands on the grid.
+    func snapLength(raw: Double, origin: Double, axis: Axis, excluding id: UUID, guides: inout AlignmentGuides) -> Double {
+        let rawEdge = origin + raw
+        var best: (delta: Double, target: Double)?
+        for target in targets(axis: axis, excluding: id) {
+            let delta = target - rawEdge
+            if abs(delta) <= Self.alignmentTolerance, abs(delta) < abs(best?.delta ?? .infinity) {
+                best = (delta, target)
+            }
+        }
+        if let best {
+            switch axis {
+            case .horizontal: guides.addVertical(best.target)
+            case .vertical: guides.addHorizontal(best.target)
+            }
+            return raw + best.delta
+        }
+        return (raw / Self.gridSpacing).rounded() * Self.gridSpacing
+    }
 }
 
 /// A part in edit mode: the control rendered inert, plus selection chrome
@@ -82,6 +203,8 @@ struct CardView: View {
 private struct EditablePart: View {
     @Binding var part: Part
     let isSelected: Bool
+    let snap: SnapContext
+    @Binding var guides: AlignmentGuides
     var onSelect: () -> Void
     var onOpenInspector: () -> Void
 
@@ -136,10 +259,17 @@ private struct EditablePart: View {
                     onSelect()
                 }
                 guard let start = frameAtGestureStart else { return }
-                part.frame.x = start.x + (value.location.x - value.startLocation.x)
-                part.frame.y = start.y + (value.location.y - value.startLocation.y)
+                let rawX = start.x + (value.location.x - value.startLocation.x)
+                let rawY = start.y + (value.location.y - value.startLocation.y)
+                var lit = AlignmentGuides()
+                part.frame.x = snap.snapPosition(raw: rawX, length: start.width, axis: .horizontal, excluding: part.id, guides: &lit)
+                part.frame.y = snap.snapPosition(raw: rawY, length: start.height, axis: .vertical, excluding: part.id, guides: &lit)
+                guides = lit
             }
-            .onEnded { _ in frameAtGestureStart = nil }
+            .onEnded { _ in
+                frameAtGestureStart = nil
+                guides = AlignmentGuides()
+            }
     }
 
     private var resizeGesture: some Gesture {
@@ -149,10 +279,17 @@ private struct EditablePart: View {
                     frameAtGestureStart = part.frame
                 }
                 guard let start = frameAtGestureStart else { return }
-                part.frame.width = max(Self.minSize, start.width + (value.location.x - value.startLocation.x))
-                part.frame.height = max(Self.minSize, start.height + (value.location.y - value.startLocation.y))
+                let rawWidth = start.width + (value.location.x - value.startLocation.x)
+                let rawHeight = start.height + (value.location.y - value.startLocation.y)
+                var lit = AlignmentGuides()
+                part.frame.width = max(Self.minSize, snap.snapLength(raw: rawWidth, origin: start.x, axis: .horizontal, excluding: part.id, guides: &lit))
+                part.frame.height = max(Self.minSize, snap.snapLength(raw: rawHeight, origin: start.y, axis: .vertical, excluding: part.id, guides: &lit))
+                guides = lit
             }
-            .onEnded { _ in frameAtGestureStart = nil }
+            .onEnded { _ in
+                frameAtGestureStart = nil
+                guides = AlignmentGuides()
+            }
     }
 }
 
