@@ -192,6 +192,18 @@ final class DocumentScriptHost: HyperTalkHost {
         case "placeholder":
             guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.placeholder
+        case "textfont":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.format.fontDesign.rawValue
+        case "textsize":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return numberText(properties.format.size)
+        case "textstyle":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return Self.styleList(properties.format)
+        case "textalign":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.format.align.rawValue
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -247,9 +259,54 @@ final class DocumentScriptHost: HyperTalkHost {
             guard case .field(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.placeholder = value
             part.kind = .field(properties)
+        case "textfont":
+            try withFieldFormat(&part, kind: kind) { format in
+                guard let design = Self.parseFontDesign(value) else {
+                    throw HostError("Unknown font \"\(value)\". Try system, serif, monospaced, or rounded.")
+                }
+                format.fontDesign = design
+            }
+        case "textsize":
+            let size = try number(value, for: property)
+            try withFieldFormat(&part, kind: kind) { $0.size = min(max(size, 4), 256) }
+        case "textstyle":
+            try withFieldFormat(&part, kind: kind) { Self.applyStyleList(value, to: &$0) }
+        case "textalign":
+            guard let align = TextAlign(rawValue: value.lowercased().trimmingCharacters(in: .whitespaces)) else {
+                throw HostError("Unknown alignment \"\(value)\". Try left, center, or right.")
+            }
+            try withFieldFormat(&part, kind: kind) { $0.align = align }
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
+    }
+
+    /// Mutates a field's text format, or throws if the part isn't a field.
+    private func withFieldFormat(_ part: inout Part, kind: String, _ body: (inout TextFormat) throws -> Void) throws {
+        guard case .field(var properties) = part.kind else { throw Self.noSuchProperty("text formatting", of: kind) }
+        try body(&properties.format)
+        part.kind = .field(properties)
+    }
+
+    /// "plain", or a comma list of bold/italic/underline.
+    static func styleList(_ format: TextFormat) -> String {
+        var parts: [String] = []
+        if format.isBold { parts.append("bold") }
+        if format.isItalic { parts.append("italic") }
+        if format.isUnderline { parts.append("underline") }
+        return parts.isEmpty ? "plain" : parts.joined(separator: ",")
+    }
+
+    static func applyStyleList(_ value: String, to format: inout TextFormat) {
+        let tokens = value.lowercased().split(whereSeparator: { $0 == "," || $0 == " " }).map(String.init)
+        format.isBold = tokens.contains("bold")
+        format.isItalic = tokens.contains("italic")
+        format.isUnderline = tokens.contains("underline")
+    }
+
+    static func parseFontDesign(_ value: String) -> FontDesign? {
+        let normalized = value.lowercased().trimmingCharacters(in: .whitespaces)
+        return FontDesign.allCases.first { $0.rawValue == normalized || $0.label.lowercased() == normalized }
     }
 
     private func cardProperty(_ property: String, cardAt index: Int) throws -> String {

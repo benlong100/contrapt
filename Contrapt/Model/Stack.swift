@@ -271,24 +271,73 @@ extension ButtonPart: Codable {
     }
 }
 
+/// A typeface family, mapped to a SwiftUI Font.Design (guaranteed on every
+/// platform without bundling fonts).
+nonisolated enum FontDesign: String, Codable, CaseIterable, Hashable {
+    case standard, serif, monospaced, rounded
+
+    var label: String {
+        switch self {
+        case .standard: "System"
+        case .serif: "Serif"
+        case .monospaced: "Monospaced"
+        case .rounded: "Rounded"
+        }
+    }
+}
+
+nonisolated enum TextAlign: String, Codable, CaseIterable, Hashable {
+    case left, center, right
+    var label: String { rawValue.capitalized }
+}
+
+/// Whole-object text formatting — HyperCard's field-level textFont/Size/
+/// Style/Align. Shared so labels can adopt it later.
+nonisolated struct TextFormat: Hashable {
+    var fontDesign: FontDesign = .standard
+    var size: Double = 17
+    var isBold = false
+    var isItalic = false
+    var isUnderline = false
+    var align: TextAlign = .left
+}
+
+extension TextFormat: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case fontDesign, size, isBold, isItalic, isUnderline, align
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        fontDesign = try container.decodeIfPresent(FontDesign.self, forKey: .fontDesign) ?? .standard
+        size = try container.decodeIfPresent(Double.self, forKey: .size) ?? 17
+        isBold = try container.decodeIfPresent(Bool.self, forKey: .isBold) ?? false
+        isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
+        isUnderline = try container.decodeIfPresent(Bool.self, forKey: .isUnderline) ?? false
+        align = try container.decodeIfPresent(TextAlign.self, forKey: .align) ?? .left
+    }
+}
+
 nonisolated struct FieldPart: Hashable {
     var text: String
     var placeholder: String
     /// Multi-line fields render as a text area filling their frame, like
     /// HyperCard fields; single-line fields are compact entry boxes.
     var isMultiline: Bool
+    var format: TextFormat
 
-    init(text: String, placeholder: String, isMultiline: Bool = false) {
+    init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat()) {
         self.text = text
         self.placeholder = placeholder
         self.isMultiline = isMultiline
+        self.format = format
     }
 }
 
-/// Manual Codable so older manifests without `isMultiline` still decode.
+/// Manual Codable so older manifests without the newer fields still decode.
 extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
-        case text, placeholder, isMultiline
+        case text, placeholder, isMultiline, format
     }
 
     init(from decoder: Decoder) throws {
@@ -296,6 +345,7 @@ extension FieldPart: Codable {
         text = try container.decode(String.self, forKey: .text)
         placeholder = try container.decode(String.self, forKey: .placeholder)
         isMultiline = try container.decodeIfPresent(Bool.self, forKey: .isMultiline) ?? false
+        format = try container.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
     }
 }
 

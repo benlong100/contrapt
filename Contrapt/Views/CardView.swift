@@ -399,6 +399,45 @@ struct CardButtonStyle: ButtonStyle {
     }
 }
 
+extension FontDesign {
+    var swiftUI: Font.Design {
+        switch self {
+        case .standard: .default
+        case .serif: .serif
+        case .monospaced: .monospaced
+        case .rounded: .rounded
+        }
+    }
+}
+
+extension TextAlign {
+    var swiftUI: TextAlignment {
+        switch self {
+        case .left: .leading
+        case .center: .center
+        case .right: .trailing
+        }
+    }
+
+    var frameAlignment: Alignment {
+        switch self {
+        case .left: .leading
+        case .center: .center
+        case .right: .trailing
+        }
+    }
+}
+
+extension TextFormat {
+    /// The composed font (design, size, bold, italic).
+    var font: Font {
+        var font = Font.system(size: size, design: fontDesign.swiftUI)
+        if isBold { font = font.bold() }
+        if isItalic { font = font.italic() }
+        return font
+    }
+}
+
 /// The open document's media assets, for image parts.
 private struct StackAssetsKey: EnvironmentKey {
     static let defaultValue: [String: Data] = [:]
@@ -438,12 +477,16 @@ struct PartView: View {
             if properties.isMultiline {
                 // A HyperCard-style field: a text area filling its frame.
                 TextEditor(text: fieldText)
+                    .font(properties.format.font)
+                    .underline(properties.format.isUnderline)
+                    .multilineTextAlignment(properties.format.align.swiftUI)
                     .scrollContentBackground(.hidden)
                     .padding(6)
                     .background(Color.cardSurface)
                     .overlay(alignment: .topLeading) {
                         if properties.text.isEmpty {
                             Text(properties.placeholder)
+                                .font(properties.format.font)
                                 .foregroundStyle(Color.placeholderTextColor)
                                 .padding(.horizontal, 11)
                                 .padding(.vertical, 14)
@@ -457,6 +500,9 @@ struct PartView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
                 TextField(properties.placeholder, text: fieldText)
+                    .font(properties.format.font)
+                    .underline(properties.format.isUnderline)
+                    .multilineTextAlignment(properties.format.align.swiftUI)
                     .textFieldStyle(.roundedBorder)
             }
         case .label(let properties):
@@ -575,6 +621,26 @@ struct PartView: View {
     )
     .padding()
     .onAppear { selection = stack.cards[0].parts[2].id }
+}
+
+#Preview("Field Text") {
+    @Previewable @State var selection: UUID?
+    var stack: Stack = {
+        var s = Stack.makeNew()
+        func field(_ text: String, y: Double, _ fmt: TextFormat) -> Part {
+            Part(id: UUID(), name: text, frame: PartFrame(x: 64, y: y, width: 560, height: 60),
+                 script: "", kind: .field(FieldPart(text: text, placeholder: "", isMultiline: false, format: fmt)))
+        }
+        s.cards[0].parts = [
+            field("Serif 24 bold", y: 60, TextFormat(fontDesign: .serif, size: 24, isBold: true)),
+            field("Monospaced italic", y: 150, TextFormat(fontDesign: .monospaced, size: 18, isItalic: true)),
+            field("Rounded underline center", y: 240, TextFormat(fontDesign: .rounded, size: 20, isUnderline: true, align: .center)),
+            field("System right", y: 330, TextFormat(size: 17, align: .right)),
+        ]
+        return s.sanitized()
+    }()
+    CardView(stack: .constant(stack), cardIndex: 0, selectedPartID: $selection)
+        .padding()
 }
 
 #Preview("Button Styles") {

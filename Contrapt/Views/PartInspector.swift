@@ -82,6 +82,21 @@ struct PartInspector: View {
                     .lineLimit(1...6)
                 Toggle("Multiple Lines", isOn: fieldIsMultiline)
             }
+            Section("Text") {
+                Picker("Font", selection: fieldFontDesign) {
+                    ForEach(FontDesign.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                Stepper(value: fieldTextSize, in: 8...96, step: 1) {
+                    LabeledContent("Size", value: "\(Int(fieldTextSize.wrappedValue)) pt")
+                }
+                Toggle("Bold", isOn: fieldBold)
+                Toggle("Italic", isOn: fieldItalic)
+                Toggle("Underline", isOn: fieldUnderline)
+                Picker("Align", selection: fieldAlign) {
+                    ForEach(TextAlign.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
         case .label:
             Section("Label") {
                 TextField("Text", text: labelText)
@@ -172,6 +187,29 @@ struct PartInspector: View {
             }
         )
     }
+
+    /// Projects one field-format value into a binding that writes back
+    /// through the part's kind.
+    private func fieldFormat<Value>(_ keyPath: WritableKeyPath<TextFormat, Value>, default fallback: Value) -> Binding<Value> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return fallback }
+                return properties.format[keyPath: keyPath]
+            },
+            set: {
+                guard case .field(var properties) = part.kind else { return }
+                properties.format[keyPath: keyPath] = $0
+                part.kind = .field(properties)
+            }
+        )
+    }
+
+    private var fieldFontDesign: Binding<FontDesign> { fieldFormat(\.fontDesign, default: .standard) }
+    private var fieldTextSize: Binding<Double> { fieldFormat(\.size, default: 17) }
+    private var fieldBold: Binding<Bool> { fieldFormat(\.isBold, default: false) }
+    private var fieldItalic: Binding<Bool> { fieldFormat(\.isItalic, default: false) }
+    private var fieldUnderline: Binding<Bool> { fieldFormat(\.isUnderline, default: false) }
+    private var fieldAlign: Binding<TextAlign> { fieldFormat(\.align, default: .left) }
 
     private var fieldPlaceholder: Binding<String> {
         Binding(
