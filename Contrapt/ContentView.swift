@@ -169,7 +169,7 @@ struct ContentView: View {
                         Button("Delete Card", systemImage: "trash", role: .destructive) {
                             deleteCurrentCard()
                         }
-                        .disabled(document.stack.cards.count <= 1 || document.stack.cards[cardIndex].cantDelete)
+                        .disabled(!canDeleteCurrentCard)
                     }
                     Menu("Arrange", systemImage: "square.3.layers.3d") {
                         Button("Bring to Front", systemImage: "arrow.up.to.line") { arrangeSelectedPart(.front) }
@@ -589,9 +589,25 @@ struct ContentView: View {
         selectedPartID = nil
     }
 
+    /// Whether the current card may be deleted: more than one card exists,
+    /// the card isn't protected, and deleting it wouldn't remove a
+    /// protected background (its last card).
+    private var canDeleteCurrentCard: Bool {
+        guard document.stack.cards.count > 1 else { return false }
+        guard !document.stack.cards[cardIndex].cantDelete else { return false }
+        let backgroundID = document.stack.cards[cardIndex].backgroundID
+        let othersShareBackground = document.stack.cards.enumerated()
+            .contains { $0.offset != cardIndex && $0.element.backgroundID == backgroundID }
+        if !othersShareBackground,
+           let background = document.stack.backgrounds.first(where: { $0.id == backgroundID }),
+           background.cantDelete {
+            return false
+        }
+        return true
+    }
+
     private func deleteCurrentCard() {
-        guard document.stack.cards.count > 1 else { return }
-        guard !document.stack.cards[cardIndex].cantDelete else { return }
+        guard canDeleteCurrentCard else { return }
         stack.wrappedValue.cards.remove(at: cardIndex)
         currentCardIndex = min(cardIndex, document.stack.cards.count - 1)
         selectedPartID = nil

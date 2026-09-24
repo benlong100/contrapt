@@ -103,11 +103,15 @@ nonisolated struct Background: Identifiable, Hashable {
     var paintImageAsset: String? = nil
     /// Permanent short ID for scripts; assigned by the stack's allocator.
     var scriptID: Int = 0
+    /// HyperCard's Background Info checkboxes, also script properties.
+    var cantDelete: Bool = false
+    var dontSearch: Bool = false
 }
 
 extension Background: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, script, parts, paintDrawingAsset, paintImageAsset, scriptID
+        case cantDelete, dontSearch
     }
 
     init(from decoder: Decoder) throws {
@@ -119,6 +123,8 @@ extension Background: Codable {
         paintDrawingAsset = try container.decodeIfPresent(String.self, forKey: .paintDrawingAsset)
         paintImageAsset = try container.decodeIfPresent(String.self, forKey: .paintImageAsset)
         scriptID = try container.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
+        cantDelete = try container.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
+        dontSearch = try container.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
     }
 }
 

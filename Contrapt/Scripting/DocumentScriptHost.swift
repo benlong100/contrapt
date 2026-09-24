@@ -113,6 +113,8 @@ final class DocumentScriptHost: HyperTalkHost {
             switch property {
             case "name": return background.name
             case "id": return String(background.scriptID)
+            case "cantdelete": return background.cantDelete ? "true" : "false"
+            case "dontsearch": return background.dontSearch ? "true" : "false"
             default: throw Self.noSuchProperty(property, of: "this background")
             }
         case .thisStack:
@@ -141,12 +143,16 @@ final class DocumentScriptHost: HyperTalkHost {
         case .thisCard:
             try setCardProperty(property, cardAt: cardIndex, to: value)
         case .thisBackground:
-            guard property == "name" else { throw Self.noSuchProperty(property, of: "this background") }
             let card = stack.cards[cardIndex]
             guard let index = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }) else {
                 throw HostError("This card has no background.")
             }
-            stackBinding.wrappedValue.backgrounds[index].name = value
+            switch property {
+            case "name": stackBinding.wrappedValue.backgrounds[index].name = value
+            case "cantdelete": stackBinding.wrappedValue.backgrounds[index].cantDelete = try boolean(value, for: property)
+            case "dontsearch": stackBinding.wrappedValue.backgrounds[index].dontSearch = try boolean(value, for: property)
+            default: throw Self.noSuchProperty(property, of: "this background")
+            }
         case .thisStack:
             switch property {
             case "name": stackBinding.wrappedValue.name = value

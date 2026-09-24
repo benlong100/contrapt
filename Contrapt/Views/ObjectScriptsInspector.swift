@@ -42,6 +42,13 @@ struct ObjectScriptsInspector: View {
                     Toggle("Can't Delete Card", isOn: $stack.cards[cardIndex].cantDelete)
                 }
             }
+            if scope == .background, let backgroundIndex {
+                Section("Background") {
+                    TextField("Name", text: $stack.backgrounds[backgroundIndex].name)
+                    Toggle("Don't Search Background", isOn: $stack.backgrounds[backgroundIndex].dontSearch)
+                    Toggle("Can't Delete Background", isOn: $stack.backgrounds[backgroundIndex].cantDelete)
+                }
+            }
             if scope == .stack {
                 Section {
                     TextField("Name", text: $stack.name)
@@ -68,6 +75,12 @@ struct ObjectScriptsInspector: View {
         .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: scriptTitle, script: scriptBinding)
         }
+    }
+
+    /// The current card's background index, if any.
+    private var backgroundIndex: Int? {
+        let backgroundID = stack.cards[cardIndex].backgroundID
+        return stack.backgrounds.firstIndex { $0.id == backgroundID }
     }
 
     /// Shows the preset name when the size matches one, else the dimensions.
