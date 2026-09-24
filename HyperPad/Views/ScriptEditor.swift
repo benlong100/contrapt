@@ -40,9 +40,11 @@ struct ScriptEditor: View {
                 let caretOffset = caretOffsetAfterEdit(from: script, to: plain)
 
                 // A newly typed return re-indents the whole script from its
-                // block structure, HyperCard style.
+                // block structure, HyperCard style. The caret's fresh empty
+                // line is pre-indented to block depth so typing starts there.
                 if newlineCount(of: plain) > newlineCount(of: script) {
-                    let reindented = HyperTalk.reindent(plain)
+                    let caretLine = plain.prefix(caretOffset).lazy.filter { $0 == "\n" }.count
+                    let reindented = HyperTalk.reindent(plain, indentingEmptyLine: caretLine)
                     if reindented != plain {
                         script = reindented
                         applyReindented(reindented, caretWasAt: caretOffset, in: plain)

@@ -129,3 +129,21 @@ import Testing
     _ = HyperTalk.reindent("repeat")
     _ = HyperTalk.reindent("")
 }
+
+@Test func caretLineGetsBlockDepthIndentationWhenRequested() {
+    let source = "on mouseUp\n  put 1\n\nend mouseUp"
+    let result = HyperTalk.reindent(source, indentingEmptyLine: 2)
+    #expect(result == "on mouseUp\n  put 1\n  \nend mouseUp")
+}
+
+@Test func caretLineInsideNestedBlocksIndentsDeeper() {
+    let source = "on mouseUp\n  repeat 3 times\n\n  end repeat\nend mouseUp"
+    let result = HyperTalk.reindent(source, indentingEmptyLine: 2)
+    #expect(result == "on mouseUp\n  repeat 3 times\n    \n  end repeat\nend mouseUp")
+}
+
+@Test func otherBlankLinesStayEmpty() {
+    let source = "on mouseUp\n\n  put 1\n\nend mouseUp"
+    let result = HyperTalk.reindent(source, indentingEmptyLine: 3)
+    #expect(result == "on mouseUp\n\n  put 1\n  \nend mouseUp")
+}

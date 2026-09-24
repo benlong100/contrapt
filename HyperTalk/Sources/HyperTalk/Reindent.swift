@@ -11,17 +11,24 @@ public extension HyperTalk {
     /// Indentation is derived, never hand-maintained; when it doesn't snap
     /// back after an `end`, the user can see a block is unbalanced.
     /// Tolerant of incomplete code: never throws, clamps at zero.
-    static func reindent(_ source: String, indentWidth: Int = 2) -> String {
+    ///
+    /// Blank lines normally stay empty, but the line at `indentingEmptyLine`
+    /// (the caret's freshly created line in an editor) receives the
+    /// indentation a statement there would get, so typing starts at depth.
+    static func reindent(_ source: String, indentWidth: Int = 2, indentingEmptyLine: Int? = nil) -> String {
         var depth = 0
         var previousWasSingleLineIf = false
         let lines = source.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
             .components(separatedBy: "\n")
 
-        let indented = lines.map { line -> String in
+        let indented = lines.enumerated().map { lineNumber, line -> String in
             let content = line.trimmingCharacters(in: .whitespaces)
             if content.isEmpty {
                 previousWasSingleLineIf = false
+                if lineNumber == indentingEmptyLine {
+                    return String(repeating: " ", count: max(0, depth) * indentWidth)
+                }
                 return ""
             }
 
