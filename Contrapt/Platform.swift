@@ -46,6 +46,63 @@ extension PlatformImage {
     }
 }
 
+// MARK: - Delete key (macOS)
+
+#if os(macOS)
+/// A local key-down monitor for the Delete key. SwiftUI's focus-scoped
+/// `onKeyPress` never receives the key here (the card's part gestures own
+/// focus), so we watch the event stream directly — while deferring to text
+/// editing so Delete still erases characters in a focused field.
+struct DeleteKeyCatcher: NSViewRepresentable {
+    var isEnabled: Bool
+    var onDelete: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        context.coordinator.onDelete = onDelete
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.install()
+        return NSView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.onDelete = onDelete
+        context.coordinator.isEnabled = isEnabled
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.remove()
+    }
+
+    final class Coordinator {
+        var onDelete: (() -> Void)?
+        var isEnabled = false
+        private var monitor: Any?
+
+        func install() {
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.isEnabled else { return event }
+                // 51 = Delete (backspace), 117 = forward delete.
+                guard event.keyCode == 51 || event.keyCode == 117 else { return event }
+                // Leave text editing alone: a focused field editor keeps the key.
+                if let responder = event.window?.firstResponder,
+                   responder is NSText || responder is NSTextView {
+                    return event
+                }
+                self.onDelete?()
+                return nil
+            }
+        }
+
+        func remove() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+    }
+}
+#endif
+
 extension Image {
     /// Builds a SwiftUI image from asset bytes, nil if undecodable.
     init?(assetData data: Data) {

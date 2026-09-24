@@ -33,6 +33,11 @@ struct ContentView: View {
     @State private var undoFlushTask: Task<Void, Never>?
     @State private var isPhotoPickerPresented = false
     @State private var selectedPhoto: PhotosPickerItem?
+    #if !os(macOS)
+    /// Keyboard focus for the card area, so the Delete key can remove the
+    /// selected part in edit mode (macOS uses a key monitor instead).
+    @FocusState private var isCardFocused: Bool
+    #endif
     #if os(macOS)
     /// The Mac uses a regular file picker so images don't have to go
     /// through Photos.
@@ -87,6 +92,33 @@ struct ContentView: View {
         .environment(\.stackAssets, document.assets)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cardBackdrop)
+        // In edit mode, the Delete key removes the selected part. A local
+        // key monitor handles it (SwiftUI's onKeyPress never gets the key
+        // while the card's part gestures own focus); it defers to any field
+        // being edited so Delete still erases text there.
+        #if os(macOS)
+        .background(
+            DeleteKeyCatcher(isEnabled: isEditing && selectedPartID != nil) {
+                if let selectedPartID { deletePart(id: selectedPartID) }
+            }
+        )
+        #else
+        .focusable(isEditing)
+        .focusEffectDisabled()
+        .focused($isCardFocused)
+        .onKeyPress { press in
+            guard isEditing, let selectedPartID,
+                  press.key == .delete || press.key == .deleteForward else { return .ignored }
+            deletePart(id: selectedPartID)
+            return .handled
+        }
+        .onChange(of: selectedPartID) { _, newValue in
+            if isEditing, newValue != nil { isCardFocused = true }
+        }
+        .onChange(of: isEditing) { _, editing in
+            if !editing { isCardFocused = false }
+        }
+        #endif
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhoto, matching: .images)
         #if os(macOS)
         .fileImporter(isPresented: $isImageImporterPresented, allowedContentTypes: [.image]) { result in
