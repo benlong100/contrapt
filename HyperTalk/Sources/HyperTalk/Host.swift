@@ -5,6 +5,15 @@
 
 import Foundation
 
+/// A clock reading requested by `the date` / `the time` / etc. The host
+/// owns the actual clock and locale formatting, keeping the interpreter
+/// pure and testable.
+public enum ClockField: Sendable, Equatable {
+    case shortDate, longDate, abbreviatedDate
+    case shortTime, longTime
+    case seconds, ticks
+}
+
 /// Where a `go` command should land.
 public enum GoDestination: Equatable, Sendable {
     case next
@@ -68,6 +77,9 @@ public protocol HyperTalkHost: AnyObject {
     /// across separate script runs — so the host owns their storage.
     func globalValue(_ name: String) -> String?
     func setGlobalValue(_ name: String, to value: String)
+    /// `the date` / `the time` / `the seconds` / `the ticks` — the host
+    /// reads the clock and formats for the current locale.
+    func clock(_ field: ClockField) -> String
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

@@ -107,6 +107,29 @@ final class DocumentScriptHost: HyperTalkHost {
         GlobalStore.shared.values[name] = value
     }
 
+    // MARK: - Clock
+
+    func clock(_ field: ClockField) -> String {
+        let now = Date()
+        switch field {
+        case .seconds:
+            return String(Int(now.timeIntervalSince1970))
+        case .ticks:
+            return String(Int(now.timeIntervalSince1970 * 60))
+        case .shortDate, .longDate, .abbreviatedDate, .shortTime, .longTime:
+            let formatter = DateFormatter()
+            switch field {
+            case .shortDate: formatter.dateStyle = .short
+            case .longDate: formatter.dateStyle = .full
+            case .abbreviatedDate: formatter.dateStyle = .medium
+            case .shortTime: formatter.timeStyle = .short
+            case .longTime: formatter.timeStyle = .medium
+            default: break
+            }
+            return formatter.string(from: now)
+        }
+    }
+
     // MARK: - Properties
 
     func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String {

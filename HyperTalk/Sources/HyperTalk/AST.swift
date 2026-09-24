@@ -100,6 +100,8 @@ indirect enum Expr {
     case call(String, [Expr])
     /// `the result` — the value returned by the last command/function.
     case result
+    /// `the date`, `the long time`, `the seconds`, etc.
+    case clock(ClockField)
     case binary(BinaryOp, Expr, Expr)
     case unary(UnaryOp, Expr)
 }

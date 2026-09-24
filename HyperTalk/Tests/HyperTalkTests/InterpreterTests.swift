@@ -102,6 +102,19 @@ final class MockHost: HyperTalkHost {
     func setGlobalValue(_ name: String, to value: String) {
         globals[name] = value
     }
+
+    /// A fixed clock so date/time tests are deterministic.
+    func clock(_ field: ClockField) -> String {
+        switch field {
+        case .shortDate: "1/2/34"
+        case .longDate: "Monday, January 2, 2034"
+        case .abbreviatedDate: "Jan 2, 2034"
+        case .shortTime: "3:45 PM"
+        case .longTime: "3:45:07 PM"
+        case .seconds: "2019686400"
+        case .ticks: "121181184000"
+        }
+    }
 }
 
 @discardableResult

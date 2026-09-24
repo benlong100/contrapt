@@ -273,3 +273,35 @@ import Testing
     #expect(host.fields["c"] == "65")
     #expect(host.fields["d"] == "B")
 }
+
+// MARK: - Date and time
+
+@Test func dateAndTimeForms() throws {
+    let host = MockHost(fields: ["a": "", "b": "", "c": "", "d": "", "e": ""])
+    try run("""
+    on mouseUp
+      put the date into field "a"
+      put the long date into field "b"
+      put the abbreviated date into field "c"
+      put the time into field "d"
+      put the long time into field "e"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["a"] == "1/2/34")
+    #expect(host.fields["b"] == "Monday, January 2, 2034")
+    #expect(host.fields["c"] == "Jan 2, 2034")
+    #expect(host.fields["d"] == "3:45 PM")
+    #expect(host.fields["e"] == "3:45:07 PM")
+}
+
+@Test func secondsAndTicks() throws {
+    let host = MockHost(fields: ["a": "", "b": ""])
+    try run("""
+    on mouseUp
+      put the seconds into field "a"
+      put the ticks into field "b"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["a"] == "2019686400")
+    #expect(host.fields["b"] == "121181184000")
+}

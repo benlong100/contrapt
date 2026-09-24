@@ -633,6 +633,38 @@ struct Parser {
         "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
     ]
 
+    /// Parses a clock field if one begins here (after `the`), else nil
+    /// without consuming: `date`, `long date`, `time`, `seconds`, `ticks`.
+    private mutating func parseClockField() -> ClockField? {
+        let first = peekIdentifier()
+        let adjectives: Set<String> = ["long", "short", "abbreviated", "abbrev", "abbr"]
+        let adjective = adjectives.contains(first ?? "") ? first : nil
+        let noun = adjective != nil ? peekIdentifier(1) : first
+
+        switch noun {
+        case "date":
+            if adjective != nil { advance() }
+            advance()
+            switch adjective {
+            case "long": return .longDate
+            case "abbreviated", "abbrev", "abbr": return .abbreviatedDate
+            default: return .shortDate
+            }
+        case "time":
+            if adjective != nil { advance() }
+            advance()
+            return adjective == "long" ? .longTime : .shortTime
+        case "seconds", "secs":
+            advance()
+            return .seconds
+        case "ticks":
+            advance()
+            return .ticks
+        default:
+            return nil
+        }
+    }
+
     /// Maps an ordinal word (or last/middle) to a chunk selector.
     static func ordinalSelector(_ word: String) -> ChunkSelector? {
         if let n = ordinals[word] { return .index(.numberLiteral(Double(n))) }
@@ -674,6 +706,10 @@ struct Parser {
             if peekIdentifier() == "result" {
                 advance()
                 return .result
+            }
+            // `the [long|short|abbreviated] date/time`, `the seconds/ticks`.
+            if let field = parseClockField() {
+                return .clock(field)
             }
             // `the length of X` → character count.
             if peekIdentifier() == "length", peekIdentifier(1) == "of" {

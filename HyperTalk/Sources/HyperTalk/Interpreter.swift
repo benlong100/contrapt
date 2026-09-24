@@ -511,6 +511,9 @@ final class Runtime {
         case .result:
             return lastResult
 
+        case .clock(let field):
+            return host.clock(field)
+
         case .unary(let op, let operand):
             let value = try evaluate(operand, line: line)
             switch op {

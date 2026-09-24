@@ -45,6 +45,7 @@ enum SyntaxScanner {
         "go", "put", "into", "after", "before", "beep", "get", "set", "this", "of",
         "and", "or", "not", "is", "contains", "div", "mod",
         "the", "card", "field", "number", "length",
+        "date", "time", "seconds", "secs", "ticks", "long", "short", "abbreviated",
         "char", "character", "chars", "characters", "word", "words",
         "item", "items", "line", "lines",
         "first", "second", "third", "fourth", "fifth", "sixth", "seventh",

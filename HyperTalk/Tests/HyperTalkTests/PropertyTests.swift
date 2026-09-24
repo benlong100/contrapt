@@ -90,11 +90,11 @@ import Testing
 @Test func theWithoutOfIsStillANoiseWord() throws {
     let host = try run("""
     on mouseUp
-      put the date into field "out"
+      put the mango into field "out"
     end mouseUp
     """, host: MockHost(fields: ["out": ""]))
-    // No date function yet: falls back to the unquoted literal.
-    #expect(host.fields["out"] == "date")
+    // A non-special word after "the" falls back to the unquoted literal.
+    #expect(host.fields["out"] == "mango")
 }
 
 @Test func setPropertyOnCards() throws {
