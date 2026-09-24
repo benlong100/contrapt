@@ -32,30 +32,48 @@ struct ScriptEditor: View {
             }
             .onChange(of: text) { _, newText in
                 let plain = String(newText.characters)
+                guard plain != script else { return }
+
+                // The caret comes from the text diff, not the selection
+                // binding — the selection hasn't been updated yet when
+                // this change handler runs.
+                let caretOffset = caretOffsetAfterEdit(from: script, to: plain)
 
                 // A newly typed return re-indents the whole script from its
                 // block structure, HyperCard style.
-                if plain != script, newlineCount(of: plain) > newlineCount(of: script) {
+                if newlineCount(of: plain) > newlineCount(of: script) {
                     let reindented = HyperTalk.reindent(plain)
                     if reindented != plain {
-                        // The caret comes from the text diff, not the
-                        // selection binding — the selection hasn't been
-                        // updated yet when this change handler runs.
-                        let caretOffset = caretOffsetAfterEdit(from: script, to: plain)
                         script = reindented
                         applyReindented(reindented, caretWasAt: caretOffset, in: plain)
                         return
                     }
                 }
 
-                if plain != script {
-                    script = plain
-                }
+                script = plain
                 let recolored = highlighted(newText)
                 if recolored != newText {
+                    // Wholesale attribute replacement also resets the caret
+                    // (e.g. a newline typed after a colored token inherits
+                    // its color, forcing a recolor pass) — restore it.
                     text = recolored
+                    setCaret(at: min(caretOffset, plain.count), in: recolored)
                 }
             }
+    }
+
+    /// Sets the insertion point now, and re-asserts it on the next runloop
+    /// turn in case the editor's own (stale) selection update lands after
+    /// this handler. The re-assert is skipped if the text moved on.
+    private func setCaret(at offset: Int, in expected: AttributedString) {
+        let caret = expected.characters.index(expected.startIndex, offsetBy: offset)
+        selection = AttributedTextSelection(insertionPoint: caret)
+        let expectedPlain = String(expected.characters)
+        Task { @MainActor in
+            guard String(text.characters) == expectedPlain else { return }
+            let caret = text.characters.index(text.startIndex, offsetBy: offset)
+            selection = AttributedTextSelection(insertionPoint: caret)
+        }
     }
 
     private func newlineCount(of string: String) -> Int {
@@ -109,9 +127,8 @@ struct ScriptEditor: View {
         offset = min(offset, reindented.count)
 
         let updated = highlighted(AttributedString(reindented))
-        let caret = updated.characters.index(updated.startIndex, offsetBy: offset)
         text = updated
-        selection = AttributedTextSelection(insertionPoint: caret)
+        setCaret(at: offset, in: updated)
     }
 
     private func highlighted(_ source: AttributedString) -> AttributedString {
