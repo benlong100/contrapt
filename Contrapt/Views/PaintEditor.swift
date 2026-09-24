@@ -69,6 +69,15 @@ struct PaintEditor: View {
                 }
             }
         }
+        #if os(macOS)
+        // On macOS this presents as a sheet, which sizes to its content; the
+        // GeometryReader has no intrinsic size, so give the sheet a real one
+        // (room for the card plus the toolbar and padding).
+        .frame(
+            minWidth: max(cardSize.width + 120, 640),
+            minHeight: max(cardSize.height + 160, 520)
+        )
+        #endif
     }
 
     @ViewBuilder

@@ -82,19 +82,22 @@ struct ContentView: View {
             if document.stack.cards.isEmpty {
                 ContentUnavailableView("No Cards", systemImage: "rectangle.on.rectangle.slash")
             } else {
-                CardView(
-                    stack: stack,
-                    cardIndex: cardIndex,
-                    isEditing: isEditing,
-                    isSnappingEnabled: isSnappingEnabled,
-                    selectedPartID: $selectedPartID,
-                    onMouseMessage: sendMouseMessage,
-                    onOpenInspector: { isInspectorPresented = true }
-                )
-                // A scripted `go` with a visual effect animates this swap;
-                // plain navigation changes the id without an animation.
-                .id(cardIndex)
-                .transition(cardTransition?.transition ?? .identity)
+                // The ZStack is a stable container so the outgoing and incoming
+                // cards can overlap during a `visual effect` transition. A
+                // scripted `go` animates the id swap; plain navigation cuts.
+                ZStack {
+                    CardView(
+                        stack: stack,
+                        cardIndex: cardIndex,
+                        isEditing: isEditing,
+                        isSnappingEnabled: isSnappingEnabled,
+                        selectedPartID: $selectedPartID,
+                        onMouseMessage: sendMouseMessage,
+                        onOpenInspector: { isInspectorPresented = true }
+                    )
+                    .id(cardIndex)
+                    .transition(cardTransition?.transition ?? .identity)
+                }
                 .padding()
             }
         }
@@ -497,12 +500,17 @@ struct ContentView: View {
             // A scripted `go`: play the first queued effect as an animated
             // card swap, or cut instantly when there's none.
             onNavigate: { index, effects in
-                if let effect = effects.first {
-                    cardTransition = effect
-                    withAnimation(effect.animation) { currentCardIndex = index }
-                } else {
+                guard let effect = effects.first else {
                     cardTransition = nil
                     currentCardIndex = index
+                    return
+                }
+                // Set the transition first so the *outgoing* card carries it
+                // (a true crossfade needs both cards animating); swap on the
+                // next runloop tick, inside the animation.
+                cardTransition = effect
+                DispatchQueue.main.async {
+                    withAnimation(effect.animation) { currentCardIndex = index }
                 }
             }
         )
