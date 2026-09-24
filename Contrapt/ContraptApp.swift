@@ -6,6 +6,52 @@
 //
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
+
+/// One-time launch bookkeeping.
+enum FirstLaunch {
+    private static let didOpenHomeKey = "didOpenHomeAtFirstLaunch"
+
+    /// Returns true exactly once — the first launch after a fresh install —
+    /// and records that Home has been auto-opened.
+    static func shouldOpenHome() -> Bool {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: didOpenHomeKey) else { return false }
+        defaults.set(true, forKey: didOpenHomeKey)
+        return true
+    }
+}
+
+#if os(iOS)
+/// A hidden view behind the document launch screen that opens Home the
+/// first time the app runs, so new users land in Home rather than the
+/// empty browser.
+private struct FirstLaunchHomeOpener: View {
+    @Environment(\.openDocument) private var openDocument
+
+    var body: some View {
+        Color.clear
+            .task {
+                guard FirstLaunch.shouldOpenHome() else { return }
+                try? await openDocument(at: HomeStack.ensureSeeded())
+            }
+    }
+}
+#endif
+
+#if os(macOS)
+/// Opens Home on the first launch after install. On macOS the document
+/// app otherwise starts at an open panel; this lands new users in Home.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard FirstLaunch.shouldOpenHome() else { return }
+        let url = HomeStack.ensureSeeded()
+        NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
+    }
+}
+#endif
 
 /// The Go menu's items, enabled only when a stack window is focused.
 private struct GoCommands: View {
@@ -44,6 +90,10 @@ private struct GoCommands: View {
 
 @main
 struct ContraptApp: App {
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
+
     var body: some Scene {
         DocumentGroup(newDocument: { StackDocument() }) { file in
             ContentView(document: file.document, fileURL: file.fileURL)
@@ -67,11 +117,13 @@ struct ContraptApp: App {
         // macOS gets New and Open from the standard File menu. (A Help-menu
         // entry point for the tutorial is a natural macOS follow-up.)
         #if os(iOS)
-        DocumentGroupLaunchScene {
+        DocumentGroupLaunchScene("Contrapt") {
             NewDocumentButton("New Stack")
             NewDocumentButton("Learn HyperTalk", for: StackDocument.self) {
                 StackDocument(stack: .tutorial())
             }
+        } background: {
+            FirstLaunchHomeOpener()
         }
         #endif
     }
