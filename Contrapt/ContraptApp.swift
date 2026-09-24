@@ -10,22 +10,35 @@ import SwiftUI
 /// The Go menu's items, enabled only when a stack window is focused.
 private struct GoCommands: View {
     @FocusedValue(\.cardNavigation) private var navigation
+    @Environment(\.openDocument) private var openDocument
 
     var body: some View {
+        // Home opens the Home stack and is always available.
+        Button("Home") { openHome() }
+            .keyboardShortcut("h", modifiers: [.command, .shift])
+        Divider()
+        // Within-stack navigation needs a focused stack window.
         Group {
             Button("Back") { navigation?.goPrevious() }
                 .keyboardShortcut("[", modifiers: .command)
             Button("Forward") { navigation?.goNext() }
                 .keyboardShortcut("]", modifiers: .command)
-            Divider()
             Button("First Card") { navigation?.goFirst() }
                 .keyboardShortcut(.upArrow, modifiers: .command)
             Button("Last Card") { navigation?.goLast() }
                 .keyboardShortcut(.downArrow, modifiers: .command)
-            Button("Home") { navigation?.goHome() }
-                .keyboardShortcut("h", modifiers: [.command, .shift])
         }
         .disabled(navigation == nil)
+        Divider()
+        Button("Reset Home to Default…") {
+            HomeStack.reset()
+            openHome()
+        }
+    }
+
+    private func openHome() {
+        let url = HomeStack.ensureSeeded()
+        Task { try? await openDocument(at: url) }
     }
 }
 

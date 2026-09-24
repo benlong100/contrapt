@@ -16,6 +16,7 @@ struct ContentView: View {
     /// The document's location on disk, for sharing. Nil until first save.
     var fileURL: URL?
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.openDocument) private var openDocument
 
     @State private var currentCardIndex = 0
     @State private var isEditing = false
@@ -174,6 +175,9 @@ struct ContentView: View {
                         isInspectorPresented = true
                     }
                 }
+                Button("Home", systemImage: "house") {
+                    openHome()
+                }
                 Button("HyperTalk Guide", systemImage: "book") {
                     isGuidePresented = true
                 }
@@ -199,7 +203,8 @@ struct ContentView: View {
                 }
                 Spacer()
                 Menu {
-                    Button("Home", systemImage: "house") { goHome() }
+                    Button("Home", systemImage: "house") { openHome() }
+                    Divider()
                     Button("First Card", systemImage: "backward.end") { goFirst() }
                     Button("Last Card", systemImage: "forward.end") { goLast() }
                 } label: {
@@ -505,17 +510,19 @@ struct ContentView: View {
         currentCardIndex = (cardIndex + count - 1) % count
     }
 
-    /// Home is the first card of the stack. (In a document-based app each
-    /// stack is its own world, so Home maps to the stack's start; a true
-    /// app-wide Home stack is a possible future.)
-    private func goHome() { currentCardIndex = 0 }
     private func goFirst() { currentCardIndex = 0 }
     private func goLast() { currentCardIndex = max(0, document.stack.cards.count - 1) }
 
-    /// Navigation actions published to the menu bar's Go menu.
+    /// Opens the Home stack (seeding it on first use) as a document.
+    private func openHome() {
+        let url = HomeStack.ensureSeeded()
+        Task { try? await openDocument(at: url) }
+    }
+
+    /// Within-stack navigation actions published to the Go menu.
     private var cardNavigation: CardNavigation {
         CardNavigation(
-            goHome: goHome, goFirst: goFirst, goLast: goLast,
+            goFirst: goFirst, goLast: goLast,
             goPrevious: goToPreviousCard, goNext: goToNextCard
         )
     }
@@ -524,7 +531,6 @@ struct ContentView: View {
 /// Bridges the focused document's navigation to app-level menu commands
 /// (the Go menu). Nil when no document is focused, which disables the menu.
 struct CardNavigation {
-    var goHome: () -> Void
     var goFirst: () -> Void
     var goLast: () -> Void
     var goPrevious: () -> Void
