@@ -13,5 +13,11 @@ struct HyperPadApp: App {
         DocumentGroup(newDocument: { StackDocument() }) { file in
             ContentView(document: file.document, fileURL: file.fileURL)
         }
+        DocumentGroupLaunchScene {
+            NewDocumentButton("New Stack")
+            NewDocumentButton("Learn HyperTalk", for: StackDocument.self) {
+                StackDocument(stack: .tutorial())
+            }
+        }
     }
 }

@@ -29,6 +29,7 @@ struct ContentView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isPaintingPresented = false
     @State private var paintDrawingToEdit = PKDrawing()
+    @State private var isGuidePresented = false
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
 
@@ -73,6 +74,9 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.secondarySystemBackground))
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhoto, matching: .images)
+        .sheet(isPresented: $isGuidePresented) {
+            HyperTalkGuideView()
+        }
         .fullScreenCover(isPresented: $isPaintingPresented) {
             PaintEditor(cardSize: document.stack.cardSize, initialDrawing: paintDrawingToEdit) { finished in
                 savePaint(finished)
@@ -159,6 +163,9 @@ struct ContentView: View {
                     Button("Inspector", systemImage: "slider.horizontal.3") {
                         isInspectorPresented = true
                     }
+                }
+                Button("HyperTalk Guide", systemImage: "book") {
+                    isGuidePresented = true
                 }
                 if let fileURL {
                     ShareLink(item: fileURL) {
