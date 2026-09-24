@@ -21,18 +21,25 @@ final class MockHost: HyperTalkHost {
         destinations.append(destination)
     }
 
-    func fieldText(named name: String) throws -> String {
-        guard let text = fields[name.lowercased()] else {
-            throw HostError("There is no field named \"\(name)\" on this card.")
+    /// Content lookups key the dictionary by the reference text, prefixed
+    /// with the domain when qualified — e.g. "name", "1", "background 1",
+    /// "id 6". Tests preset whichever keys they use.
+    private func fieldKey(_ reference: HyperTalkObject.Reference, _ domain: HyperTalkObject.PartDomain) -> String {
+        (domainText(domain) + referenceText(reference)).lowercased()
+    }
+
+    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String {
+        guard let text = fields[fieldKey(reference, domain)] else {
+            throw HostError("There is no field \(referenceText(reference)) here.")
         }
         return text
     }
 
-    func setFieldText(named name: String, to text: String) throws {
-        guard fields[name.lowercased()] != nil else {
-            throw HostError("There is no field named \"\(name)\" on this card.")
+    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, to text: String) throws {
+        guard fields[fieldKey(reference, domain)] != nil else {
+            throw HostError("There is no field \(referenceText(reference)) here.")
         }
-        fields[name.lowercased()] = text
+        fields[fieldKey(reference, domain)] = text
     }
 
     func showMessage(_ text: String) {

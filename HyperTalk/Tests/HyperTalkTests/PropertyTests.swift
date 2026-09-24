@@ -196,3 +196,38 @@ import Testing
     """)
     #expect(host.properties["field 2.visible"] == "false")
 }
+
+// MARK: - Field contents with domains, ordinals, and ids
+
+@Test func fieldContentsRespectDomainQualifiers() throws {
+    let host = MockHost(fields: ["card 1": "on the card", "background 1": "on the bg"])
+    try run("""
+    on mouseUp
+      put " (card)" after card field 1
+      put " (bg)" after background field 1
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["card 1"] == "on the card (card)")
+    #expect(host.fields["background 1"] == "on the bg (bg)")
+}
+
+@Test func fieldContentsByOrdinalAndID() throws {
+    let host = MockHost(fields: ["2": "second", "id 9": "by id"])
+    try run("""
+    on mouseUp
+      put field 2 into a
+      put field id 9 into b
+      put a && b into field 2
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["2"] == "second by id")
+}
+
+@Test func fieldContentsByNameStillWork() throws {
+    let host = try run("""
+    on mouseUp
+      put "hello" into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "hello")
+}

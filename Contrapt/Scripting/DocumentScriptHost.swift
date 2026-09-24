@@ -65,18 +65,18 @@ final class DocumentScriptHost: HyperTalkHost {
         }
     }
 
-    func fieldText(named name: String) throws -> String {
-        guard let location = locateField(named: name),
-              case .field(let properties) = part(at: location).kind else {
-            throw HostError("There is no field named \"\(name)\" on this card.")
+    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String {
+        let location = try locatePart(kind: "field", domain: domain, reference: reference)
+        guard case .field(let properties) = part(at: location).kind else {
+            throw HostError("That part is not a field.")
         }
         return properties.text
     }
 
-    func setFieldText(named name: String, to text: String) throws {
-        guard let location = locateField(named: name),
-              case .field(var properties) = part(at: location).kind else {
-            throw HostError("There is no field named \"\(name)\" on this card.")
+    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, to text: String) throws {
+        let location = try locatePart(kind: "field", domain: domain, reference: reference)
+        guard case .field(var properties) = part(at: location).kind else {
+            throw HostError("That part is not a field.")
         }
         properties.text = text
         setKind(.field(properties), at: location)
@@ -267,36 +267,13 @@ final class DocumentScriptHost: HyperTalkHost {
         HostError("There is no property \"\(property)\" of \(what == "this stack" || what == "this card" || what == "this background" || what == "a card" ? what : "a \(what)").")
     }
 
-    // MARK: - Field lookup
+    // MARK: - Part lookup
 
     /// Card parts win over background parts, matching HyperCard's layering.
     private enum FieldLocation {
         case card(partIndex: Int)
         case background(backgroundIndex: Int, partIndex: Int)
     }
-
-    private func locateField(named name: String) -> FieldLocation? {
-        let card = stack.cards[cardIndex]
-        if let partIndex = index(ofFieldNamed: name, in: card.parts) {
-            return .card(partIndex: partIndex)
-        }
-        if let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
-           let partIndex = index(ofFieldNamed: name, in: stack.backgrounds[backgroundIndex].parts) {
-            return .background(backgroundIndex: backgroundIndex, partIndex: partIndex)
-        }
-        return nil
-    }
-
-    private func index(ofFieldNamed name: String, in parts: [Part]) -> Int? {
-        parts.firstIndex { part in
-            if case .field = part.kind {
-                return part.name.caseInsensitiveCompare(name) == .orderedSame
-            }
-            return false
-        }
-    }
-
-    // MARK: - Part lookup (any kind, for properties)
 
     /// Finds a part of the given kind by name, ordinal, or permanent ID.
     /// Unqualified references search card parts first, then the

@@ -37,6 +37,8 @@ struct HyperTalkGuideView: View {
                     put 6 * 7 into answer
                     put "Hi" into field "Greeting"
                     put "!" after field "Greeting"
+                    put "new" into background field 1
+                    put field id 9 into safekeeping
                     put "shown in the Message Box"
                     """)
 

@@ -280,8 +280,8 @@ struct Parser {
         }
 
         let container: Container
-        if consumeWord("field") {
-            container = .field(try parsePrimary())
+        if let fieldRef = try parseFieldRefIfPresent() {
+            container = .field(fieldRef)
         } else if let name = peekIdentifier() {
             advance()
             container = .variable(name)
@@ -531,6 +531,30 @@ struct Parser {
         return try parsePrimary()
     }
 
+    /// A field-contents reference if one begins here: `field <ref>`,
+    /// `card field <ref>`, `background field <ref>`, each with optional
+    /// `id`. Returns nil (consuming nothing) otherwise.
+    private mutating func parseFieldRefIfPresent() throws -> FieldRef? {
+        let domain: HyperTalkObject.PartDomain
+        if peekIdentifier() == "field" {
+            domain = .any
+            advance()
+        } else if peekIdentifier() == "card", peekIdentifier(1) == "field" {
+            domain = .card
+            advance()
+            advance()
+        } else if peekIdentifier() == "background" || peekIdentifier() == "bg",
+                  peekIdentifier(1) == "field" {
+            domain = .background
+            advance()
+            advance()
+        } else {
+            return nil
+        }
+        let isID = consumeWord("id")
+        return FieldRef(domain: domain, isID: isID, expr: try parsePrimary())
+    }
+
     /// An object reference: typed part (`button "OK"`), `card 3`, or
     /// `this card` / `this background` / `this stack`.
     private mutating func parseObjectExpr() throws -> ObjectExpr {
@@ -586,9 +610,17 @@ struct Parser {
                 throw ScriptError(line: line, message: "This '(' is missing its closing ')'.")
             }
             return inner
-        case .identifier("field"):
-            advance()
-            return .field(try parsePrimary())
+        case .identifier("field"), .identifier("card"), .identifier("background"), .identifier("bg"):
+            if let fieldRef = try parseFieldRefIfPresent() {
+                return .field(fieldRef)
+            }
+            // "card"/"background" not followed by "field": fall through to
+            // the unquoted-literal behavior.
+            if case .identifier(let word) = current.kind {
+                advance()
+                return .variable(word)
+            }
+            throw ScriptError(line: current.line, message: "Expected a value here.")
         case .identifier("the"):
             advance()
             // `the <property> of <object>`; otherwise "the" is a noise

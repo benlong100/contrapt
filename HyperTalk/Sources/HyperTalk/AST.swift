@@ -47,9 +47,17 @@ enum PutMode {
     case before
 }
 
+/// A field addressed for its *contents* — `field "Name"`, `card field 1`,
+/// `background field id 6` — in expressions and as a put container.
+struct FieldRef {
+    var domain: HyperTalkObject.PartDomain
+    var isID: Bool
+    var expr: Expr
+}
+
 enum Container {
     case variable(String)
-    case field(Expr)
+    case field(FieldRef)
 }
 
 enum GoTarget {
@@ -75,7 +83,7 @@ indirect enum Expr {
     /// Bare identifier: a variable — or, if never assigned, its own name
     /// (HyperTalk's unquoted literal behavior).
     case variable(String)
-    case field(Expr)
+    case field(FieldRef)
     /// `the <property> of <object>`.
     case property(String, ObjectExpr)
     case binary(BinaryOp, Expr, Expr)

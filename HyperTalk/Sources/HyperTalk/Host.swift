@@ -51,8 +51,10 @@ public enum HyperTalkObject: Sendable, Equatable {
 /// the sandbox).
 public protocol HyperTalkHost: AnyObject {
     func goToCard(_ destination: GoDestination) throws
-    func fieldText(named name: String) throws -> String
-    func setFieldText(named name: String, to text: String) throws
+    /// Field *contents*, addressed like any part: by name, ordinal, or id,
+    /// optionally restricted to the card or background layer.
+    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String
+    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, to text: String) throws
     /// `put <expr>` with no destination — HyperCard's message box.
     func showMessage(_ text: String)
     /// `beep` — one system beep per call.

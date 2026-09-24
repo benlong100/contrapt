@@ -311,9 +311,9 @@ final class Runtime {
         switch container {
         case .variable(let name):
             existing = variableValue(name) ?? ""
-        case .field(let nameExpression):
-            let fieldName = try evaluate(nameExpression, line: line)
-            existing = try hostCall(line: line) { try host.fieldText(named: fieldName) }
+        case .field(let fieldRef):
+            let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
+            existing = try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
         }
 
         let combined = switch mode {
@@ -325,10 +325,16 @@ final class Runtime {
         switch container {
         case .variable(let name):
             setVariable(name, to: combined)
-        case .field(let nameExpression):
-            let fieldName = try evaluate(nameExpression, line: line)
-            try hostCall(line: line) { try host.setFieldText(named: fieldName, to: combined) }
+        case .field(let fieldRef):
+            let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
+            try hostCall(line: line) { try host.setFieldText(reference, domain: domain, to: combined) }
         }
+    }
+
+    private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain) {
+        let value = try evaluate(fieldRef.expr, line: line)
+        let reference: HyperTalkObject.Reference = fieldRef.isID ? .id(value) : self.reference(from: value)
+        return (reference, fieldRef.domain)
     }
 
     private func executeGo(_ target: GoTarget, line: Int) throws {
@@ -412,9 +418,9 @@ final class Runtime {
             // unquoted literal behavior.
             return variableValue(name) ?? name
 
-        case .field(let nameExpression):
-            let fieldName = try evaluate(nameExpression, line: line)
-            return try hostCall(line: line) { try host.fieldText(named: fieldName) }
+        case .field(let fieldRef):
+            let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
+            return try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
 
         case .property(let property, let objectExpression):
             let object = try resolveObject(objectExpression, line: line)
