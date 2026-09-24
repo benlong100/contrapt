@@ -44,6 +44,30 @@ final class MockHost: HyperTalkHost {
     func beep() {
         beeps += 1
     }
+
+    /// Properties keyed by a readable path like "button OK.width".
+    var properties: [String: String] = [:]
+
+    private func propertyKey(_ property: String, _ object: HyperTalkObject) -> String {
+        switch object {
+        case .part(let kind, let name): "\(kind) \(name).\(property)"
+        case .card(let which): "card \(which).\(property)"
+        case .thisCard: "this card.\(property)"
+        case .thisBackground: "this background.\(property)"
+        case .thisStack: "this stack.\(property)"
+        }
+    }
+
+    func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String {
+        guard let value = properties[propertyKey(property, object)] else {
+            throw HostError("There is no property \"\(property)\" here.")
+        }
+        return value
+    }
+
+    func setProperty(_ property: String, of object: HyperTalkObject, to value: String) throws {
+        properties[propertyKey(property, object)] = value
+    }
 }
 
 @discardableResult

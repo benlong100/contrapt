@@ -19,6 +19,7 @@ struct PartInspector: View {
             Section("Part") {
                 TextField("Name", text: $part.name)
                 LabeledContent("Kind", value: kindName)
+                Toggle("Visible", isOn: $part.isVisible)
             }
             kindSection
             Section("Position and Size") {

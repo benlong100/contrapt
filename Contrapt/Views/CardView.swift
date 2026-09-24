@@ -119,6 +119,7 @@ struct CardView: View {
         ForEach(parts) { $part in
             Group {
                 if isEditing {
+                    // Hidden parts stay editable, shown ghosted.
                     EditablePart(
                         part: $part,
                         isSelected: selectedPartID == part.id,
@@ -127,7 +128,8 @@ struct CardView: View {
                         onSelect: { selectedPartID = part.id },
                         onOpenInspector: onOpenInspector
                     )
-                } else {
+                    .opacity(part.isVisible ? 1 : 0.35)
+                } else if part.isVisible {
                     PartView(
                         part: $part,
                         onTap: { onMouseMessage("mouseUp", part) },

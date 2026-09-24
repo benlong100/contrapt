@@ -80,6 +80,9 @@ nonisolated struct Part: Identifiable, Hashable {
     var frame: PartFrame
     var script: String
     var kind: PartKind
+    /// Hidden parts don't render or take taps in browse mode (scriptable
+    /// via `set the visible of … to false`); edit mode shows them ghosted.
+    var isVisible: Bool = true
 }
 
 nonisolated enum PartKind: Hashable {
@@ -87,6 +90,16 @@ nonisolated enum PartKind: Hashable {
     case field(FieldPart)
     case label(LabelPart)
     case image(ImagePart)
+
+    /// The word scripts and the UI use for this kind.
+    var word: String {
+        switch self {
+        case .button: "button"
+        case .field: "field"
+        case .label: "label"
+        case .image: "image"
+        }
+    }
 }
 
 nonisolated struct ButtonPart: Codable, Hashable {
@@ -140,7 +153,7 @@ nonisolated struct ImagePart: Codable, Hashable {
 /// so older builds refuse newer stacks instead of failing mid-decode.
 extension Part: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, name, frame, script, type, button, field, label, image
+        case id, name, frame, script, type, button, field, label, image, visible
     }
 
     init(from decoder: Decoder) throws {
@@ -149,6 +162,7 @@ extension Part: Codable {
         name = try container.decode(String.self, forKey: .name)
         frame = try container.decode(PartFrame.self, forKey: .frame)
         script = try container.decode(String.self, forKey: .script)
+        isVisible = try container.decodeIfPresent(Bool.self, forKey: .visible) ?? true
         let type = try container.decode(String.self, forKey: .type)
         switch type {
         case "button":
@@ -174,6 +188,7 @@ extension Part: Codable {
         try container.encode(name, forKey: .name)
         try container.encode(frame, forKey: .frame)
         try container.encode(script, forKey: .script)
+        try container.encode(isVisible, forKey: .visible)
         switch kind {
         case .button(let properties):
             try container.encode("button", forKey: .type)

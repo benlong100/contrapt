@@ -280,6 +280,17 @@ final class Runtime {
             }
             return .normal
 
+        case .get(let expression):
+            // `get` evaluates into the special variable `it`.
+            setVariable("it", to: try evaluate(expression, line: statement.line))
+            return .normal
+
+        case .set(let property, let objectExpression, let valueExpression):
+            let object = try resolveObject(objectExpression, line: statement.line)
+            let value = try evaluate(valueExpression, line: statement.line)
+            try hostCall(line: statement.line) { try host.setProperty(property, of: object, to: value) }
+            return .normal
+
         case .send(let name, let argumentExpressions):
             let arguments = try argumentExpressions.map { try evaluate($0, line: statement.line) }
             let handled = try send(name, arguments: arguments, fromLayer: currentLayerIndex, line: statement.line)
@@ -403,6 +414,10 @@ final class Runtime {
             let fieldName = try evaluate(nameExpression, line: line)
             return try hostCall(line: line) { try host.fieldText(named: fieldName) }
 
+        case .property(let property, let objectExpression):
+            let object = try resolveObject(objectExpression, line: line)
+            return try hostCall(line: line) { try host.propertyValue(property, of: object) }
+
         case .unary(let op, let operand):
             let value = try evaluate(operand, line: line)
             switch op {
@@ -473,6 +488,18 @@ final class Runtime {
             let (a, b) = try bools(); return bool(a && b)
         case .or:
             let (a, b) = try bools(); return bool(a || b)
+        }
+    }
+
+    private func resolveObject(_ object: ObjectExpr, line: Int) throws -> HyperTalkObject {
+        switch object {
+        case .part(let kind, let nameExpression):
+            .part(kind: kind, name: try evaluate(nameExpression, line: line))
+        case .card(let expression):
+            .card(try evaluate(expression, line: line))
+        case .thisCard: .thisCard
+        case .thisBackground: .thisBackground
+        case .thisStack: .thisStack
         }
     }
 

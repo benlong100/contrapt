@@ -226,6 +226,28 @@ struct Parser {
             }
             try expectNewline()
             return Stmt(kind: .beep(count), line: line)
+        case "get":
+            advance()
+            let expression = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .get(expression), line: line)
+        case "set":
+            advance()
+            _ = consumeWord("the")
+            guard let property = peekIdentifier() else {
+                throw ScriptError(line: line, message: "Expected a property name after 'set'.")
+            }
+            advance()
+            guard consumeWord("of") else {
+                throw ScriptError(line: line, message: "Expected 'of' after the property name, like: set the width of button \"OK\" to 200.")
+            }
+            let object = try parseObjectExpr()
+            guard consumeWord("to") else {
+                throw ScriptError(line: line, message: "Expected 'to' and a value at the end of 'set'.")
+            }
+            let value = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
         default:
             // An unknown word is a message send: it travels the message
             // path at run time (HyperCard semantics), so `doGreeting "Bill"`
@@ -505,6 +527,26 @@ struct Parser {
         return try parsePrimary()
     }
 
+    /// An object reference: typed part (`button "OK"`), `card 3`, or
+    /// `this card` / `this background` / `this stack`.
+    private mutating func parseObjectExpr() throws -> ObjectExpr {
+        let line = current.line
+        if consumeWord("this") {
+            if consumeWord("card") { return .thisCard }
+            if consumeWord("background") { return .thisBackground }
+            if consumeWord("stack") { return .thisStack }
+            throw ScriptError(line: line, message: "Expected 'card', 'background', or 'stack' after 'this'.")
+        }
+        if let kind = peekIdentifier(), ["button", "field", "label", "image"].contains(kind) {
+            advance()
+            return .part(kind: kind, name: try parsePrimary())
+        }
+        if consumeWord("card") {
+            return .card(try parsePrimary())
+        }
+        throw ScriptError(line: line, message: "Expected an object here, like button \"OK\", field \"Name\", card 2, or this card.")
+    }
+
     private mutating func parsePrimary() throws -> Expr {
         let line = current.line
         switch current.kind {
@@ -524,6 +566,17 @@ struct Parser {
         case .identifier("field"):
             advance()
             return .field(try parsePrimary())
+        case .identifier("the"):
+            advance()
+            // `the <property> of <object>`; otherwise "the" is a noise
+            // word before a value ("the date" → the unquoted literal).
+            if peekIdentifier() != nil, peekIdentifier(1) == "of" {
+                let property = peekIdentifier()!
+                advance() // property
+                advance() // of
+                return .property(property.lowercased(), try parseObjectExpr())
+            }
+            return try parsePrimary()
         case .identifier(let word):
             advance()
             return .variable(word)

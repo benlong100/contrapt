@@ -32,6 +32,10 @@ indirect enum StmtKind {
     case exitHandler
     /// `beep` or `beep <count>`.
     case beep(Expr?)
+    /// `get <expr>` — evaluates into the variable `it`.
+    case get(Expr)
+    /// `set [the] <property> of <object> to <value>`.
+    case set(property: String, object: ObjectExpr, value: Expr)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
@@ -71,8 +75,19 @@ indirect enum Expr {
     /// (HyperTalk's unquoted literal behavior).
     case variable(String)
     case field(Expr)
+    /// `the <property> of <object>`.
+    case property(String, ObjectExpr)
     case binary(BinaryOp, Expr, Expr)
     case unary(UnaryOp, Expr)
+}
+
+/// An object reference in source: `button "OK"`, `card 3`, `this card`.
+indirect enum ObjectExpr {
+    case part(kind: String, name: Expr)
+    case card(Expr)
+    case thisCard
+    case thisBackground
+    case thisStack
 }
 
 enum BinaryOp {

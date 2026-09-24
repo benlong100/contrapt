@@ -15,6 +15,18 @@ public enum GoDestination: Equatable, Sendable {
     case named(String)
 }
 
+/// An object a script can address with `get`/`set` and `the … of …`.
+public enum HyperTalkObject: Sendable, Equatable {
+    /// A part on the current card or its background: kind is the word the
+    /// script used ("button", "field", "label", "image").
+    case part(kind: String, name: String)
+    /// A card by number-or-name (as written; the host resolves).
+    case card(String)
+    case thisCard
+    case thisBackground
+    case thisStack
+}
+
 /// The interpreter's only window onto the world. The app implements this;
 /// scripts can do nothing the host doesn't offer (D7: the interpreter is
 /// the sandbox).
@@ -26,6 +38,11 @@ public protocol HyperTalkHost: AnyObject {
     func showMessage(_ text: String)
     /// `beep` — one system beep per call.
     func beep()
+    /// `the <property> of <object>` — property names arrive lowercased;
+    /// the host owns the property vocabulary and throws for unknowns.
+    func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String
+    /// `set the <property> of <object> to <value>`.
+    func setProperty(_ property: String, of object: HyperTalkObject, to value: String) throws
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them
