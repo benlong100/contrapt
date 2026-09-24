@@ -316,7 +316,7 @@ struct ContentView: View {
         } else {
             ""
         }
-        let part = Part(
+        var part = Part(
             id: UUID(),
             name: defaultName(for: kind),
             frame: PartFrame(
@@ -328,7 +328,10 @@ struct ContentView: View {
             script: script,
             kind: kind
         )
-        stack.wrappedValue.cards[cardIndex].parts.append(part)
+        var updated = document.stack
+        part.scriptID = updated.claimScriptID()
+        updated.cards[cardIndex].parts.append(part)
+        stack.wrappedValue = updated
         selectedPartID = part.id
     }
 
@@ -399,7 +402,7 @@ struct ContentView: View {
         let width = imageSize.width * scale
         let height = imageSize.height * scale
         let cardSize = document.stack.cardSize
-        let part = Part(
+        var part = Part(
             id: UUID(),
             name: defaultName(for: .image(ImagePart(assetName: assetName))),
             frame: PartFrame(
@@ -411,7 +414,10 @@ struct ContentView: View {
             script: "",
             kind: .image(ImagePart(assetName: assetName))
         )
-        stack.wrappedValue.cards[cardIndex].parts.append(part)
+        var updated = document.stack
+        part.scriptID = updated.claimScriptID()
+        updated.cards[cardIndex].parts.append(part)
+        stack.wrappedValue = updated
         selectedPartID = part.id
     }
 
@@ -440,14 +446,17 @@ struct ContentView: View {
 
     private func addCard() {
         let current = document.stack.cards[cardIndex]
-        let card = Card(
+        var card = Card(
             id: UUID(),
             name: "Card \(document.stack.cards.count + 1)",
             backgroundID: current.backgroundID,
             script: "",
             parts: []
         )
-        stack.wrappedValue.cards.insert(card, at: cardIndex + 1)
+        var updated = document.stack
+        card.scriptID = updated.claimScriptID()
+        updated.cards.insert(card, at: cardIndex + 1)
+        stack.wrappedValue = updated
         currentCardIndex = cardIndex + 1
         selectedPartID = nil
     }

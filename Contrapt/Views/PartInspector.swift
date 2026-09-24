@@ -19,6 +19,7 @@ struct PartInspector: View {
             Section("Part") {
                 TextField("Name", text: $part.name)
                 LabeledContent("Kind", value: kindName)
+                LabeledContent("ID", value: String(part.scriptID))
                 Toggle("Visible", isOn: $part.isVisible)
             }
             kindSection

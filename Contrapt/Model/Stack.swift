@@ -35,7 +35,7 @@ nonisolated struct PartFrame: Codable, Hashable {
 
 // MARK: - Stack hierarchy
 
-nonisolated struct Stack: Codable, Identifiable, Hashable {
+nonisolated struct Stack: Identifiable, Hashable {
     var formatVersion: Int
     var id: UUID
     var name: String
@@ -43,9 +43,37 @@ nonisolated struct Stack: Codable, Identifiable, Hashable {
     var script: String
     var backgrounds: [Background]
     var cards: [Card]
+    /// Allocator for scriptIDs — the short permanent numbers scripts use
+    /// (`button id 6`). Never decremented; IDs are never reused.
+    var nextID: Int = 1
+
+    /// Claims the next permanent scriptID.
+    mutating func claimScriptID() -> Int {
+        let id = max(nextID, 1)
+        nextID = id + 1
+        return id
+    }
 }
 
-nonisolated struct Background: Codable, Identifiable, Hashable {
+extension Stack: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try container.decode(Int.self, forKey: .formatVersion)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        cardSize = try container.decode(CardSize.self, forKey: .cardSize)
+        script = try container.decode(String.self, forKey: .script)
+        backgrounds = try container.decode([Background].self, forKey: .backgrounds)
+        cards = try container.decode([Card].self, forKey: .cards)
+        nextID = try container.decodeIfPresent(Int.self, forKey: .nextID) ?? 1
+    }
+}
+
+nonisolated struct Background: Identifiable, Hashable {
     var id: UUID
     var name: String
     var script: String
@@ -54,9 +82,28 @@ nonisolated struct Background: Codable, Identifiable, Hashable {
     /// sharing this background (same pair as Card's).
     var paintDrawingAsset: String? = nil
     var paintImageAsset: String? = nil
+    /// Permanent short ID for scripts; assigned by the stack's allocator.
+    var scriptID: Int = 0
 }
 
-nonisolated struct Card: Codable, Identifiable, Hashable {
+extension Background: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, script, parts, paintDrawingAsset, paintImageAsset, scriptID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        script = try container.decode(String.self, forKey: .script)
+        parts = try container.decode([Part].self, forKey: .parts)
+        paintDrawingAsset = try container.decodeIfPresent(String.self, forKey: .paintDrawingAsset)
+        paintImageAsset = try container.decodeIfPresent(String.self, forKey: .paintImageAsset)
+        scriptID = try container.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
+    }
+}
+
+nonisolated struct Card: Identifiable, Hashable {
     var id: UUID
     var name: String
     var backgroundID: UUID
@@ -67,6 +114,26 @@ nonisolated struct Card: Codable, Identifiable, Hashable {
     /// anywhere. Both live in the archive's assets.
     var paintDrawingAsset: String? = nil
     var paintImageAsset: String? = nil
+    /// Permanent short ID for scripts; assigned by the stack's allocator.
+    var scriptID: Int = 0
+}
+
+extension Card: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, backgroundID, script, parts, paintDrawingAsset, paintImageAsset, scriptID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        backgroundID = try container.decode(UUID.self, forKey: .backgroundID)
+        script = try container.decode(String.self, forKey: .script)
+        parts = try container.decode([Part].self, forKey: .parts)
+        paintDrawingAsset = try container.decodeIfPresent(String.self, forKey: .paintDrawingAsset)
+        paintImageAsset = try container.decodeIfPresent(String.self, forKey: .paintImageAsset)
+        scriptID = try container.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
+    }
 }
 
 // MARK: - Parts
@@ -83,6 +150,9 @@ nonisolated struct Part: Identifiable, Hashable {
     /// Hidden parts don't render or take taps in browse mode (scriptable
     /// via `set the visible of … to false`); edit mode shows them ghosted.
     var isVisible: Bool = true
+    /// Permanent short ID for scripts (`button id 6`); assigned by the
+    /// stack's allocator, stable across renames, never reused.
+    var scriptID: Int = 0
 }
 
 nonisolated enum PartKind: Hashable {
@@ -153,7 +223,7 @@ nonisolated struct ImagePart: Codable, Hashable {
 /// so older builds refuse newer stacks instead of failing mid-decode.
 extension Part: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, name, frame, script, type, button, field, label, image, visible
+        case id, name, frame, script, type, button, field, label, image, visible, scriptID
     }
 
     init(from decoder: Decoder) throws {
@@ -163,6 +233,7 @@ extension Part: Codable {
         frame = try container.decode(PartFrame.self, forKey: .frame)
         script = try container.decode(String.self, forKey: .script)
         isVisible = try container.decodeIfPresent(Bool.self, forKey: .visible) ?? true
+        scriptID = try container.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
         let type = try container.decode(String.self, forKey: .type)
         switch type {
         case "button":
@@ -189,6 +260,7 @@ extension Part: Codable {
         try container.encode(frame, forKey: .frame)
         try container.encode(script, forKey: .script)
         try container.encode(isVisible, forKey: .visible)
+        try container.encode(scriptID, forKey: .scriptID)
         switch kind {
         case .button(let properties):
             try container.encode("button", forKey: .type)
@@ -266,6 +338,49 @@ nonisolated extension Stack {
         for index in stack.backgrounds.indices {
             stack.backgrounds[index].script = Self.cappedScript(stack.backgrounds[index].script)
         }
+
+        // Permanent scriptIDs: keep valid unique ones, then assign the
+        // missing or duplicated from above the maximum. This also migrates
+        // stacks from before scriptIDs existed.
+        var usedScriptIDs = Set<Int>()
+        var maxScriptID = 0
+        func validated(_ id: Int) -> Int {
+            guard id > 0, !usedScriptIDs.contains(id) else { return 0 }
+            usedScriptIDs.insert(id)
+            maxScriptID = max(maxScriptID, id)
+            return id
+        }
+        for index in stack.backgrounds.indices {
+            stack.backgrounds[index].scriptID = validated(stack.backgrounds[index].scriptID)
+            for partIndex in stack.backgrounds[index].parts.indices {
+                stack.backgrounds[index].parts[partIndex].scriptID = validated(stack.backgrounds[index].parts[partIndex].scriptID)
+            }
+        }
+        for index in stack.cards.indices {
+            stack.cards[index].scriptID = validated(stack.cards[index].scriptID)
+            for partIndex in stack.cards[index].parts.indices {
+                stack.cards[index].parts[partIndex].scriptID = validated(stack.cards[index].parts[partIndex].scriptID)
+            }
+        }
+        var nextAssignable = maxScriptID + 1
+        func assigned() -> Int {
+            defer { nextAssignable += 1 }
+            return nextAssignable
+        }
+        for index in stack.backgrounds.indices {
+            if stack.backgrounds[index].scriptID == 0 { stack.backgrounds[index].scriptID = assigned() }
+            for partIndex in stack.backgrounds[index].parts.indices where stack.backgrounds[index].parts[partIndex].scriptID == 0 {
+                stack.backgrounds[index].parts[partIndex].scriptID = assigned()
+            }
+        }
+        for index in stack.cards.indices {
+            if stack.cards[index].scriptID == 0 { stack.cards[index].scriptID = assigned() }
+            for partIndex in stack.cards[index].parts.indices where stack.cards[index].parts[partIndex].scriptID == 0 {
+                stack.cards[index].parts[partIndex].scriptID = assigned()
+            }
+        }
+        stack.nextID = max(stack.nextID, nextAssignable)
+
         return stack
     }
 

@@ -345,6 +345,8 @@ final class Runtime {
             } else {
                 destination = .named(value)
             }
+        case .idExpression(let expression):
+            destination = .id(try evaluate(expression, line: line))
         }
         try hostCall(line: line) { try host.goToCard(destination) }
     }
@@ -494,9 +496,13 @@ final class Runtime {
     private func resolveObject(_ object: ObjectExpr, line: Int) throws -> HyperTalkObject {
         switch object {
         case .part(let kind, let nameExpression):
-            .part(kind: kind, name: try evaluate(nameExpression, line: line))
+            .part(kind: kind, reference: .named(try evaluate(nameExpression, line: line)))
+        case .partByID(let kind, let idExpression):
+            .part(kind: kind, reference: .id(try evaluate(idExpression, line: line)))
         case .card(let expression):
-            .card(try evaluate(expression, line: line))
+            .card(.named(try evaluate(expression, line: line)))
+        case .cardByID(let idExpression):
+            .card(.id(try evaluate(idExpression, line: line)))
         case .thisCard: .thisCard
         case .thisBackground: .thisBackground
         case .thisStack: .thisStack

@@ -309,7 +309,11 @@ struct Parser {
             _ = consumeWord("card")
             target = .last
         } else if consumeWord("card") {
-            target = .expression(try parseExpression())
+            if consumeWord("id") {
+                target = .idExpression(try parseExpression())
+            } else {
+                target = .expression(try parseExpression())
+            }
         } else {
             throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
         }
@@ -539,9 +543,15 @@ struct Parser {
         }
         if let kind = peekIdentifier(), ["button", "field", "label", "image"].contains(kind) {
             advance()
+            if consumeWord("id") {
+                return .partByID(kind: kind, id: try parsePrimary())
+            }
             return .part(kind: kind, name: try parsePrimary())
         }
         if consumeWord("card") {
+            if consumeWord("id") {
+                return .cardByID(try parsePrimary())
+            }
             return .card(try parsePrimary())
         }
         throw ScriptError(line: line, message: "Expected an object here, like button \"OK\", field \"Name\", card 2, or this card.")

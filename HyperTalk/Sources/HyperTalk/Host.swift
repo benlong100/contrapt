@@ -13,15 +13,24 @@ public enum GoDestination: Equatable, Sendable {
     case last
     case number(Int)
     case named(String)
+    /// `go to card id 12` — by permanent ID.
+    case id(String)
 }
 
 /// An object a script can address with `get`/`set` and `the … of …`.
 public enum HyperTalkObject: Sendable, Equatable {
+    /// How the script referred to the object.
+    public enum Reference: Sendable, Equatable {
+        /// By name (or, for cards, number-or-name as written).
+        case named(String)
+        /// By permanent ID: `button id 6` — stable across renames.
+        case id(String)
+    }
+
     /// A part on the current card or its background: kind is the word the
     /// script used ("button", "field", "label", "image").
-    case part(kind: String, name: String)
-    /// A card by number-or-name (as written; the host resolves).
-    case card(String)
+    case part(kind: String, reference: Reference)
+    case card(Reference)
     case thisCard
     case thisBackground
     case thisStack

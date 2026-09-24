@@ -56,6 +56,12 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("There is no card named \"\(name)\".")
             }
             currentCardIndex.wrappedValue = index
+        case .id(let id):
+            let wanted = id.trimmingCharacters(in: .whitespaces)
+            guard let index = stack.cards.firstIndex(where: { String($0.scriptID) == wanted }) else {
+                throw HostError("There is no card with id \(id).")
+            }
+            currentCardIndex.wrappedValue = index
         }
     }
 
@@ -88,21 +94,24 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String {
         switch object {
-        case .part(let kind, let name):
-            let location = try locatePart(kind: kind, named: name)
+        case .part(let kind, let reference):
+            let location = try locatePart(kind: kind, reference: reference)
             return try partProperty(property, of: part(at: location), kind: kind)
-        case .card(let which):
-            let index = try cardIndexFor(which)
+        case .card(let reference):
+            let index = try cardIndexFor(reference)
             return try cardProperty(property, cardAt: index)
         case .thisCard:
             return try cardProperty(property, cardAt: cardIndex)
         case .thisBackground:
-            guard property == "name" else { throw Self.noSuchProperty(property, of: "this background") }
             let card = stack.cards[cardIndex]
             guard let background = stack.backgrounds.first(where: { $0.id == card.backgroundID }) else {
                 throw HostError("This card has no background.")
             }
-            return background.name
+            switch property {
+            case "name": return background.name
+            case "id": return String(background.scriptID)
+            default: throw Self.noSuchProperty(property, of: "this background")
+            }
         case .thisStack:
             switch property {
             case "name": return stack.name
@@ -113,14 +122,17 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     func setProperty(_ property: String, of object: HyperTalkObject, to value: String) throws {
+        guard property != "id" else {
+            throw HostError("The id of an object can't be changed.")
+        }
         switch object {
-        case .part(let kind, let name):
-            let location = try locatePart(kind: kind, named: name)
+        case .part(let kind, let reference):
+            let location = try locatePart(kind: kind, reference: reference)
             var updated = part(at: location)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: location)
-        case .card(let which):
-            let index = try cardIndexFor(which)
+        case .card(let reference):
+            let index = try cardIndexFor(reference)
             guard property == "name" else { throw Self.noSuchProperty(property, of: "a card") }
             stackBinding.wrappedValue.cards[index].name = value
         case .thisCard:
@@ -142,6 +154,7 @@ final class DocumentScriptHost: HyperTalkHost {
     private func partProperty(_ property: String, of part: Part, kind: String) throws -> String {
         switch property {
         case "name": return part.name
+        case "id": return String(part.scriptID)
         case "visible": return part.isVisible ? "true" : "false"
         case "width": return numberText(part.frame.width)
         case "height": return numberText(part.frame.height)
@@ -210,21 +223,31 @@ final class DocumentScriptHost: HyperTalkHost {
         switch property {
         case "name": return stack.cards[index].name
         case "number": return String(index + 1)
+        case "id": return String(stack.cards[index].scriptID)
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }
 
-    private func cardIndexFor(_ which: String) throws -> Int {
-        if let number = Int(which.trimmingCharacters(in: .whitespaces)) {
-            guard (1...stack.cards.count).contains(number) else {
-                throw HostError("There is no card \(number) — this stack has \(stack.cards.count) card\(stack.cards.count == 1 ? "" : "s").")
+    private func cardIndexFor(_ reference: HyperTalkObject.Reference) throws -> Int {
+        switch reference {
+        case .named(let which):
+            if let number = Int(which.trimmingCharacters(in: .whitespaces)) {
+                guard (1...stack.cards.count).contains(number) else {
+                    throw HostError("There is no card \(number) — this stack has \(stack.cards.count) card\(stack.cards.count == 1 ? "" : "s").")
+                }
+                return number - 1
             }
-            return number - 1
+            guard let index = stack.cards.firstIndex(where: { $0.name.caseInsensitiveCompare(which) == .orderedSame }) else {
+                throw HostError("There is no card named \"\(which)\".")
+            }
+            return index
+        case .id(let id):
+            let wanted = id.trimmingCharacters(in: .whitespaces)
+            guard let index = stack.cards.firstIndex(where: { String($0.scriptID) == wanted }) else {
+                throw HostError("There is no card with id \(id).")
+            }
+            return index
         }
-        guard let index = stack.cards.firstIndex(where: { $0.name.caseInsensitiveCompare(which) == .orderedSame }) else {
-            throw HostError("There is no card named \"\(which)\".")
-        }
-        return index
     }
 
     private func number(_ value: String, for property: String) throws -> Double {
@@ -273,23 +296,34 @@ final class DocumentScriptHost: HyperTalkHost {
 
     // MARK: - Part lookup (any kind, for properties)
 
-    /// Finds a part of the given kind by name — card parts first, then the
-    /// background's, matching HyperCard's layering.
-    private func locatePart(kind: String, named name: String) throws -> FieldLocation {
+    /// Finds a part of the given kind by name or permanent ID — card parts
+    /// first, then the background's, matching HyperCard's layering.
+    private func locatePart(kind: String, reference: HyperTalkObject.Reference) throws -> FieldLocation {
         let card = stack.cards[cardIndex]
-        if let partIndex = index(ofKind: kind, named: name, in: card.parts) {
+        if let partIndex = index(ofKind: kind, matching: reference, in: card.parts) {
             return .card(partIndex: partIndex)
         }
         if let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
-           let partIndex = index(ofKind: kind, named: name, in: stack.backgrounds[backgroundIndex].parts) {
+           let partIndex = index(ofKind: kind, matching: reference, in: stack.backgrounds[backgroundIndex].parts) {
             return .background(backgroundIndex: backgroundIndex, partIndex: partIndex)
         }
-        throw HostError("There is no \(kind) named \"\(name)\" on this card.")
+        switch reference {
+        case .named(let name):
+            throw HostError("There is no \(kind) named \"\(name)\" on this card.")
+        case .id(let id):
+            throw HostError("There is no \(kind) with id \(id) on this card.")
+        }
     }
 
-    private func index(ofKind kind: String, named name: String, in parts: [Part]) -> Int? {
+    private func index(ofKind kind: String, matching reference: HyperTalkObject.Reference, in parts: [Part]) -> Int? {
         parts.firstIndex { part in
-            part.kind.word == kind && part.name.caseInsensitiveCompare(name) == .orderedSame
+            guard part.kind.word == kind else { return false }
+            switch reference {
+            case .named(let name):
+                return part.name.caseInsensitiveCompare(name) == .orderedSame
+            case .id(let id):
+                return String(part.scriptID) == id.trimmingCharacters(in: .whitespaces)
+            }
         }
     }
 

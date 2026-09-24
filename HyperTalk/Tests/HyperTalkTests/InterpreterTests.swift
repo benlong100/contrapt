@@ -48,10 +48,17 @@ final class MockHost: HyperTalkHost {
     /// Properties keyed by a readable path like "button OK.width".
     var properties: [String: String] = [:]
 
+    private func referenceText(_ reference: HyperTalkObject.Reference) -> String {
+        switch reference {
+        case .named(let name): name
+        case .id(let id): "id \(id)"
+        }
+    }
+
     private func propertyKey(_ property: String, _ object: HyperTalkObject) -> String {
         switch object {
-        case .part(let kind, let name): "\(kind) \(name).\(property)"
-        case .card(let which): "card \(which).\(property)"
+        case .part(let kind, let reference): "\(kind) \(referenceText(reference)).\(property)"
+        case .card(let reference): "card \(referenceText(reference)).\(property)"
         case .thisCard: "this card.\(property)"
         case .thisBackground: "this background.\(property)"
         case .thisStack: "this stack.\(property)"

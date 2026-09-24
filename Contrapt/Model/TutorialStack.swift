@@ -162,6 +162,6 @@ nonisolated extension Stack {
             script: "",
             backgrounds: [background],
             cards: [card1, card2, card3, card4, card5, card6]
-        )
+        ).sanitized() // assigns permanent scriptIDs
     }
 }

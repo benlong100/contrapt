@@ -107,3 +107,56 @@ import Testing
     #expect(host.properties["this card.name"] == "Home")
     #expect(host.properties["card 2.name"] == "Second")
 }
+
+// MARK: - IDs
+
+@Test func partsCanBeAddressedByID() throws {
+    let host = try run("""
+    on mouseUp
+      set the title of button id 6 to "Renamed"
+    end mouseUp
+    """)
+    #expect(host.properties["button id 6.title"] == "Renamed")
+}
+
+@Test func cardsCanBeAddressedByID() throws {
+    let host = MockHost(fields: ["out": ""])
+    host.properties["card id 12.name"] = "Home"
+    try run("""
+    on mouseUp
+      put the name of card id 12 into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "Home")
+}
+
+@Test func theIDOfReadsAnID() throws {
+    let host = MockHost(fields: ["out": ""])
+    host.properties["button OK.id"] = "6"
+    try run("""
+    on mouseUp
+      get the id of button "OK"
+      set the visible of button id it to false
+    end mouseUp
+    """, host: host)
+    #expect(host.properties["button id 6.visible"] == "false")
+}
+
+@Test func idExpressionsCanBeComputed() throws {
+    let host = try run("""
+    on mouseUp
+      put 4 into n
+      set the width of button id (n + 2) to 100
+    end mouseUp
+    """)
+    #expect(host.properties["button id 6.width"] == "100")
+}
+
+@Test func goToCardByID() throws {
+    let host = try run("""
+    on mouseUp
+      go to card id 12
+    end mouseUp
+    """)
+    #expect(host.destinations == [.id("12")])
+}

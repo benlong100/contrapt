@@ -48,13 +48,15 @@ struct HyperTalkGuideView: View {
                     go to card "Home"
                     """)
 
-                    section("get and set", body: "Every object has properties. `set` changes them; `the … of …` reads them anywhere an expression fits; `get` reads one into the special variable `it`. Parts have name, visible, title or text, and geometry (left, top, right, bottom, width, height). Cards, backgrounds, and the stack have name.", example: """
+                    section("get and set", body: "Every object has properties. `set` changes them; `the … of …` reads them anywhere an expression fits; `get` reads one into the special variable `it`. Parts have name, visible, title or text, and geometry (left, top, right, bottom, width, height). Cards, backgrounds, and the stack have name. Every object also has a permanent id — shown in the Inspector — so `button id 6` keeps working even after renames.", example: """
                     set the visible of button "Secret" to false
                     set the width of field "Notes" to 400
                     set the title of button "OK" to "Go!"
                     get the name of this card
                     put it into field "Where"
                     if the left of button "Box" > 500 then beep
+                    set the text of field id 9 to "found you"
+                    go to card id 12
                     """)
 
                     section("if", body: "Single-line or block form, with optional else and else-if chains.", example: """
