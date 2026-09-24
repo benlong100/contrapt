@@ -384,8 +384,30 @@ struct PartView: View {
             .buttonStyle(.bordered)
             .simultaneousGesture(pressDetector)
         case .field(let properties):
-            TextField(properties.placeholder, text: fieldText)
-                .textFieldStyle(.roundedBorder)
+            if properties.isMultiline {
+                // A HyperCard-style field: a text area filling its frame.
+                TextEditor(text: fieldText)
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .background(Color(.systemBackground))
+                    .overlay(alignment: .topLeading) {
+                        if properties.text.isEmpty {
+                            Text(properties.placeholder)
+                                .foregroundStyle(Color(.placeholderText))
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 14)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color(.systemGray4), lineWidth: 1)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                TextField(properties.placeholder, text: fieldText)
+                    .textFieldStyle(.roundedBorder)
+            }
         case .label(let properties):
             // Labels take presses too, like HyperCard's locked text:
             // mouseDown at touch-down, mouseUp on release inside.

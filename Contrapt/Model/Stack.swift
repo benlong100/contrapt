@@ -93,9 +93,32 @@ nonisolated struct ButtonPart: Codable, Hashable {
     var title: String
 }
 
-nonisolated struct FieldPart: Codable, Hashable {
+nonisolated struct FieldPart: Hashable {
     var text: String
     var placeholder: String
+    /// Multi-line fields render as a text area filling their frame, like
+    /// HyperCard fields; single-line fields are compact entry boxes.
+    var isMultiline: Bool
+
+    init(text: String, placeholder: String, isMultiline: Bool = false) {
+        self.text = text
+        self.placeholder = placeholder
+        self.isMultiline = isMultiline
+    }
+}
+
+/// Manual Codable so older manifests without `isMultiline` still decode.
+extension FieldPart: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case text, placeholder, isMultiline
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        text = try container.decode(String.self, forKey: .text)
+        placeholder = try container.decode(String.self, forKey: .placeholder)
+        isMultiline = try container.decodeIfPresent(Bool.self, forKey: .isMultiline) ?? false
+    }
 }
 
 nonisolated struct LabelPart: Codable, Hashable {

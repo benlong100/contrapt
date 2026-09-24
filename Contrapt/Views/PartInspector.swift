@@ -59,7 +59,9 @@ struct PartInspector: View {
         case .field:
             Section("Field") {
                 TextField("Placeholder", text: fieldPlaceholder)
-                TextField("Contents", text: fieldContents)
+                TextField("Contents", text: fieldContents, axis: .vertical)
+                    .lineLimit(1...6)
+                Toggle("Multiple Lines", isOn: fieldIsMultiline)
             }
         case .label:
             Section("Label") {
@@ -119,6 +121,20 @@ struct PartInspector: View {
             set: {
                 guard case .field(var properties) = part.kind else { return }
                 properties.text = $0
+                part.kind = .field(properties)
+            }
+        )
+    }
+
+    private var fieldIsMultiline: Binding<Bool> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return false }
+                return properties.isMultiline
+            },
+            set: {
+                guard case .field(var properties) = part.kind else { return }
+                properties.isMultiline = $0
                 part.kind = .field(properties)
             }
         )
