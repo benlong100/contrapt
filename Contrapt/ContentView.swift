@@ -166,6 +166,9 @@ struct ContentView: View {
                         Button("New Card", systemImage: "rectangle.badge.plus") {
                             addCard()
                         }
+                        Button("New Background", systemImage: "rectangle.on.rectangle.badge.plus") {
+                            addBackground()
+                        }
                         Button("Delete Card", systemImage: "trash", role: .destructive) {
                             deleteCurrentCard()
                         }
@@ -582,6 +585,32 @@ struct ContentView: View {
             parts: []
         )
         var updated = document.stack
+        card.scriptID = updated.claimScriptID()
+        updated.cards.insert(card, at: cardIndex + 1)
+        stack.wrappedValue = updated
+        currentCardIndex = cardIndex + 1
+        selectedPartID = nil
+    }
+
+    /// New Background: a fresh background plus a card on it — HyperCard's
+    /// distinction from New Card (which reuses the current background).
+    private func addBackground() {
+        var updated = document.stack
+        var background = Background(
+            id: UUID(),
+            name: "Background \(updated.backgrounds.count + 1)",
+            script: "",
+            parts: []
+        )
+        background.scriptID = updated.claimScriptID()
+        updated.backgrounds.append(background)
+        var card = Card(
+            id: UUID(),
+            name: "Card \(updated.cards.count + 1)",
+            backgroundID: background.id,
+            script: "",
+            parts: []
+        )
         card.scriptID = updated.claimScriptID()
         updated.cards.insert(card, at: cardIndex + 1)
         stack.wrappedValue = updated
