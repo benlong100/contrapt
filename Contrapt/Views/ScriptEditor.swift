@@ -250,6 +250,11 @@ struct LargeScriptEditor: View {
                 checkResult = nil
             }
         }
+        #if os(macOS)
+        // On macOS this editor is a sheet, which sizes to its content —
+        // give it room for real, deeply nested scripts.
+        .frame(minWidth: 700, idealWidth: 900, minHeight: 500, idealHeight: 720)
+        #endif
     }
 }
 
