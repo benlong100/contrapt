@@ -7,6 +7,7 @@ import Combine
 import PencilKit
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 import HyperTalk
 
 /// The document view. Browse mode shows the current card with live parts;
@@ -32,6 +33,11 @@ struct ContentView: View {
     @State private var undoFlushTask: Task<Void, Never>?
     @State private var isPhotoPickerPresented = false
     @State private var selectedPhoto: PhotosPickerItem?
+    #if os(macOS)
+    /// The Mac uses a regular file picker so images don't have to go
+    /// through Photos.
+    @State private var isImageImporterPresented = false
+    #endif
     @State private var isPaintingPresented = false
     @State private var paintDrawingToEdit = PKDrawing()
     @State private var paintTarget: PaintTarget = .card
@@ -82,6 +88,15 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cardBackdrop)
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhoto, matching: .images)
+        #if os(macOS)
+        .fileImporter(isPresented: $isImageImporterPresented, allowedContentTypes: [.image]) { result in
+            guard case .success(let url) = result else { return }
+            let didAccess = url.startAccessingSecurityScopedResource()
+            defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url), let image = PlatformImage(data: data) else { return }
+            addImagePart(data: data, imageSize: image.size)
+        }
+        #endif
         .sheet(isPresented: $isGuidePresented) {
             HyperTalkGuideView()
         }
@@ -164,7 +179,11 @@ struct ContentView: View {
                             addPart(.label(LabelPart(text: "New Label")))
                         }
                         Button("Image…", systemImage: "photo") {
+                            #if os(macOS)
+                            isImageImporterPresented = true
+                            #else
                             isPhotoPickerPresented = true
+                            #endif
                         }
                     }
                     Menu("Cards", systemImage: "rectangle.stack") {
