@@ -50,7 +50,7 @@ struct HyperTalkGuideView: View {
                     go to card "Home"
                     """)
 
-                    section("get and set", body: "Every object has properties. `set` changes them; `the … of …` reads them anywhere an expression fits; `get` reads one into the special variable `it`. Parts have name, visible, title or text, and geometry (left, top, right, bottom, width, height). Cards, backgrounds, and the stack have name. Refer to parts three ways: by name (button \"OK\"), by ordinal (field 1 — position among that kind, and `the number of` reads it back), or by permanent id (button id 6 — shown in the Inspector, and it survives renames). Add `card` or `background` before the kind to pick the layer: card field 1, background button \"Next\".", example: """
+                    section("get and set", body: "Every object has properties. `set` changes them; `the … of …` reads them anywhere an expression fits; `get` reads one into the special variable `it`. Parts have name, visible, title or text, and geometry (left, top, right, bottom, width, height). Cards have name, number, marked, cantDelete, and dontSearch; the stack has name. Refer to parts three ways: by name (button \"OK\"), by ordinal (field 1 — position among that kind, and `the number of` reads it back), or by permanent id (button id 6 — shown in the Inspector, and it survives renames). Add `card` or `background` before the kind to pick the layer: card field 1, background button \"Next\".", example: """
                     set the name of card field 1 to "blah"
                     set the visible of button "Secret" to false
                     set the width of field "Notes" to 400

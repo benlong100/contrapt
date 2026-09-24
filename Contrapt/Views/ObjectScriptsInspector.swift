@@ -34,6 +34,14 @@ struct ObjectScriptsInspector: View {
             } footer: {
                 Text("These scripts receive messages that parts don't handle, and system messages like openCard and openStack.")
             }
+            if scope == .card {
+                Section("Card") {
+                    TextField("Name", text: $stack.cards[cardIndex].name)
+                    Toggle("Card Marked", isOn: $stack.cards[cardIndex].isMarked)
+                    Toggle("Don't Search Card", isOn: $stack.cards[cardIndex].dontSearch)
+                    Toggle("Can't Delete Card", isOn: $stack.cards[cardIndex].cantDelete)
+                }
+            }
             ScriptFormSection(title: scriptTitle, script: scriptBinding, onExpand: { isEditorExpanded = true })
                 .id(scope)
         }

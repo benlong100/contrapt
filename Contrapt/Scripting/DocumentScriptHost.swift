@@ -135,12 +135,9 @@ final class DocumentScriptHost: HyperTalkHost {
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: location)
         case .card(let reference):
-            let index = try cardIndexFor(reference)
-            guard property == "name" else { throw Self.noSuchProperty(property, of: "a card") }
-            stackBinding.wrappedValue.cards[index].name = value
+            try setCardProperty(property, cardAt: try cardIndexFor(reference), to: value)
         case .thisCard:
-            guard property == "name" else { throw Self.noSuchProperty(property, of: "this card") }
-            stackBinding.wrappedValue.cards[cardIndex].name = value
+            try setCardProperty(property, cardAt: cardIndex, to: value)
         case .thisBackground:
             guard property == "name" else { throw Self.noSuchProperty(property, of: "this background") }
             let card = stack.cards[cardIndex]
@@ -223,10 +220,31 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     private func cardProperty(_ property: String, cardAt index: Int) throws -> String {
+        let card = stack.cards[index]
         switch property {
-        case "name": return stack.cards[index].name
+        case "name": return card.name
         case "number": return String(index + 1)
-        case "id": return String(stack.cards[index].scriptID)
+        case "id": return String(card.scriptID)
+        case "marked": return card.isMarked ? "true" : "false"
+        case "cantdelete": return card.cantDelete ? "true" : "false"
+        case "dontsearch": return card.dontSearch ? "true" : "false"
+        default: throw Self.noSuchProperty(property, of: "a card")
+        }
+    }
+
+    private func setCardProperty(_ property: String, cardAt index: Int, to value: String) throws {
+        func flag() throws -> Bool {
+            switch value.lowercased() {
+            case "true": return true
+            case "false": return false
+            default: throw HostError("The \(property) property must be true or false, not \"\(value)\".")
+            }
+        }
+        switch property {
+        case "name": stackBinding.wrappedValue.cards[index].name = value
+        case "marked": stackBinding.wrappedValue.cards[index].isMarked = try flag()
+        case "cantdelete": stackBinding.wrappedValue.cards[index].cantDelete = try flag()
+        case "dontsearch": stackBinding.wrappedValue.cards[index].dontSearch = try flag()
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }

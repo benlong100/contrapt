@@ -156,7 +156,7 @@ struct ContentView: View {
                         Button("Delete Card", systemImage: "trash", role: .destructive) {
                             deleteCurrentCard()
                         }
-                        .disabled(document.stack.cards.count <= 1)
+                        .disabled(document.stack.cards.count <= 1 || document.stack.cards[cardIndex].cantDelete)
                     }
                     Menu("Paint", systemImage: "paintbrush") {
                         Button("Paint on Card", systemImage: "rectangle") {
@@ -470,6 +470,7 @@ struct ContentView: View {
 
     private func deleteCurrentCard() {
         guard document.stack.cards.count > 1 else { return }
+        guard !document.stack.cards[cardIndex].cantDelete else { return }
         stack.wrappedValue.cards.remove(at: cardIndex)
         currentCardIndex = min(cardIndex, document.stack.cards.count - 1)
         selectedPartID = nil
