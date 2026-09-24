@@ -306,17 +306,45 @@ struct Parser {
             return Stmt(kind: .put(value, .into, nil), line: line)
         }
 
-        let container: Container
-        if let fieldRef = try parseFieldRefIfPresent() {
-            container = .field(fieldRef)
-        } else if let name = peekIdentifier() {
-            advance()
-            container = .variable(name)
-        } else {
-            throw ScriptError(line: line, message: "Expected a variable or field after '\(String(describing: mode) == "into" ? "into" : "after/before")'.")
-        }
+        let container = try parseContainer(line: line)
         try expectNewline()
         return Stmt(kind: .put(value, mode, container), line: line)
+    }
+
+    /// A put destination: a chunk of a container (`word 2 of field "X"`),
+    /// a field, or a variable.
+    private mutating func parseContainer(line: Int) throws -> Container {
+        if let word = peekIdentifier(), let kind = Self.chunkKinds[word] {
+            advance()
+            let start = try parsePrimary()
+            let selector: ChunkSelector = consumeWord("to")
+                ? .range(start, try parsePrimary())
+                : .index(start)
+            guard consumeWord("of") else {
+                throw ScriptError(line: line, message: "Expected 'of' after '\(word)' in a put destination.")
+            }
+            return .chunk(kind, selector, try parseContainer(line: line))
+        }
+        let ordinalOffset = peekIdentifier() == "the" ? 1 : 0
+        if let ordinalWord = peekIdentifier(ordinalOffset),
+           let selector = Self.ordinalSelector(ordinalWord),
+           let kindWord = peekIdentifier(ordinalOffset + 1), let kind = Self.chunkKinds[kindWord] {
+            if ordinalOffset == 1 { advance() } // the
+            advance() // ordinal
+            advance() // kind
+            guard consumeWord("of") else {
+                throw ScriptError(line: line, message: "Expected 'of' after '\(ordinalWord) \(kindWord)'.")
+            }
+            return .chunk(kind, selector, try parseContainer(line: line))
+        }
+        if let fieldRef = try parseFieldRefIfPresent() {
+            return .field(fieldRef)
+        }
+        if let name = peekIdentifier() {
+            advance()
+            return .variable(name)
+        }
+        throw ScriptError(line: line, message: "Expected a variable, field, or chunk here.")
     }
 
     private mutating func parseGo(line: Int) throws -> Stmt {

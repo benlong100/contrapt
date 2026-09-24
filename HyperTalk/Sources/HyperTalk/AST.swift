@@ -61,9 +61,11 @@ struct FieldRef {
     var expr: Expr
 }
 
-enum Container {
+indirect enum Container {
     case variable(String)
     case field(FieldRef)
+    /// A chunk of another container: `word 2 of field "X"`.
+    case chunk(ChunkKind, ChunkSelector, Container)
 }
 
 enum GoTarget {

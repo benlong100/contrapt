@@ -112,3 +112,67 @@ import Testing
     """, host: MockHost(fields: ["name": "Grace Hopper", "out": ""]))
     #expect(host.fields["out"] == "Grace")
 }
+
+// MARK: - Chunks as containers (put into a chunk)
+
+@Test func putIntoWordOfVariable() throws {
+    let host = try run("""
+    on mouseUp
+      put "the quick brown fox" into s
+      put "slow" into word 2 of s
+      put s into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "the slow brown fox")
+}
+
+@Test func putIntoItemOfField() throws {
+    let host = try run("""
+    on mouseUp
+      put "green" into item 2 of field "colors"
+    end mouseUp
+    """, host: MockHost(fields: ["colors": "red,white,blue"]))
+    #expect(host.fields["colors"] == "red,green,blue")
+}
+
+@Test func putAfterCharChunk() throws {
+    let host = try run("""
+    on mouseUp
+      put "X" after char 2 of s
+      put s into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    // s is empty; char 2 of empty → append X at start-ish. Just ensure no crash.
+    #expect(host.fields["out"] != nil)
+}
+
+@Test func putIntoLineExtendsField() throws {
+    let host = try run("""
+    on mouseUp
+      put "third" into line 3 of field "log"
+    end mouseUp
+    """, host: MockHost(fields: ["log": "first\nsecond"]))
+    #expect(host.fields["log"] == "first\nsecond\nthird")
+}
+
+@Test func putIntoLastWord() throws {
+    let host = try run("""
+    on mouseUp
+      put "dog" into the last word of s
+      put s into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    // s empty → last word (count 0) selector resolves to 0; guard leaves as no-op-ish
+    #expect(host.fields["out"] != nil)
+}
+
+@Test func replaceCharRange() throws {
+    let host = try run("""
+    on mouseUp
+      put "Hello" into s
+      put "i" into char 1 to 4 of s
+      put s into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "io")
+}

@@ -37,6 +37,36 @@ enum ChunkResolver {
         return units[lo..<hi].joined(separator: delimiter(kind))
     }
 
+    /// Returns `source` with the selected chunk replaced by `replacement`.
+    /// Extends the text (padding with empty units) when the selection lies
+    /// past the end, so `put X into line 5 of Y` can grow Y.
+    static func replacing(
+        kind: ChunkKind,
+        selector: ChunkSelector,
+        in source: String,
+        with replacement: String,
+        evaluateIndex: (Expr) throws -> Int
+    ) rethrows -> String {
+        if kind == .character {
+            var characters = Array(source)
+            let (start, end) = try bounds(selector, count: characters.count, evaluateIndex: evaluateIndex)
+            guard start >= 1 else { return source }
+            let lo = min(start - 1, characters.count)
+            let hi = min(max(end, start - 1), characters.count)
+            characters.replaceSubrange(lo..<hi, with: Array(replacement))
+            return String(characters)
+        }
+
+        var units = split(source, kind: kind)
+        let (start, end) = try bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
+        guard start >= 1 else { return source }
+        while units.count < start { units.append("") }
+        let lo = start - 1
+        let hi = min(max(end, start), units.count)
+        units.replaceSubrange(lo..<hi, with: [replacement])
+        return units.joined(separator: delimiter(kind))
+    }
+
     /// How many units of `kind` are in `source` (empty text has none).
     static func count(kind: ChunkKind, in source: String) -> Int {
         guard !source.isEmpty else { return 0 }

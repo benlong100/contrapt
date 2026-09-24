@@ -372,27 +372,48 @@ final class Runtime {
             host.showMessage(value)
             return
         }
-        let existing: String
+        let combined: String
+        switch mode {
+        case .into:
+            combined = value
+        case .after:
+            combined = try containerValue(container, line: line) + value
+        case .before:
+            combined = value + (try containerValue(container, line: line))
+        }
+        try setContainer(container, to: combined, line: line)
+    }
+
+    /// Reads a container's text — a variable, a field, or a chunk of one.
+    private func containerValue(_ container: Container, line: Int) throws -> String {
         switch container {
         case .variable(let name):
-            existing = variableValue(name) ?? ""
+            return variableValue(name) ?? ""
         case .field(let fieldRef):
             let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
-            existing = try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
+            return try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
+        case .chunk(let kind, let selector, let base):
+            let source = try containerValue(base, line: line)
+            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source) {
+                Int(try Value.number(from: try evaluate($0, line: line), line: line))
+            }
         }
+    }
 
-        let combined = switch mode {
-        case .into: value
-        case .after: existing + value
-        case .before: value + existing
-        }
-
+    /// Writes a container's text — replacing a chunk in place when needed.
+    private func setContainer(_ container: Container, to value: String, line: Int) throws {
         switch container {
         case .variable(let name):
-            setVariable(name, to: combined)
+            setVariable(name, to: value)
         case .field(let fieldRef):
             let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
-            try hostCall(line: line) { try host.setFieldText(reference, domain: domain, to: combined) }
+            try hostCall(line: line) { try host.setFieldText(reference, domain: domain, to: value) }
+        case .chunk(let kind, let selector, let base):
+            let source = try containerValue(base, line: line)
+            let updated = try ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value) {
+                Int(try Value.number(from: try evaluate($0, line: line), line: line))
+            }
+            try setContainer(base, to: updated, line: line)
         }
     }
 

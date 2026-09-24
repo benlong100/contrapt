@@ -39,6 +39,8 @@ struct HyperTalkGuideView: View {
                     put "!" after field "Greeting"
                     put "new" into background field 1
                     put field id 9 into safekeeping
+                    put "slow" into word 2 of field "Notes"
+                    put "third" into line 3 of field "Log"
                     put "shown in the Message Box"
                     """)
 
