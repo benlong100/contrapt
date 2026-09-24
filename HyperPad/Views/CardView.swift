@@ -15,7 +15,10 @@ struct CardView: View {
     var isEditing: Bool = false
     var isSnappingEnabled: Bool = true
     @Binding var selectedPartID: UUID?
-    var onButtonTap: (Part) -> Void
+    /// Browse-mode tap on a part (button or label) — dispatches its mouseUp.
+    var onPartTap: (Part) -> Void
+    /// Browse-mode tap on empty card canvas — mouseUp goes to the card.
+    var onCardTap: () -> Void = {}
     var onOpenInspector: () -> Void = {}
 
     @State private var guides = AlignmentGuides()
@@ -44,7 +47,11 @@ struct CardView: View {
                 .fill(Color(.systemBackground))
                 .shadow(radius: 8)
                 .onTapGesture {
-                    if isEditing { selectedPartID = nil }
+                    if isEditing {
+                        selectedPartID = nil
+                    } else {
+                        onCardTap()
+                    }
                 }
             if let backgroundIndex {
                 partViews(for: $stack.backgrounds[backgroundIndex].parts)
@@ -81,7 +88,7 @@ struct CardView: View {
                         onOpenInspector: onOpenInspector
                     )
                 } else {
-                    PartView(part: $part, onButtonTap: { onButtonTap(part) })
+                    PartView(part: $part, onTap: { onPartTap(part) })
                 }
             }
             .frame(width: part.frame.width, height: part.frame.height)
@@ -217,7 +224,7 @@ private struct EditablePart: View {
     private static let minSize: Double = 32
 
     var body: some View {
-        PartView(part: $part, onButtonTap: {})
+        PartView(part: $part, onTap: {})
             .allowsHitTesting(false)
             .contentShape(Rectangle())
             .onTapGesture(count: 2) {
@@ -301,13 +308,13 @@ private struct EditablePart: View {
 /// keep the native look; per-kind style properties come later.
 struct PartView: View {
     @Binding var part: Part
-    var onButtonTap: () -> Void
+    var onTap: () -> Void
 
     var body: some View {
         switch part.kind {
         case .button(let properties):
             Button {
-                onButtonTap()
+                onTap()
             } label: {
                 Text(properties.title)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -317,9 +324,13 @@ struct PartView: View {
             TextField(properties.placeholder, text: fieldText)
                 .textFieldStyle(.roundedBorder)
         case .label(let properties):
+            // Labels take taps too, like HyperCard's locked text: their
+            // mouseUp travels the message path (label → card → …).
             Text(properties.text)
                 .font(.title)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { onTap() }
         }
     }
 
@@ -348,7 +359,7 @@ struct PartView: View {
         cardIndex: 0,
         isEditing: true,
         selectedPartID: $selection,
-        onButtonTap: { _ in }
+        onPartTap: { _ in }
     )
     .padding()
     .onAppear { selection = stack.cards[0].parts[2].id }

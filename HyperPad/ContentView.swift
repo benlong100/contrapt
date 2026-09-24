@@ -55,7 +55,8 @@ struct ContentView: View {
                     isEditing: isEditing,
                     isSnappingEnabled: isSnappingEnabled,
                     selectedPartID: $selectedPartID,
-                    onButtonTap: runMouseUp,
+                    onPartTap: runMouseUp,
+                    onCardTap: runCardMouseUp,
                     onOpenInspector: { isInspectorPresented = true }
                 )
                 .padding()
@@ -212,6 +213,15 @@ struct ContentView: View {
     private func runMouseUp(on part: Part) {
         do {
             try HyperTalk.send("mouseUp", along: scriptPath(cardAt: cardIndex, part: part), host: makeHost())
+        } catch {
+            scriptErrorText = error.localizedDescription
+        }
+    }
+
+    /// A tap on empty card canvas: mouseUp starts at the card layer.
+    private func runCardMouseUp() {
+        do {
+            try HyperTalk.send("mouseUp", along: scriptPath(cardAt: cardIndex, part: nil), host: makeHost())
         } catch {
             scriptErrorText = error.localizedDescription
         }
