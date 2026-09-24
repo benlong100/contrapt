@@ -598,6 +598,10 @@ final class Runtime {
         case .clock(let field):
             return host.clock(field)
 
+        case .isType(let expression, let type, let negated):
+            let matches = Self.matchesType(try evaluate(expression, line: line), type)
+            return (negated ? !matches : matches) ? "true" : "false"
+
         case .unary(let op, let operand):
             let value = try evaluate(operand, line: line)
             switch op {
@@ -825,6 +829,35 @@ final class Runtime {
             throw ScriptError(line: line, message: "There is no '\(keyword)' here.")
         }
         return object
+    }
+
+    /// Whether `value` reads as the given `is a …` type. Purely textual —
+    /// `date` isn't handled here (it would need the host's calendar).
+    private static func matchesType(_ value: String, _ type: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        switch type {
+        case "number":
+            return Double(trimmed) != nil
+        case "integer":
+            guard let number = Double(trimmed) else { return false }
+            return number.rounded() == number
+        case "logical", "boolean":
+            let lowercased = trimmed.lowercased()
+            return lowercased == "true" || lowercased == "false"
+        case "point":
+            return isNumberList(trimmed, count: 2)
+        case "rect", "rectangle":
+            return isNumberList(trimmed, count: 4)
+        default:
+            return false
+        }
+    }
+
+    /// True when `value` is exactly `count` comma-separated numbers.
+    private static func isNumberList(_ value: String, count: Int) -> Bool {
+        let parts = value.split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.count == count else { return false }
+        return parts.allSatisfy { Double($0.trimmingCharacters(in: .whitespaces)) != nil }
     }
 
     /// A numeric value is an ordinal (`field 1`); anything else is a name.

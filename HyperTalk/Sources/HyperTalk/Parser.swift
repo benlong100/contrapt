@@ -605,7 +605,14 @@ struct Parser {
                 left = .binary(.greater, left, try parseConcatenation())
             } else if peekIdentifier() == "is" {
                 advance()
-                if consumeWord("not") {
+                let negated = consumeWord("not")
+                // `is [not] a[n] <type>` — a type test.
+                if peekIdentifier() == "a" || peekIdentifier() == "an",
+                   let type = peekIdentifier(1), Self.typeNames.contains(type) {
+                    advance() // a / an
+                    advance() // type
+                    left = .isType(left, type, negated: negated)
+                } else if negated {
                     left = .binary(.notEqual, left, try parseConcatenation())
                 } else {
                     left = .binary(.equal, left, try parseConcatenation())
@@ -744,6 +751,11 @@ struct Parser {
         }
         throw ScriptError(line: line, message: "Expected an object here, like button \"OK\", field \"Name\", card 2, or this card.")
     }
+
+    /// The types recognized by `is a[n] <type>`.
+    static let typeNames: Set<String> = [
+        "number", "integer", "point", "rect", "rectangle", "logical", "boolean",
+    ]
 
     /// Functions readable as `the <fn> of X`, not just `fn(X)`.
     static let oneArgFunctions: Set<String> = [

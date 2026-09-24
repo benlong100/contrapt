@@ -121,6 +121,9 @@ indirect enum Expr {
     case globalProperty(String)
     /// `the date`, `the long time`, `the seconds`, etc.
     case clock(ClockField)
+    /// `X is [not] a[n] <type>` — a type test (number, integer, point, rect,
+    /// logical). Result is true/false.
+    case isType(Expr, String, negated: Bool)
     case binary(BinaryOp, Expr, Expr)
     case unary(UnaryOp, Expr)
 }

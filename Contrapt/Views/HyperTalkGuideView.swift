@@ -121,11 +121,13 @@ struct HyperTalkGuideView: View {
                     repeat until field "Done" is "yes"
                     """)
 
-                    section("Values and operators", body: "Everything is text, becoming a number or true/false as needed. Comparisons ignore case; & joins, && joins with a space. Also: + - * / div mod, and, or, not, contains, is, is not.", example: """
+                    section("Values and operators", body: "Everything is text, becoming a number or true/false as needed. Comparisons ignore case; & joins, && joins with a space. Also: + - * / div mod, and, or, not, contains, is, is not. `is a[n] …` tests a type: number, integer, point, rect, logical.", example: """
                     put "Hyper" & "Talk"          -- HyperTalk
                     put "Hello" && "world"        -- Hello world
                     if "10" > "9" then beep       -- numeric compare
                     if name contains "an" then beep
+                    if field "Age" is a number then beep
+                    if "10,20" is a point then beep
                     """)
 
                     section("do and value", body: "`do` runs a string as commands, and `the value of` (or value(…)) evaluates a string as an expression — both in the current handler's context, so they see your variables. Handy for building HyperTalk on the fly.", example: """

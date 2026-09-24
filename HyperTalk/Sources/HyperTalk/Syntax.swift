@@ -45,6 +45,7 @@ enum SyntaxScanner {
         "go", "put", "into", "after", "before", "beep", "get", "set", "this", "of",
         "me", "target", "do", "value",
         "and", "or", "not", "is", "contains", "div", "mod",
+        "integer", "logical", "boolean", "point", "rect", "rectangle",
         "the", "card", "field", "number", "length",
         "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
         "ln", "ln1", "log2", "annuity", "compound", "average", "avg", "sum",
