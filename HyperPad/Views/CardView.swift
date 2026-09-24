@@ -15,13 +15,13 @@ struct CardView: View {
     var isEditing: Bool = false
     var isSnappingEnabled: Bool = true
     @Binding var selectedPartID: UUID?
-    /// Browse-mode tap on a part (button or label) — dispatches its mouseUp.
-    var onPartTap: (Part) -> Void
-    /// Browse-mode tap on empty card canvas — mouseUp goes to the card.
-    var onCardTap: () -> Void = {}
+    /// Browse-mode mouse messages: the message name (mouseDown/mouseUp)
+    /// plus the part it targets — nil means the card itself.
+    var onMouseMessage: (String, Part?) -> Void = { _, _ in }
     var onOpenInspector: () -> Void = {}
 
     @State private var guides = AlignmentGuides()
+    @State private var isCardPressed = false
 
     /// Named coordinate space on the logical-size canvas, so gesture math
     /// works in card coordinates regardless of display scale.
@@ -43,22 +43,44 @@ struct CardView: View {
 
     private var cardCanvas: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(.systemBackground))
-                .shadow(radius: 8)
-                .onTapGesture {
-                    if isEditing {
-                        selectedPartID = nil
-                    } else {
-                        onCardTap()
-                    }
-                }
+            cardSurface
             if let backgroundIndex {
                 partViews(for: $stack.backgrounds[backgroundIndex].parts)
             }
             partViews(for: $stack.cards[cardIndex].parts)
             guideLines
         }
+    }
+
+    @ViewBuilder
+    private var cardSurface: some View {
+        let surface = RoundedRectangle(cornerRadius: 8)
+            .fill(Color(.systemBackground))
+            .shadow(radius: 8)
+        if isEditing {
+            surface.onTapGesture { selectedPartID = nil }
+        } else {
+            surface.gesture(cardPressGesture)
+        }
+    }
+
+    /// Press on empty canvas: mouseDown at touch-down, mouseUp on release —
+    /// but only if released inside the card, as in HyperCard.
+    private var cardPressGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                if !isCardPressed {
+                    isCardPressed = true
+                    onMouseMessage("mouseDown", nil)
+                }
+            }
+            .onEnded { value in
+                isCardPressed = false
+                if (0...stack.cardSize.width).contains(value.location.x),
+                   (0...stack.cardSize.height).contains(value.location.y) {
+                    onMouseMessage("mouseUp", nil)
+                }
+            }
     }
 
     private var backgroundIndex: Int? {
@@ -88,7 +110,11 @@ struct CardView: View {
                         onOpenInspector: onOpenInspector
                     )
                 } else {
-                    PartView(part: $part, onTap: { onPartTap(part) })
+                    PartView(
+                        part: $part,
+                        onTap: { onMouseMessage("mouseUp", part) },
+                        onMouseDown: { onMouseMessage("mouseDown", part) }
+                    )
                 }
             }
             .frame(width: part.frame.width, height: part.frame.height)
@@ -309,10 +335,15 @@ private struct EditablePart: View {
 struct PartView: View {
     @Binding var part: Part
     var onTap: () -> Void
+    var onMouseDown: () -> Void = {}
+
+    @State private var isPressed = false
 
     var body: some View {
         switch part.kind {
         case .button(let properties):
+            // The Button's action is HyperCard's mouseUp: it fires on
+            // release inside. The simultaneous gesture adds mouseDown.
             Button {
                 onTap()
             } label: {
@@ -320,18 +351,48 @@ struct PartView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .buttonStyle(.bordered)
+            .simultaneousGesture(pressDetector)
         case .field(let properties):
             TextField(properties.placeholder, text: fieldText)
                 .textFieldStyle(.roundedBorder)
         case .label(let properties):
-            // Labels take taps too, like HyperCard's locked text: their
-            // mouseUp travels the message path (label → card → …).
+            // Labels take presses too, like HyperCard's locked text:
+            // mouseDown at touch-down, mouseUp on release inside.
             Text(properties.text)
                 .font(.title)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture { onTap() }
+                .gesture(labelPressGesture)
         }
+    }
+
+    private var pressDetector: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                if !isPressed {
+                    isPressed = true
+                    onMouseDown()
+                }
+            }
+            .onEnded { _ in isPressed = false }
+    }
+
+    private var labelPressGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                if !isPressed {
+                    isPressed = true
+                    onMouseDown()
+                }
+            }
+            .onEnded { value in
+                isPressed = false
+                // Release inside sends mouseUp; sliding off cancels.
+                if (0...part.frame.width).contains(value.location.x),
+                   (0...part.frame.height).contains(value.location.y) {
+                    onTap()
+                }
+            }
     }
 
     /// Field contents are document data, as in HyperCard: typing into a
@@ -358,8 +419,7 @@ struct PartView: View {
         stack: $stack,
         cardIndex: 0,
         isEditing: true,
-        selectedPartID: $selection,
-        onPartTap: { _ in }
+        selectedPartID: $selection
     )
     .padding()
     .onAppear { selection = stack.cards[0].parts[2].id }

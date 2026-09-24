@@ -55,8 +55,7 @@ struct ContentView: View {
                     isEditing: isEditing,
                     isSnappingEnabled: isSnappingEnabled,
                     selectedPartID: $selectedPartID,
-                    onPartTap: runMouseUp,
-                    onCardTap: runCardMouseUp,
+                    onMouseMessage: sendMouseMessage,
                     onOpenInspector: { isInspectorPresented = true }
                 )
                 .padding()
@@ -210,18 +209,12 @@ struct ContentView: View {
         return layers
     }
 
-    private func runMouseUp(on part: Part) {
+    /// Dispatches a mouse message (mouseDown/mouseUp) from a press on a
+    /// part, or on the card itself when `part` is nil. All pointing devices
+    /// — finger, Pencil, trackpad, mouse — arrive through the same gestures.
+    private func sendMouseMessage(_ message: String, to part: Part?) {
         do {
-            try HyperTalk.send("mouseUp", along: scriptPath(cardAt: cardIndex, part: part), host: makeHost())
-        } catch {
-            scriptErrorText = error.localizedDescription
-        }
-    }
-
-    /// A tap on empty card canvas: mouseUp starts at the card layer.
-    private func runCardMouseUp() {
-        do {
-            try HyperTalk.send("mouseUp", along: scriptPath(cardAt: cardIndex, part: nil), host: makeHost())
+            try HyperTalk.send(message, along: scriptPath(cardAt: cardIndex, part: part), host: makeHost())
         } catch {
             scriptErrorText = error.localizedDescription
         }
