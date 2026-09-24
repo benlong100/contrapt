@@ -199,8 +199,30 @@ nonisolated enum PartKind: Hashable {
     }
 }
 
-nonisolated struct ButtonPart: Codable, Hashable {
+nonisolated struct ButtonPart: Hashable {
     var title: String
+    /// Whether the title draws (off = a nameless button / hot-zone).
+    var showName: Bool
+    /// Whether the button highlights while pressed.
+    var autoHilite: Bool
+
+    init(title: String, showName: Bool = true, autoHilite: Bool = true) {
+        self.title = title
+        self.showName = showName
+        self.autoHilite = autoHilite
+    }
+}
+
+/// Manual Codable so older manifests without the new flags still decode.
+extension ButtonPart: Codable {
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        showName = try container.decodeIfPresent(Bool.self, forKey: .showName) ?? true
+        autoHilite = try container.decodeIfPresent(Bool.self, forKey: .autoHilite) ?? true
+    }
 }
 
 nonisolated struct FieldPart: Hashable {

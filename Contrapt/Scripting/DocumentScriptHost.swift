@@ -171,6 +171,12 @@ final class DocumentScriptHost: HyperTalkHost {
         case "title":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.title
+        case "showname":
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.showName ? "true" : "false"
+        case "autohilite", "autohighlight":
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.autoHilite ? "true" : "false"
         case "text":
             switch part.kind {
             case .field(let properties): return properties.text
@@ -190,11 +196,7 @@ final class DocumentScriptHost: HyperTalkHost {
         case "name":
             part.name = value
         case "visible":
-            switch value.lowercased() {
-            case "true": part.isVisible = true
-            case "false": part.isVisible = false
-            default: throw HostError("The visible property must be true or false, not \"\(value)\".")
-            }
+            part.isVisible = try boolean(value, for: property)
         case "width": part.frame.width = max(16, try number(value, for: property))
         case "height": part.frame.height = max(16, try number(value, for: property))
         case "left": part.frame.x = try number(value, for: property)
@@ -204,6 +206,14 @@ final class DocumentScriptHost: HyperTalkHost {
         case "title":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.title = value
+            part.kind = .button(properties)
+        case "showname":
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            properties.showName = try boolean(value, for: property)
+            part.kind = .button(properties)
+        case "autohilite", "autohighlight":
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            properties.autoHilite = try boolean(value, for: property)
             part.kind = .button(properties)
         case "text":
             switch part.kind {
@@ -273,6 +283,14 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("There is no card with id \(id).")
             }
             return index
+        }
+    }
+
+    private func boolean(_ value: String, for property: String) throws -> Bool {
+        switch value.lowercased() {
+        case "true": return true
+        case "false": return false
+        default: throw HostError("The \(property) property must be true or false, not \"\(value)\".")
         }
     }
 

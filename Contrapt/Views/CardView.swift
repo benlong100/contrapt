@@ -350,6 +350,28 @@ private struct EditablePart: View {
     }
 }
 
+/// A HyperCard-style button: a rounded, tinted pill that inverts to the
+/// accent color while pressed — but only when Auto Hilite is on.
+struct CardButtonStyle: ButtonStyle {
+    var autoHilite: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let lit = autoHilite && configuration.isPressed
+        return configuration.label
+            .font(.body)
+            .foregroundStyle(lit ? Color.white : Color.accentColor)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(lit ? Color.accentColor : Color.accentColor.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
+            )
+    }
+}
+
 /// The open document's media assets, for image parts.
 private struct StackAssetsKey: EnvironmentKey {
     static let defaultValue: [String: Data] = [:]
@@ -380,10 +402,10 @@ struct PartView: View {
             Button {
                 onTap()
             } label: {
-                Text(properties.title)
+                Text(properties.showName ? properties.title : "")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(CardButtonStyle(autoHilite: properties.autoHilite))
             .simultaneousGesture(pressDetector)
         case .field(let properties):
             if properties.isMultiline {

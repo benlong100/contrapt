@@ -60,6 +60,8 @@ struct PartInspector: View {
         case .button:
             Section("Button") {
                 TextField("Title", text: buttonTitle)
+                Toggle("Show Name", isOn: buttonShowName)
+                Toggle("Auto Hilite", isOn: buttonAutoHilite)
                 Button("Link To…", systemImage: "link") {
                     onLinkTo()
                 }
@@ -101,6 +103,34 @@ struct PartInspector: View {
             set: {
                 guard case .button(var properties) = part.kind else { return }
                 properties.title = $0
+                part.kind = .button(properties)
+            }
+        )
+    }
+
+    private var buttonShowName: Binding<Bool> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return true }
+                return properties.showName
+            },
+            set: {
+                guard case .button(var properties) = part.kind else { return }
+                properties.showName = $0
+                part.kind = .button(properties)
+            }
+        )
+    }
+
+    private var buttonAutoHilite: Binding<Bool> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return true }
+                return properties.autoHilite
+            },
+            set: {
+                guard case .button(var properties) = part.kind else { return }
+                properties.autoHilite = $0
                 part.kind = .button(properties)
             }
         )
