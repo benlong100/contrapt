@@ -1030,6 +1030,12 @@ struct Parser {
             return .chunk(kind, selector, try parsePrimary())
         case .identifier(let word):
             advance()
+            // `there is a[n] <object>` / `there is no <object>` — existence.
+            if word == "there", consumeWord("is") {
+                let negated = consumeWord("no")
+                if !negated { _ = consumeWord("a") || consumeWord("an") }
+                return .exists(try parseObjectExpr(), negated: negated)
+            }
             // `me` / `target` on their own → the object's name (HyperTalk
             // reserves both words for dispatch identity).
             if word == "me" { return .property("name", .me) }

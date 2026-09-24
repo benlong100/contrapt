@@ -146,6 +146,8 @@ indirect enum Expr {
     /// `X is [not] a[n] <type>` — a type test (number, integer, point, rect,
     /// logical). Result is true/false.
     case isType(Expr, String, negated: Bool)
+    /// `there is a[n] <object>` / `there is no <object>` — an existence test.
+    case exists(ObjectExpr, negated: Bool)
     case binary(BinaryOp, Expr, Expr)
     case unary(UnaryOp, Expr)
 }

@@ -134,6 +134,8 @@ public protocol HyperTalkHost: AnyObject {
     /// `wait` — pause the script for `seconds`. The host owns real time (as
     /// with the clock), so tests can make it instant.
     func wait(seconds: Double) async
+    /// `there is a[n] <object>` — whether the object exists right now.
+    func exists(_ object: HyperTalkObject) -> Bool
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

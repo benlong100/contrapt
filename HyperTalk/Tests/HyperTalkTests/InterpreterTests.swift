@@ -158,6 +158,21 @@ final class MockHost: HyperTalkHost {
         waits.append(seconds)
     }
 
+    /// A field exists if it's in `fields`; any other part/card exists if a
+    /// property was preset for it. `this …` objects always exist.
+    func exists(_ object: HyperTalkObject) -> Bool {
+        switch object {
+        case .part(let kind, let domain, let reference):
+            if kind == "field", fields[fieldKey(reference, domain)] != nil { return true }
+            let prefix = "\(domainText(domain))\(kind) \(referenceText(reference))."
+            return properties.keys.contains { $0.hasPrefix(prefix) }
+        case .card(let reference):
+            return properties.keys.contains { $0.hasPrefix("card \(referenceText(reference)).") }
+        case .thisCard, .thisBackground, .thisStack:
+            return true
+        }
+    }
+
     private func patterns(_ format: ConvertFormat) -> String? {
         switch format {
         case .shortDate: "M/d/yy"

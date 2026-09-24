@@ -166,6 +166,22 @@ final class DocumentScriptHost: HyperTalkHost {
         try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
     }
 
+    func exists(_ object: HyperTalkObject) -> Bool {
+        switch object {
+        case .part(let kind, let domain, let reference):
+            return (try? locatePart(kind: kind, domain: domain, reference: reference)) != nil
+        case .card(let reference):
+            return (try? cardIndexFor(reference)) != nil
+        case .thisCard:
+            return !stack.cards.isEmpty
+        case .thisBackground:
+            let card = stack.cards[cardIndex]
+            return stack.backgrounds.contains { $0.id == card.backgroundID }
+        case .thisStack:
+            return true
+        }
+    }
+
     private func convertFormatter(_ formats: [ConvertFormat]) -> DateFormatter? {
         let formatter = DateFormatter()
         for format in formats {

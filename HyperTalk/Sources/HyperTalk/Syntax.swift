@@ -44,7 +44,7 @@ enum SyntaxScanner {
         "repeat", "forever", "while", "until", "with", "times", "down", "to", "for",
         "wait", "second", "sec", "tick",
         "go", "put", "into", "after", "before", "beep", "get", "set", "this", "of",
-        "me", "target", "do", "value", "answer", "ask",
+        "me", "target", "do", "value", "answer", "ask", "there",
         "visual", "effect", "dissolve", "wipe", "scroll", "zoom", "iris",
         "barn", "door", "venetian", "blinds", "checkerboard", "plain",
         "slow", "slowly", "fast", "very",

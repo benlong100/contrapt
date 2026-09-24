@@ -666,6 +666,11 @@ final class Runtime {
             let matches = Self.matchesType(try await evaluate(expression, line: line), type)
             return (negated ? !matches : matches) ? "true" : "false"
 
+        case .exists(let objectExpression, let negated):
+            let object = try await resolveObject(objectExpression, line: line)
+            let present = host.exists(object)
+            return (negated ? !present : present) ? "true" : "false"
+
         case .unary(let op, let operand):
             let value = try await evaluate(operand, line: line)
             switch op {
