@@ -38,8 +38,12 @@ struct ScriptEditor: View {
                 if plain != script, newlineCount(of: plain) > newlineCount(of: script) {
                     let reindented = HyperTalk.reindent(plain)
                     if reindented != plain {
+                        // The caret comes from the text diff, not the
+                        // selection binding — the selection hasn't been
+                        // updated yet when this change handler runs.
+                        let caretOffset = caretOffsetAfterEdit(from: script, to: plain)
                         script = reindented
-                        applyReindented(reindented, basedOn: newText)
+                        applyReindented(reindented, caretWasAt: caretOffset, in: plain)
                         return
                     }
                 }
@@ -58,32 +62,49 @@ struct ScriptEditor: View {
         string.lazy.filter { $0 == "\n" }.count
     }
 
-    /// Replaces the text with the re-indented script and puts the caret at
-    /// the end of its line's new leading whitespace.
-    private func applyReindented(_ reindented: String, basedOn current: AttributedString) {
-        // Which line is the caret on now?
-        let caretOffset: Int
-        switch selection.indices(in: current) {
-        case .insertionPoint(let index):
-            caretOffset = current.characters.distance(from: current.startIndex, to: index)
-        case .ranges(let ranges):
-            if let first = ranges.ranges.first {
-                caretOffset = current.characters.distance(from: current.startIndex, to: first.lowerBound)
-            } else {
-                caretOffset = 0
-            }
-        @unknown default:
-            caretOffset = 0
+    /// Where the caret sits after an edit, derived from the old and new
+    /// text. Matching greedily from the end resolves ambiguous insertions
+    /// (a return typed before an existing newline) toward the newly
+    /// created line, which is where the caret actually is.
+    private func caretOffsetAfterEdit(from old: String, to new: String) -> Int {
+        let oldChars = Array(old)
+        let newChars = Array(new)
+        var suffix = 0
+        while suffix < oldChars.count, suffix < newChars.count,
+              oldChars[oldChars.count - 1 - suffix] == newChars[newChars.count - 1 - suffix] {
+            suffix += 1
         }
-        let plainBefore = String(current.characters)
-        let lineIndex = plainBefore.prefix(caretOffset).lazy.filter { $0 == "\n" }.count
+        return newChars.count - suffix
+    }
 
-        // Same line in the re-indented text, after its leading spaces.
-        let lines = reindented.components(separatedBy: "\n")
+    /// Replaces the text with the re-indented script, keeping the caret on
+    /// its line at the equivalent column (adjusted for the line's new
+    /// leading whitespace).
+    private func applyReindented(_ reindented: String, caretWasAt caretOffset: Int, in plain: String) {
+        // Locate the caret's line and column in the pre-indent text.
+        let plainLines = plain.components(separatedBy: "\n")
+        var lineIndex = 0
+        var lineStart = 0
+        for line in plainLines {
+            let lineEnd = lineStart + line.count
+            if caretOffset <= lineEnd { break }
+            lineStart = lineEnd + 1
+            lineIndex += 1
+        }
+        lineIndex = min(lineIndex, plainLines.count - 1)
+        let oldLine = plainLines[lineIndex]
+        let column = max(0, caretOffset - lineStart)
+        let oldLeading = oldLine.prefix(while: { $0 == " " }).count
+        let contentColumn = max(0, column - oldLeading)
+
+        // The same line and content column in the re-indented text.
+        let newLines = reindented.components(separatedBy: "\n")
         var offset = 0
-        for line in lines.prefix(lineIndex) { offset += line.count + 1 }
-        if lineIndex < lines.count {
-            offset += lines[lineIndex].prefix(while: { $0 == " " }).count
+        for line in newLines.prefix(lineIndex) { offset += line.count + 1 }
+        if lineIndex < newLines.count {
+            let newLine = newLines[lineIndex]
+            let newLeading = newLine.prefix(while: { $0 == " " }).count
+            offset += min(newLeading + contentColumn, newLine.count)
         }
         offset = min(offset, reindented.count)
 
