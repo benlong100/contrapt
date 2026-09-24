@@ -171,6 +171,13 @@ struct ContentView: View {
                         }
                         .disabled(document.stack.cards.count <= 1 || document.stack.cards[cardIndex].cantDelete)
                     }
+                    Menu("Arrange", systemImage: "square.3.layers.3d") {
+                        Button("Bring to Front", systemImage: "arrow.up.to.line") { arrangeSelectedPart(.front) }
+                        Button("Bring Closer", systemImage: "chevron.up") { arrangeSelectedPart(.closer) }
+                        Button("Send Farther", systemImage: "chevron.down") { arrangeSelectedPart(.farther) }
+                        Button("Send to Back", systemImage: "arrow.down.to.line") { arrangeSelectedPart(.back) }
+                    }
+                    .disabled(selectedPartID == nil)
                     Menu("Paint", systemImage: "paintbrush") {
                         Button("Paint on Card", systemImage: "rectangle") {
                             openPaintEditor(target: .card)
@@ -516,6 +523,41 @@ struct ContentView: View {
         }
         let existing = document.stack.cards[cardIndex].parts.count
         return "\(base) \(existing + 1)"
+    }
+
+    /// Z-order changes for the selected part, within its own layer (later
+    /// in the array = nearer the front). Part order is also part number, so
+    /// this changes ordinals too — as in HyperCard.
+    enum ArrangeAction { case front, closer, farther, back }
+
+    private func arrangeSelectedPart(_ action: ArrangeAction) {
+        guard let id = selectedPartID else { return }
+        var updated = document.stack
+        let index = cardIndex
+        if reorder(&updated.cards[index].parts, id: id, action: action) {
+            stack.wrappedValue = updated
+            return
+        }
+        let card = updated.cards[index]
+        if let backgroundIndex = updated.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+           reorder(&updated.backgrounds[backgroundIndex].parts, id: id, action: action) {
+            stack.wrappedValue = updated
+        }
+    }
+
+    private func reorder(_ parts: inout [Part], id: UUID, action: ArrangeAction) -> Bool {
+        guard let i = parts.firstIndex(where: { $0.id == id }) else { return false }
+        switch action {
+        case .front:
+            parts.append(parts.remove(at: i))
+        case .back:
+            parts.insert(parts.remove(at: i), at: 0)
+        case .closer:
+            if i < parts.count - 1 { parts.swapAt(i, i + 1) }
+        case .farther:
+            if i > 0 { parts.swapAt(i, i - 1) }
+        }
+        return true
     }
 
     private func deletePart(id: UUID) {
