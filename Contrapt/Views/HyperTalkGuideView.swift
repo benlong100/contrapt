@@ -135,9 +135,11 @@ struct HyperTalkGuideView: View {
                     put value("n * 2")              -- 30
                     """)
 
-                    section("Constants and more", body: "empty, space, comma, quote, return, tab, true, false. `beep` beeps (or `beep 3`). `exit mouseUp` ends a handler early. Comments start with two dashes.", example: """
+                    section("Constants and more", body: "empty, space, comma, colon, quote, return, linefeed, formfeed, null, tab, true, false, pi, and the number words zero through ten. `beep` beeps (or `beep 3`). `exit mouseUp` ends a handler early. Comments start with two dashes.", example: """
                     put empty into field "Log"
                     put "a" & comma & space & "b"  -- a, b
+                    put ten & colon & zero & zero   -- 10:00
+                    put pi                          -- 3.14159265358979
                     beep 2                          -- twice
                     """)
 

@@ -56,6 +56,8 @@ enum SyntaxScanner {
         "eighth", "ninth", "tenth", "middle",
         "previous", "prev", "first", "last",
         "empty", "true", "false", "quote", "space", "return", "comma", "tab",
+        "linefeed", "formfeed", "null", "colon", "pi",
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
     ]
 
     static func scan(_ source: String) -> [SyntaxSpan] {
