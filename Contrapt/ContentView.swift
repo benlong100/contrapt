@@ -3,6 +3,7 @@
 //  Contrapt
 //
 
+import Combine
 import PencilKit
 import PhotosUI
 import SwiftUI
@@ -17,6 +18,7 @@ struct ContentView: View {
     var fileURL: URL?
     @Environment(\.undoManager) private var undoManager
     @Environment(\.openDocument) private var openDocument
+    @ObservedObject private var cardClipboard = CardClipboard.shared
 
     @State private var currentCardIndex = 0
     @State private var isEditing = false
@@ -169,6 +171,19 @@ struct ContentView: View {
                         Button("New Background", systemImage: "rectangle.on.rectangle.badge.plus") {
                             addBackground()
                         }
+                        Divider()
+                        Button("Cut Card", systemImage: "scissors") {
+                            cutCard()
+                        }
+                        .disabled(!canDeleteCurrentCard)
+                        Button("Copy Card", systemImage: "doc.on.doc") {
+                            copyCard()
+                        }
+                        Button("Paste Card", systemImage: "doc.on.clipboard") {
+                            pasteCard()
+                        }
+                        .disabled(cardClipboard.payload == nil)
+                        Divider()
                         Button("Delete Card", systemImage: "trash", role: .destructive) {
                             deleteCurrentCard()
                         }
@@ -618,6 +633,82 @@ struct ContentView: View {
         selectedPartID = nil
     }
 
+    // MARK: - Cut / Copy / Paste Card
+
+    private func copyCard() {
+        let card = document.stack.cards[cardIndex]
+        let background = document.stack.backgrounds.first { $0.id == card.backgroundID }
+        var assets: [String: Data] = [:]
+        for name in referencedAssetNames(card: card, background: background) {
+            if let data = document.assets[name] { assets[name] = data }
+        }
+        cardClipboard.payload = CardClipboard.Payload(card: card, background: background, assets: assets)
+    }
+
+    private func cutCard() {
+        copyCard()
+        deleteCurrentCard()
+    }
+
+    private func pasteCard() {
+        guard let payload = cardClipboard.payload else { return }
+
+        // Bring over any assets the card/background reference but the target
+        // doesn't have yet (UUID names never collide).
+        for (name, data) in payload.assets where document.assets[name] == nil {
+            document.assets[name] = data
+        }
+
+        var updated = document.stack
+        var backgroundID = payload.card.backgroundID
+
+        // If the source background isn't in this stack, insert a copy with
+        // fresh part identities but the same UUID so the card can find it.
+        if let background = payload.background,
+           !updated.backgrounds.contains(where: { $0.id == background.id }) {
+            var copy = background
+            copy.scriptID = updated.claimScriptID()
+            copy.parts = copy.parts.map { freshIdentity($0, in: &updated) }
+            updated.backgrounds.append(copy)
+            backgroundID = copy.id
+        }
+
+        var card = payload.card
+        card.id = UUID()
+        card.scriptID = updated.claimScriptID()
+        card.backgroundID = backgroundID
+        card.parts = card.parts.map { freshIdentity($0, in: &updated) }
+        updated.cards.insert(card, at: cardIndex + 1)
+
+        stack.wrappedValue = updated
+        currentCardIndex = cardIndex + 1
+        selectedPartID = nil
+    }
+
+    /// A copy of a part with a new UUID and a freshly claimed scriptID.
+    private func freshIdentity(_ part: Part, in stack: inout Stack) -> Part {
+        var part = part
+        part.id = UUID()
+        part.scriptID = stack.claimScriptID()
+        return part
+    }
+
+    private func referencedAssetNames(card: Card, background: Background?) -> Set<String> {
+        var names: Set<String> = []
+        func collect(_ paintDrawing: String?, _ paintImage: String?, _ parts: [Part]) {
+            if let paintDrawing { names.insert(paintDrawing) }
+            if let paintImage { names.insert(paintImage) }
+            for part in parts {
+                if case .image(let image) = part.kind { names.insert(image.assetName) }
+            }
+        }
+        collect(card.paintDrawingAsset, card.paintImageAsset, card.parts)
+        if let background {
+            collect(background.paintDrawingAsset, background.paintImageAsset, background.parts)
+        }
+        return names
+    }
+
     /// Whether the current card may be deleted: more than one card exists,
     /// the card isn't protected, and deleting it wouldn't remove a
     /// protected background (its last card).
@@ -696,6 +787,22 @@ struct CardNavigation {
     var goLast: () -> Void
     var goPrevious: () -> Void
     var goNext: () -> Void
+}
+
+/// An in-app clipboard for whole cards. Carries the card, its background,
+/// and the asset bytes both reference, so Paste works within a document
+/// and across windows. Asset names are UUIDs, so re-inserting them can't
+/// collide.
+final class CardClipboard: ObservableObject {
+    static let shared = CardClipboard()
+
+    struct Payload {
+        let card: Card
+        let background: Background?
+        let assets: [String: Data]
+    }
+
+    @Published var payload: Payload?
 }
 
 struct CardNavigationKey: FocusedValueKey {
