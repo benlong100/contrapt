@@ -128,6 +128,7 @@ struct HyperTalkGuideView: View {
                     if name contains "an" then beep
                     if field "Age" is a number then beep
                     if "10,20" is a point then beep
+                    if "per" is in "HyperCard" then beep
                     """)
 
                     section("do and value", body: "`do` runs a string as commands, and `the value of` (or value(…)) evaluates a string as an expression — both in the current handler's context, so they see your variables. Handy for building HyperTalk on the fly.", example: """

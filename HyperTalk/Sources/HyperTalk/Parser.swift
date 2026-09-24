@@ -612,6 +612,10 @@ struct Parser {
                     advance() // a / an
                     advance() // type
                     left = .isType(left, type, negated: negated)
+                } else if consumeWord("in") {
+                    // `A is [not] in B` == B [does not] contains A.
+                    let contains = Expr.binary(.contains, try parseConcatenation(), left)
+                    left = negated ? .unary(.not, contains) : contains
                 } else if negated {
                     left = .binary(.notEqual, left, try parseConcatenation())
                 } else {
