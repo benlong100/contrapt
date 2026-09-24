@@ -22,6 +22,7 @@ struct CardView: View {
 
     @State private var guides = AlignmentGuides()
     @State private var isCardPressed = false
+    @Environment(\.stackAssets) private var stackAssets
 
     /// Named coordinate space on the logical-size canvas, so gesture math
     /// works in card coordinates regardless of display scale.
@@ -44,11 +45,25 @@ struct CardView: View {
     private var cardCanvas: some View {
         ZStack(alignment: .topLeading) {
             cardSurface
+            paintLayer
             if let backgroundIndex {
                 partViews(for: $stack.backgrounds[backgroundIndex].parts)
             }
             partViews(for: $stack.cards[cardIndex].parts)
             guideLines
+        }
+    }
+
+    /// The card's rendered paint, beneath all parts.
+    @ViewBuilder
+    private var paintLayer: some View {
+        if let name = stack.cards[cardIndex].paintImageAsset,
+           let data = stackAssets[name],
+           let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: stack.cardSize.width, height: stack.cardSize.height)
+                .allowsHitTesting(false)
         }
     }
 

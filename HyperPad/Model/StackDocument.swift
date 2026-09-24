@@ -79,9 +79,12 @@ nonisolated final class StackDocument: ReferenceFileDocument {
     }
 
     /// Stores asset bytes under a fresh name and returns it, sniffing the
-    /// extension so unzipped stacks stay human-friendly.
-    func storeAsset(_ data: Data) -> String {
-        let ext: String = if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+    /// extension (unless one is given) so unzipped stacks stay
+    /// human-friendly.
+    func storeAsset(_ data: Data, preferredExtension: String? = nil) -> String {
+        let ext: String = if let preferredExtension {
+            preferredExtension
+        } else if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
             "png"
         } else if data.starts(with: [0xFF, 0xD8]) {
             "jpg"

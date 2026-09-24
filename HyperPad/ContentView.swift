@@ -3,6 +3,7 @@
 //  HyperPad
 //
 
+import PencilKit
 import PhotosUI
 import SwiftUI
 import HyperTalk
@@ -24,6 +25,8 @@ struct ContentView: View {
     @State private var undoFlushTask: Task<Void, Never>?
     @State private var isPhotoPickerPresented = false
     @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isPaintingPresented = false
+    @State private var paintDrawingToEdit = PKDrawing()
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
 
@@ -68,6 +71,11 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.secondarySystemBackground))
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhoto, matching: .images)
+        .fullScreenCover(isPresented: $isPaintingPresented) {
+            PaintEditor(cardSize: document.stack.cardSize, initialDrawing: paintDrawingToEdit) { finished in
+                savePaint(finished)
+            }
+        }
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             selectedPhoto = nil
@@ -138,6 +146,9 @@ struct ContentView: View {
                             deleteCurrentCard()
                         }
                         .disabled(document.stack.cards.count <= 1)
+                    }
+                    Button("Paint", systemImage: "paintbrush") {
+                        openPaintEditor()
                     }
                     Toggle(isOn: $isSnappingEnabled) {
                         Label("Snap to Guides", systemImage: "grid")
@@ -295,6 +306,40 @@ struct ContentView: View {
         )
         stack.wrappedValue.cards[cardIndex].parts.append(part)
         selectedPartID = part.id
+    }
+
+    /// Opens paint mode with the current card's drawing, if any.
+    private func openPaintEditor() {
+        let card = document.stack.cards[cardIndex]
+        if let name = card.paintDrawingAsset,
+           let data = document.assets[name],
+           let existing = try? PKDrawing(data: data) {
+            paintDrawingToEdit = existing
+        } else {
+            paintDrawingToEdit = PKDrawing()
+        }
+        isPaintingPresented = true
+    }
+
+    /// Stores the finished drawing twice — the editable PencilKit data and
+    /// a rendered PNG for display — and points the card at both. An empty
+    /// drawing clears the paint layer.
+    private func savePaint(_ drawing: PKDrawing) {
+        if drawing.strokes.isEmpty {
+            stack.wrappedValue.cards[cardIndex].paintDrawingAsset = nil
+            stack.wrappedValue.cards[cardIndex].paintImageAsset = nil
+            return
+        }
+        let cardSize = document.stack.cardSize
+        let bounds = CGRect(x: 0, y: 0, width: cardSize.width, height: cardSize.height)
+        let rendered = drawing.image(from: bounds, scale: 2)
+        guard let png = rendered.pngData() else { return }
+        let drawingName = document.storeAsset(drawing.dataRepresentation(), preferredExtension: "drawing")
+        let imageName = document.storeAsset(png)
+        var updated = document.stack
+        updated.cards[cardIndex].paintDrawingAsset = drawingName
+        updated.cards[cardIndex].paintImageAsset = imageName
+        stack.wrappedValue = updated
     }
 
     /// Imports picked image data as an asset and places an image part

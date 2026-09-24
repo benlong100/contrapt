@@ -58,6 +58,11 @@ nonisolated struct Card: Codable, Identifiable, Hashable {
     var backgroundID: UUID
     var script: String
     var parts: [Part]
+    /// The card's paint layer (Phase 6): the editable PencilKit drawing,
+    /// and its rendered PNG for display and for viewing unzipped stacks
+    /// anywhere. Both live in the archive's assets.
+    var paintDrawingAsset: String? = nil
+    var paintImageAsset: String? = nil
 }
 
 // MARK: - Parts
@@ -167,6 +172,8 @@ nonisolated extension Stack {
     func referencedAssetNames() -> Set<String> {
         var names: Set<String> = []
         for card in cards {
+            if let paint = card.paintDrawingAsset { names.insert(paint) }
+            if let paint = card.paintImageAsset { names.insert(paint) }
             for part in card.parts {
                 if case .image(let image) = part.kind { names.insert(image.assetName) }
             }
