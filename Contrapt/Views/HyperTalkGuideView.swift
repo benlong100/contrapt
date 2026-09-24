@@ -78,7 +78,7 @@ struct HyperTalkGuideView: View {
                     put item 2 of "usr/local/bin"          -- local
                     """)
 
-                    section("get and set", body: "Every object has properties. `set` changes them; `the … of …` reads them anywhere an expression fits; `get` reads one into the special variable `it`. Parts have name, visible, title or text, and geometry (left, top, right, bottom, width, height). Buttons also have style (roundRect, rectangle, shadow, opaque, transparent, checkbox, radio), showName, autoHilite, and hilite (the check-box/radio on-state). Fields have textFont (system, serif, monospaced, rounded), textSize, textStyle (bold, italic, underline, or plain), and textAlign (left, center, right). Cards have name, number, marked, cantDelete, and dontSearch; the stack has name, cards, width, and height. Refer to parts three ways: by name (button \"OK\"), by ordinal (field 1 — position among that kind, and `the number of` reads it back), or by permanent id (button id 6 — shown in the Inspector, and it survives renames). Add `card` or `background` before the kind to pick the layer: card field 1, background button \"Next\".", example: """
+                    section("get and set", body: "Every object has properties. `set` changes them; `the … of …` reads them anywhere an expression fits; `get` reads one into the special variable `it`. Parts have name, visible, title or text, and geometry (left, top, right, bottom, width, height). Buttons also have style (roundRect, rectangle, shadow, opaque, transparent, checkbox, radio), showName, autoHilite, and hilite (the check-box/radio on-state). Fields have textFont (system, serif, monospaced, rounded), textSize, textStyle (bold, italic, underline, or plain), and textAlign (left, center, right). Cards have name, number, marked, cantDelete, and dontSearch; the stack has name, cards, width, and height. Refer to parts three ways: by name (button \"OK\"), by ordinal (field 1 — position among that kind, and `the number of` reads it back), or by permanent id (button id 6 — shown in the Inspector, and it survives renames). Add `card` or `background` before the kind to pick the layer: card field 1, background button \"Next\". `me` is the object whose script is running; `the target` is the object first tapped — so a shared card handler can tell which button sent the message.", example: """
                     set the name of card field 1 to "blah"
                     set the visible of button "Secret" to false
                     set the width of field "Notes" to 400
@@ -88,6 +88,8 @@ struct HyperTalkGuideView: View {
                     if the left of button "Box" > 500 then beep
                     set the text of field id 9 to "found you"
                     go to card id 12
+                    set the hilite of me to true
+                    put the target into field "Clicked"
                     """)
 
                     section("if", body: "Single-line or block form, with optional else and else-if chains.", example: """

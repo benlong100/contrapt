@@ -135,6 +135,10 @@ indirect enum ObjectExpr {
     case thisCard
     case thisBackground
     case thisStack
+    /// `me` — the object whose script is currently running.
+    case me
+    /// `the target` — the object the current message was first sent to.
+    case target
 }
 
 enum BinaryOp {

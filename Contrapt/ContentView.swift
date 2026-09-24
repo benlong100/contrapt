@@ -364,19 +364,19 @@ struct ContentView: View {
         let card = document.stack.cards[index]
         var layers: [ScriptLayer] = []
         if let part {
-            let kind = switch part.kind {
-            case .button: "button"
-            case .field: "field"
-            case .label: "label"
-            case .image: "image"
-            }
-            layers.append(ScriptLayer(name: "\(kind) \"\(part.name)\" script", source: part.script))
+            let kind = part.kind.word
+            // A part on this card is a card part; otherwise it belongs to the
+            // shared background. Addressed by permanent id so `me` / `the
+            // target` survive renames.
+            let domain: HyperTalkObject.PartDomain = card.parts.contains(where: { $0.id == part.id }) ? .card : .background
+            let object = HyperTalkObject.part(kind: kind, domain: domain, reference: .id(String(part.scriptID)))
+            layers.append(ScriptLayer(name: "\(kind) \"\(part.name)\" script", source: part.script, object: object))
         }
-        layers.append(ScriptLayer(name: "card \"\(card.name)\" script", source: card.script))
+        layers.append(ScriptLayer(name: "card \"\(card.name)\" script", source: card.script, object: .thisCard))
         if let background = document.stack.backgrounds.first(where: { $0.id == card.backgroundID }) {
-            layers.append(ScriptLayer(name: "background script", source: background.script))
+            layers.append(ScriptLayer(name: "background script", source: background.script, object: .thisBackground))
         }
-        layers.append(ScriptLayer(name: "stack script", source: document.stack.script))
+        layers.append(ScriptLayer(name: "stack script", source: document.stack.script, object: .thisStack))
         return layers
     }
 

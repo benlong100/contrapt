@@ -10,10 +10,15 @@ import Foundation
 public struct ScriptLayer: Sendable, Equatable {
     public let name: String
     public let source: String
+    /// The object this script belongs to — a button, field, card, etc. —
+    /// so `me` and `the target` can name it. Nil for scriptless contexts
+    /// like the message box.
+    public let object: HyperTalkObject?
 
-    public init(name: String, source: String) {
+    public init(name: String, source: String, object: HyperTalkObject? = nil) {
         self.name = name
         self.source = source
+        self.object = object
     }
 }
 
@@ -711,7 +716,19 @@ final class Runtime {
         case .thisCard: .thisCard
         case .thisBackground: .thisBackground
         case .thisStack: .thisStack
+        case .me:
+            try layerObject(at: currentLayerIndex, keyword: "me", line: line)
+        case .target:
+            try layerObject(at: 0, keyword: "the target", line: line)
         }
+    }
+
+    /// The object a path layer belongs to, for `me` / `the target`.
+    private func layerObject(at index: Int, keyword: String, line: Int) throws -> HyperTalkObject {
+        guard path.indices.contains(index), let object = path[index].object else {
+            throw ScriptError(line: line, message: "There is no '\(keyword)' here.")
+        }
+        return object
     }
 
     /// A numeric value is an ordinal (`field 1`); anything else is a name.

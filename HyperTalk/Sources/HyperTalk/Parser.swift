@@ -626,6 +626,13 @@ struct Parser {
             if consumeWord("stack") { return .thisStack }
             throw ScriptError(line: line, message: "Expected 'card', 'background', or 'stack' after 'this'.")
         }
+        // Dispatch identity: `me` and `[the] target`.
+        if consumeWord("me") { return .me }
+        if peekIdentifier() == "target" || (peekIdentifier() == "the" && peekIdentifier(1) == "target") {
+            _ = consumeWord("the")
+            advance() // target
+            return .target
+        }
         let partKinds = ["button", "field", "label", "image"]
 
         // Domain qualifier: `card field 1` / `background button "OK"`.
@@ -750,6 +757,11 @@ struct Parser {
                 advance()
                 return .globalProperty("itemdelimiter")
             }
+            // `the target` on its own → the target object's name.
+            if peekIdentifier() == "target", peekIdentifier(1) != "of" {
+                advance()
+                return .property("name", .target)
+            }
             // `the length of X` → character count.
             if peekIdentifier() == "length", peekIdentifier(1) == "of" {
                 advance() // length
@@ -802,6 +814,10 @@ struct Parser {
             return .chunk(kind, selector, try parsePrimary())
         case .identifier(let word):
             advance()
+            // `me` / `target` on their own → the object's name (HyperTalk
+            // reserves both words for dispatch identity).
+            if word == "me" { return .property("name", .me) }
+            if word == "target" { return .property("name", .target) }
             // `name(args)` — a function call. Otherwise a plain variable.
             if case .symbol("(") = current.kind {
                 advance()
