@@ -10,31 +10,27 @@ import SwiftUI
 import AppKit
 #endif
 
-/// One-time launch bookkeeping.
-enum FirstLaunch {
-    private static let didOpenHomeKey = "didOpenHomeAtFirstLaunch"
-
-    /// Returns true exactly once — the first launch after a fresh install —
-    /// and records that Home has been auto-opened.
-    static func shouldOpenHome() -> Bool {
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: didOpenHomeKey) else { return false }
-        defaults.set(true, forKey: didOpenHomeKey)
-        return true
-    }
-}
-
 // Note: programmatically opening a document at a URL uses SwiftUI's
 // openDocument action, which is macOS-only. On iOS the document browser
-// is the front door; a native iOS Home entry point (bridging the document
-// browser) is a separate piece of work.
+// is the front door; forcing launch into Home there needs an architecture
+// change (see project memory).
 
 #if os(macOS)
-/// Opens Home on the first launch after install. On macOS the document
-/// app otherwise starts at an open panel; this lands new users in Home.
+/// Launches into Home instead of the open panel — every launch, and on
+/// dock reopen with no windows. Opening a specific stack from Finder still
+/// works normally (this hook isn't called in that case).
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        guard FirstLaunch.shouldOpenHome() else { return }
+    func applicationOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        openHome()
+        return true
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { openHome() }
+        return true
+    }
+
+    private func openHome() {
         let url = HomeStack.ensureSeeded()
         NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
     }
