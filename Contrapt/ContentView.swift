@@ -118,7 +118,12 @@ struct ContentView: View {
         .inspector(isPresented: $isInspectorPresented) {
             Group {
                 if let selectedPartID, let partBinding = partBinding(for: selectedPartID) {
-                    PartInspector(part: partBinding) {
+                    PartInspector(
+                        part: partBinding,
+                        linkCards: document.stack.cards.map {
+                            PartInspector.LinkTarget(scriptID: $0.scriptID, name: $0.name)
+                        }
+                    ) {
                         deletePart(id: selectedPartID)
                     }
                 } else {
