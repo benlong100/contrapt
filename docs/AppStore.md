@@ -86,14 +86,23 @@ suppresses the per-build compliance questionnaire.
 
 ## TestFlight checklist
 
+No screenshots needed for any of this — those are release-only.
+
 1. Archive (Product → Archive) and upload via Xcode Organizer
-2. Screenshots: 13" iPad required set — suggest: tutorial card 1, edit
-   mode with inspector open, the script editor full-screen with colored
-   HyperTalk, paint mode, the Message Box answering `2 + 3`
-3. Internal testing first (your devices), then external group
-   ("HyperCard folks") — external requires a brief beta review
-4. Beta app description: one paragraph + "scripts are always viewable"
-   sentence from the review notes
+2. Internal testing (your own devices): available minutes after
+   processing, no review, no metadata
+3. External group ("HyperCard folks"): needs a one-time beta review —
+   provide only a beta description, feedback email, and "what to test."
+   Use the "scripts are always viewable" sentence from the review notes
+   in the beta description
+
+## Release-only items (later)
+
+- Screenshots: 13" iPad required set — suggest: tutorial card 1, edit
+  mode with inspector open, the script editor full-screen with colored
+  HyperTalk, paint mode, the Message Box answering `2 + 3`
+- Full listing: description, keywords, category, age rating (drafted
+  above)
 
 ## Known review risks and answers
 
