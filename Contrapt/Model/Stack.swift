@@ -50,6 +50,10 @@ nonisolated struct Background: Codable, Identifiable, Hashable {
     var name: String
     var script: String
     var parts: [Part]
+    /// The background's paint layer, beneath everything on every card
+    /// sharing this background (same pair as Card's).
+    var paintDrawingAsset: String? = nil
+    var paintImageAsset: String? = nil
 }
 
 nonisolated struct Card: Codable, Identifiable, Hashable {
@@ -268,6 +272,8 @@ nonisolated extension Stack {
             }
         }
         for background in backgrounds {
+            if let paint = background.paintDrawingAsset { names.insert(paint) }
+            if let paint = background.paintImageAsset { names.insert(paint) }
             for part in background.parts {
                 if case .image(let image) = part.kind { names.insert(image.assetName) }
             }

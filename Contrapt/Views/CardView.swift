@@ -42,23 +42,26 @@ struct CardView: View {
         }
     }
 
+    /// HyperCard's authentic layering: background paint, background parts,
+    /// card paint, card parts.
     private var cardCanvas: some View {
         ZStack(alignment: .topLeading) {
             cardSurface
-            paintLayer
             if let backgroundIndex {
+                paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset)
                 partViews(for: $stack.backgrounds[backgroundIndex].parts)
             }
+            paintLayer(assetName: stack.cards[cardIndex].paintImageAsset)
             partViews(for: $stack.cards[cardIndex].parts)
             guideLines
         }
     }
 
-    /// The card's rendered paint, beneath all parts.
+    /// A rendered paint layer, if the object has one.
     @ViewBuilder
-    private var paintLayer: some View {
-        if let name = stack.cards[cardIndex].paintImageAsset,
-           let data = stackAssets[name],
+    private func paintLayer(assetName: String?) -> some View {
+        if let assetName,
+           let data = stackAssets[assetName],
            let image = UIImage(data: data) {
             Image(uiImage: image)
                 .resizable()

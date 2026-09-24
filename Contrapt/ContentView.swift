@@ -29,6 +29,7 @@ struct ContentView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isPaintingPresented = false
     @State private var paintDrawingToEdit = PKDrawing()
+    @State private var paintTarget: PaintTarget = .card
     @State private var isGuidePresented = false
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
@@ -78,7 +79,11 @@ struct ContentView: View {
             HyperTalkGuideView()
         }
         .fullScreenCover(isPresented: $isPaintingPresented) {
-            PaintEditor(cardSize: document.stack.cardSize, initialDrawing: paintDrawingToEdit) { finished in
+            PaintEditor(
+                title: paintTarget == .card ? "Paint on Card" : "Paint on Background",
+                cardSize: document.stack.cardSize,
+                initialDrawing: paintDrawingToEdit
+            ) { finished in
                 savePaint(finished)
             }
         }
@@ -153,8 +158,13 @@ struct ContentView: View {
                         }
                         .disabled(document.stack.cards.count <= 1)
                     }
-                    Button("Paint", systemImage: "paintbrush") {
-                        openPaintEditor()
+                    Menu("Paint", systemImage: "paintbrush") {
+                        Button("Paint on Card", systemImage: "rectangle") {
+                            openPaintEditor(target: .card)
+                        }
+                        Button("Paint on Background", systemImage: "rectangle.on.rectangle") {
+                            openPaintEditor(target: .background)
+                        }
                     }
                     Toggle(isOn: $isSnappingEnabled) {
                         Label("Snap to Guides", systemImage: "grid")
@@ -322,11 +332,30 @@ struct ContentView: View {
         selectedPartID = part.id
     }
 
-    /// Opens paint mode with the current card's drawing, if any.
-    private func openPaintEditor() {
-        let card = document.stack.cards[cardIndex]
-        if let name = card.paintDrawingAsset,
-           let data = document.assets[name],
+    /// Which paint layer is being edited: the current card's own, or the
+    /// shared background's (visible on every card using that background).
+    enum PaintTarget {
+        case card
+        case background
+    }
+
+    private var currentBackgroundIndex: Int? {
+        let backgroundID = document.stack.cards[cardIndex].backgroundID
+        return document.stack.backgrounds.firstIndex { $0.id == backgroundID }
+    }
+
+    /// Opens paint mode on the chosen layer, loading its existing strokes
+    /// (paintings stay editable — the stroke data lives in the stack).
+    private func openPaintEditor(target: PaintTarget) {
+        paintTarget = target
+        let drawingAsset: String? = switch target {
+        case .card:
+            document.stack.cards[cardIndex].paintDrawingAsset
+        case .background:
+            currentBackgroundIndex.flatMap { document.stack.backgrounds[$0].paintDrawingAsset }
+        }
+        if let drawingAsset,
+           let data = document.assets[drawingAsset],
            let existing = try? PKDrawing(data: data) {
             paintDrawingToEdit = existing
         } else {
@@ -336,23 +365,28 @@ struct ContentView: View {
     }
 
     /// Stores the finished drawing twice — the editable PencilKit data and
-    /// a rendered PNG for display — and points the card at both. An empty
-    /// drawing clears the paint layer.
+    /// a rendered PNG for display — and points the target layer at both.
+    /// An empty drawing clears the layer.
     private func savePaint(_ drawing: PKDrawing) {
-        if drawing.strokes.isEmpty {
-            stack.wrappedValue.cards[cardIndex].paintDrawingAsset = nil
-            stack.wrappedValue.cards[cardIndex].paintImageAsset = nil
-            return
-        }
-        let cardSize = document.stack.cardSize
-        let bounds = CGRect(x: 0, y: 0, width: cardSize.width, height: cardSize.height)
-        let rendered = drawing.image(from: bounds, scale: 2)
-        guard let png = rendered.pngData() else { return }
-        let drawingName = document.storeAsset(drawing.dataRepresentation(), preferredExtension: "drawing")
-        let imageName = document.storeAsset(png)
         var updated = document.stack
-        updated.cards[cardIndex].paintDrawingAsset = drawingName
-        updated.cards[cardIndex].paintImageAsset = imageName
+        var drawingName: String?
+        var imageName: String?
+        if !drawing.strokes.isEmpty {
+            let cardSize = document.stack.cardSize
+            let bounds = CGRect(x: 0, y: 0, width: cardSize.width, height: cardSize.height)
+            guard let png = drawing.image(from: bounds, scale: 2).pngData() else { return }
+            drawingName = document.storeAsset(drawing.dataRepresentation(), preferredExtension: "drawing")
+            imageName = document.storeAsset(png)
+        }
+        switch paintTarget {
+        case .card:
+            updated.cards[cardIndex].paintDrawingAsset = drawingName
+            updated.cards[cardIndex].paintImageAsset = imageName
+        case .background:
+            guard let backgroundIndex = currentBackgroundIndex else { return }
+            updated.backgrounds[backgroundIndex].paintDrawingAsset = drawingName
+            updated.backgrounds[backgroundIndex].paintImageAsset = imageName
+        }
         stack.wrappedValue = updated
     }
 

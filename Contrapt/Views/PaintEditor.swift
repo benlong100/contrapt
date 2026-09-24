@@ -10,6 +10,7 @@ import SwiftUI
 /// card's logical size with the system tool picker. Strokes live in
 /// logical card coordinates, so the drawing scales with the card.
 struct PaintEditor: View {
+    let title: String
     let cardSize: CardSize
     let initialDrawing: PKDrawing
     var onDone: (PKDrawing) -> Void
@@ -17,7 +18,8 @@ struct PaintEditor: View {
     @State private var drawing: PKDrawing
     @Environment(\.dismiss) private var dismiss
 
-    init(cardSize: CardSize, initialDrawing: PKDrawing, onDone: @escaping (PKDrawing) -> Void) {
+    init(title: String = "Paint", cardSize: CardSize, initialDrawing: PKDrawing, onDone: @escaping (PKDrawing) -> Void) {
+        self.title = title
         self.cardSize = cardSize
         self.initialDrawing = initialDrawing
         self.onDone = onDone
@@ -41,7 +43,7 @@ struct PaintEditor: View {
             }
             .padding()
             .background(Color(.secondarySystemBackground))
-            .navigationTitle("Paint")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
