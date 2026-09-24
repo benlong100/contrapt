@@ -3,7 +3,6 @@
 //  Contrapt
 //
 
-import AudioToolbox
 import SwiftUI
 import HyperTalk
 
@@ -82,7 +81,7 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     func beep() {
-        AudioServicesPlaySystemSound(1103) // classic short "tink"
+        Beeper.shared.beep()
     }
 
     // MARK: - Field lookup
