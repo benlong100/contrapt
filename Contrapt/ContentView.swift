@@ -198,16 +198,23 @@ struct ContentView: View {
                     goToPreviousCard()
                 }
                 Spacer()
-                Text("Card \(cardIndex + 1) of \(document.stack.cards.count)")
-                    .font(.callout)
-                    .monospacedDigit()
-                    .fixedSize()
+                Menu {
+                    Button("Home", systemImage: "house") { goHome() }
+                    Button("First Card", systemImage: "backward.end") { goFirst() }
+                    Button("Last Card", systemImage: "forward.end") { goLast() }
+                } label: {
+                    Text("Card \(cardIndex + 1) of \(document.stack.cards.count)")
+                        .font(.callout)
+                        .monospacedDigit()
+                        .fixedSize()
+                }
                 Spacer()
                 Button("Next Card", systemImage: "chevron.right") {
                     goToNextCard()
                 }
             }
         }
+        .focusedValue(\.cardNavigation, cardNavigation)
     }
 
     // MARK: - Script dispatch
@@ -495,6 +502,42 @@ struct ContentView: View {
         let count = document.stack.cards.count
         guard count > 0 else { return }
         currentCardIndex = (cardIndex + count - 1) % count
+    }
+
+    /// Home is the first card of the stack. (In a document-based app each
+    /// stack is its own world, so Home maps to the stack's start; a true
+    /// app-wide Home stack is a possible future.)
+    private func goHome() { currentCardIndex = 0 }
+    private func goFirst() { currentCardIndex = 0 }
+    private func goLast() { currentCardIndex = max(0, document.stack.cards.count - 1) }
+
+    /// Navigation actions published to the menu bar's Go menu.
+    private var cardNavigation: CardNavigation {
+        CardNavigation(
+            goHome: goHome, goFirst: goFirst, goLast: goLast,
+            goPrevious: goToPreviousCard, goNext: goToNextCard
+        )
+    }
+}
+
+/// Bridges the focused document's navigation to app-level menu commands
+/// (the Go menu). Nil when no document is focused, which disables the menu.
+struct CardNavigation {
+    var goHome: () -> Void
+    var goFirst: () -> Void
+    var goLast: () -> Void
+    var goPrevious: () -> Void
+    var goNext: () -> Void
+}
+
+struct CardNavigationKey: FocusedValueKey {
+    typealias Value = CardNavigation
+}
+
+extension FocusedValues {
+    var cardNavigation: CardNavigation? {
+        get { self[CardNavigationKey.self] }
+        set { self[CardNavigationKey.self] = newValue }
     }
 }
 
