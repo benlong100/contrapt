@@ -20,6 +20,20 @@ typealias PlatformImage = NSImage
 // MARK: - Images
 
 extension PlatformImage {
+    /// The image's true size in pixels. `NSImage.size` (and `UIImage.size`)
+    /// report *points*, which a DPI tag scales away from the pixel count —
+    /// so a 1024×768 image tagged 144 dpi would otherwise measure 512×384.
+    var pixelSize: CGSize {
+        #if canImport(UIKit)
+        CGSize(width: size.width * scale, height: size.height * scale)
+        #elseif canImport(AppKit)
+        let pixelDimensions = representations
+            .map { CGSize(width: $0.pixelsWide, height: $0.pixelsHigh) }
+            .filter { $0.width > 0 && $0.height > 0 }
+        return pixelDimensions.max { $0.width * $0.height < $1.width * $1.height } ?? size
+        #endif
+    }
+
     /// PNG bytes, however the platform spells it.
     var pngDataCrossPlatform: Data? {
         #if canImport(UIKit)

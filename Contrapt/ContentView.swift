@@ -94,7 +94,7 @@ struct ContentView: View {
             let didAccess = url.startAccessingSecurityScopedResource()
             defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
             guard let data = try? Data(contentsOf: url), let image = PlatformImage(data: data) else { return }
-            addImagePart(data: data, imageSize: image.size)
+            addImagePart(data: data, imageSize: image.pixelSize)
         }
         #endif
         .sheet(isPresented: $isGuidePresented) {
@@ -115,7 +115,7 @@ struct ContentView: View {
             Task {
                 guard let data = try? await item.loadTransferable(type: Data.self),
                       let image = PlatformImage(data: data) else { return }
-                addImagePart(data: data, imageSize: image.size)
+                addImagePart(data: data, imageSize: image.pixelSize)
             }
         }
         .overlay(alignment: .bottom) {
@@ -534,11 +534,12 @@ struct ContentView: View {
     /// sized to fit, centered on the current card.
     private func addImagePart(data: Data, imageSize: CGSize) {
         let assetName = document.storeAsset(data)
-        let maxSide: Double = 400
-        let scale = min(1, min(maxSide / imageSize.width, maxSide / imageSize.height))
+        let cardSize = document.stack.cardSize
+        // Bring the image in at its natural pixel size, only shrinking it to
+        // fit the card when it's larger — never scaling a small image up.
+        let scale = min(1, min(cardSize.width / imageSize.width, cardSize.height / imageSize.height))
         let width = imageSize.width * scale
         let height = imageSize.height * scale
-        let cardSize = document.stack.cardSize
         var part = Part(
             id: UUID(),
             name: defaultName(for: .image(ImagePart(assetName: assetName))),
