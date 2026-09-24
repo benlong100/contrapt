@@ -31,6 +31,8 @@ struct ContentView: View {
     @State private var isPaintingPresented = false
     @State private var paintDrawingToEdit = PKDrawing()
     @State private var paintTarget: PaintTarget = .card
+    /// The button being linked, while the Link To panel floats over the card.
+    @State private var linkingPartID: UUID?
     @State private var isGuidePresented = false
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
@@ -103,7 +105,14 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .top) {
+            if linkingPartID != nil {
+                linkToPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .animation(.default, value: isMessageBoxVisible)
+        .animation(.default, value: linkingPartID)
         .alert(
             "Script Error",
             isPresented: Binding(
@@ -120,9 +129,7 @@ struct ContentView: View {
                 if let selectedPartID, let partBinding = partBinding(for: selectedPartID) {
                     PartInspector(
                         part: partBinding,
-                        linkCards: document.stack.cards.map {
-                            PartInspector.LinkTarget(scriptID: $0.scriptID, name: $0.name)
-                        }
+                        onLinkTo: { linkingPartID = selectedPartID }
                     ) {
                         deletePart(id: selectedPartID)
                     }
@@ -225,6 +232,68 @@ struct ContentView: View {
             }
         }
         .focusedValue(\.cardNavigation, cardNavigation)
+    }
+
+    // MARK: - Link To
+
+    /// A floating panel over the card while linking a button. Navigation
+    /// stays live (both here and in the toolbar), so the user flips to the
+    /// destination card, then captures it with "This Card" — HyperCard's
+    /// Link To flow.
+    @ViewBuilder
+    private var linkToPanel: some View {
+        VStack(spacing: 12) {
+            Text("Link To")
+                .font(.headline)
+            Text("Go to the card you want, then link to it.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 16) {
+                Button("Previous", systemImage: "chevron.left") { goToPreviousCard() }
+                    .labelStyle(.iconOnly)
+                Text("\(cardIndex + 1) of \(document.stack.cards.count)")
+                    .font(.callout).monospacedDigit().fixedSize()
+                Button("Next", systemImage: "chevron.right") { goToNextCard() }
+                    .labelStyle(.iconOnly)
+            }
+            HStack(spacing: 12) {
+                Button("Cancel", role: .cancel) { linkingPartID = nil }
+                Button("This Stack") { applyLink("go to first card") }
+                Button("This Card") {
+                    applyLink("go to card id \(document.stack.cards[cardIndex].scriptID)")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: 420)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.top, 12)
+        .shadow(radius: 12)
+    }
+
+    /// Writes a generated navigation handler to the linking button, found
+    /// anywhere in the stack (it lives on a different card than the one the
+    /// user navigated to).
+    private func applyLink(_ command: String) {
+        defer { linkingPartID = nil }
+        guard let id = linkingPartID else { return }
+        let script = "on mouseUp\n  \(command)\nend mouseUp"
+        var updated = document.stack
+        for cardIdx in updated.cards.indices {
+            if let partIdx = updated.cards[cardIdx].parts.firstIndex(where: { $0.id == id }) {
+                updated.cards[cardIdx].parts[partIdx].script = script
+                stack.wrappedValue = updated
+                return
+            }
+        }
+        for bgIdx in updated.backgrounds.indices {
+            if let partIdx = updated.backgrounds[bgIdx].parts.firstIndex(where: { $0.id == id }) {
+                updated.backgrounds[bgIdx].parts[partIdx].script = script
+                stack.wrappedValue = updated
+                return
+            }
+        }
     }
 
     // MARK: - Script dispatch
