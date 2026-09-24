@@ -495,18 +495,27 @@ final class Runtime {
 
     private func resolveObject(_ object: ObjectExpr, line: Int) throws -> HyperTalkObject {
         switch object {
-        case .part(let kind, let nameExpression):
-            .part(kind: kind, reference: .named(try evaluate(nameExpression, line: line)))
-        case .partByID(let kind, let idExpression):
-            .part(kind: kind, reference: .id(try evaluate(idExpression, line: line)))
+        case .part(let kind, let domain, let nameExpression):
+            .part(kind: kind, domain: domain, reference: reference(from: try evaluate(nameExpression, line: line)))
+        case .partByID(let kind, let domain, let idExpression):
+            .part(kind: kind, domain: domain, reference: .id(try evaluate(idExpression, line: line)))
         case .card(let expression):
-            .card(.named(try evaluate(expression, line: line)))
+            .card(reference(from: try evaluate(expression, line: line)))
         case .cardByID(let idExpression):
             .card(.id(try evaluate(idExpression, line: line)))
         case .thisCard: .thisCard
         case .thisBackground: .thisBackground
         case .thisStack: .thisStack
         }
+    }
+
+    /// A numeric value is an ordinal (`field 1`); anything else is a name.
+    /// Parts whose names are digits remain reachable by `id`.
+    private func reference(from value: String) -> HyperTalkObject.Reference {
+        if let number = Int(value.trimmingCharacters(in: .whitespaces)) {
+            return .number(number)
+        }
+        return .named(value)
     }
 
     /// Numeric comparison when both sides are numbers, case-insensitive

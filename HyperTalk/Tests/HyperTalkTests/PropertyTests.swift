@@ -160,3 +160,39 @@ import Testing
     """)
     #expect(host.destinations == [.id("12")])
 }
+
+// MARK: - Ordinals and domains
+
+@Test func partsCanBeAddressedByOrdinal() throws {
+    let host = try run("""
+    on mouseUp
+      set the name of field 1 to "First Field"
+      set the width of button 2 to 90
+    end mouseUp
+    """)
+    #expect(host.properties["field 1.name"] == "First Field")
+    #expect(host.properties["button 2.width"] == "90")
+}
+
+@Test func domainQualifiersReachTheRightLayer() throws {
+    let host = try run("""
+    on mouseUp
+      set the name of card field 1 to "blah"
+      set the text of background field 1 to "shared"
+      set the title of bg button "Next" to "Onward"
+    end mouseUp
+    """)
+    #expect(host.properties["card field 1.name"] == "blah")
+    #expect(host.properties["background field 1.text"] == "shared")
+    #expect(host.properties["background button Next.title"] == "Onward")
+}
+
+@Test func ordinalsCanBeComputed() throws {
+    let host = try run("""
+    on mouseUp
+      put 1 into n
+      set the visible of field (n + 1) to false
+    end mouseUp
+    """)
+    #expect(host.properties["field 2.visible"] == "false")
+}

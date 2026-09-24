@@ -21,15 +21,25 @@ public enum GoDestination: Equatable, Sendable {
 public enum HyperTalkObject: Sendable, Equatable {
     /// How the script referred to the object.
     public enum Reference: Sendable, Equatable {
-        /// By name (or, for cards, number-or-name as written).
+        /// By name: `button "OK"`.
         case named(String)
+        /// By ordinal: `field 1` — position among that kind.
+        case number(Int)
         /// By permanent ID: `button id 6` — stable across renames.
         case id(String)
     }
 
+    /// Which layer a part reference searches: `card field 1`,
+    /// `background field 1`, or unqualified (card first, then background).
+    public enum PartDomain: Sendable, Equatable {
+        case any
+        case card
+        case background
+    }
+
     /// A part on the current card or its background: kind is the word the
     /// script used ("button", "field", "label", "image").
-    case part(kind: String, reference: Reference)
+    case part(kind: String, domain: PartDomain, reference: Reference)
     case card(Reference)
     case thisCard
     case thisBackground

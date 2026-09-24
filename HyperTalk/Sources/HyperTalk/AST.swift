@@ -82,11 +82,11 @@ indirect enum Expr {
     case unary(UnaryOp, Expr)
 }
 
-/// An object reference in source: `button "OK"`, `button id 6`, `card 3`,
-/// `card id 12`, `this card`.
+/// An object reference in source: `button "OK"`, `card field 1`,
+/// `button id 6`, `card 3`, `card id 12`, `this card`.
 indirect enum ObjectExpr {
-    case part(kind: String, name: Expr)
-    case partByID(kind: String, id: Expr)
+    case part(kind: String, domain: HyperTalkObject.PartDomain, name: Expr)
+    case partByID(kind: String, domain: HyperTalkObject.PartDomain, id: Expr)
     case card(Expr)
     case cardByID(Expr)
     case thisCard

@@ -51,13 +51,23 @@ final class MockHost: HyperTalkHost {
     private func referenceText(_ reference: HyperTalkObject.Reference) -> String {
         switch reference {
         case .named(let name): name
+        case .number(let number): String(number)
         case .id(let id): "id \(id)"
+        }
+    }
+
+    private func domainText(_ domain: HyperTalkObject.PartDomain) -> String {
+        switch domain {
+        case .any: ""
+        case .card: "card "
+        case .background: "background "
         }
     }
 
     private func propertyKey(_ property: String, _ object: HyperTalkObject) -> String {
         switch object {
-        case .part(let kind, let reference): "\(kind) \(referenceText(reference)).\(property)"
+        case .part(let kind, let domain, let reference):
+            "\(domainText(domain))\(kind) \(referenceText(reference)).\(property)"
         case .card(let reference): "card \(referenceText(reference)).\(property)"
         case .thisCard: "this card.\(property)"
         case .thisBackground: "this background.\(property)"

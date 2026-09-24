@@ -541,12 +541,25 @@ struct Parser {
             if consumeWord("stack") { return .thisStack }
             throw ScriptError(line: line, message: "Expected 'card', 'background', or 'stack' after 'this'.")
         }
-        if let kind = peekIdentifier(), ["button", "field", "label", "image"].contains(kind) {
+        let partKinds = ["button", "field", "label", "image"]
+
+        // Domain qualifier: `card field 1` / `background button "OK"`.
+        var domain = HyperTalkObject.PartDomain.any
+        if peekIdentifier() == "card", let next = peekIdentifier(1), partKinds.contains(next) {
+            advance()
+            domain = .card
+        } else if peekIdentifier() == "background" || peekIdentifier() == "bg",
+                  let next = peekIdentifier(1), partKinds.contains(next) {
+            advance()
+            domain = .background
+        }
+
+        if let kind = peekIdentifier(), partKinds.contains(kind) {
             advance()
             if consumeWord("id") {
-                return .partByID(kind: kind, id: try parsePrimary())
+                return .partByID(kind: kind, domain: domain, id: try parsePrimary())
             }
-            return .part(kind: kind, name: try parsePrimary())
+            return .part(kind: kind, domain: domain, name: try parsePrimary())
         }
         if consumeWord("card") {
             if consumeWord("id") {
