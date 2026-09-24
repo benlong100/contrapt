@@ -17,7 +17,9 @@ struct ContentView: View {
     /// The document's location on disk, for sharing. Nil until first save.
     var fileURL: URL?
     @Environment(\.undoManager) private var undoManager
+    #if os(macOS)
     @Environment(\.openDocument) private var openDocument
+    #endif
     @ObservedObject private var cardClipboard = CardClipboard.shared
 
     @State private var currentCardIndex = 0
@@ -212,9 +214,11 @@ struct ContentView: View {
                         isInspectorPresented = true
                     }
                 }
+                #if os(macOS)
                 Button("Home", systemImage: "house") {
                     openHome()
                 }
+                #endif
                 Button("HyperTalk Guide", systemImage: "book") {
                     isGuidePresented = true
                 }
@@ -240,8 +244,10 @@ struct ContentView: View {
                 }
                 Spacer()
                 Menu {
+                    #if os(macOS)
                     Button("Home", systemImage: "house") { openHome() }
                     Divider()
+                    #endif
                     Button("First Card", systemImage: "backward.end") { goFirst() }
                     Button("Last Card", systemImage: "forward.end") { goLast() }
                 } label: {
@@ -766,9 +772,13 @@ struct ContentView: View {
     private func goLast() { currentCardIndex = max(0, document.stack.cards.count - 1) }
 
     /// Opens the Home stack (seeding it on first use) as a document.
+    /// macOS-only: SwiftUI's openDocument action isn't available on iOS,
+    /// where the document browser is the front door.
     private func openHome() {
+        #if os(macOS)
         let url = HomeStack.ensureSeeded()
         Task { try? await openDocument(at: url) }
+        #endif
     }
 
     /// Within-stack navigation actions published to the Go menu.

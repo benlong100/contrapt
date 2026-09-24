@@ -24,22 +24,10 @@ enum FirstLaunch {
     }
 }
 
-#if os(iOS)
-/// A hidden view behind the document launch screen that opens Home the
-/// first time the app runs, so new users land in Home rather than the
-/// empty browser.
-private struct FirstLaunchHomeOpener: View {
-    @Environment(\.openDocument) private var openDocument
-
-    var body: some View {
-        Color.clear
-            .task {
-                guard FirstLaunch.shouldOpenHome() else { return }
-                try? await openDocument(at: HomeStack.ensureSeeded())
-            }
-    }
-}
-#endif
+// Note: programmatically opening a document at a URL uses SwiftUI's
+// openDocument action, which is macOS-only. On iOS the document browser
+// is the front door; a native iOS Home entry point (bridging the document
+// browser) is a separate piece of work.
 
 #if os(macOS)
 /// Opens Home on the first launch after install. On macOS the document
@@ -56,13 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// The Go menu's items, enabled only when a stack window is focused.
 private struct GoCommands: View {
     @FocusedValue(\.cardNavigation) private var navigation
+    #if os(macOS)
     @Environment(\.openDocument) private var openDocument
+    #endif
 
     var body: some View {
-        // Home opens the Home stack and is always available.
+        #if os(macOS)
+        // Home opens the Home stack (macOS-only: openDocument).
         Button("Home") { openHome() }
             .keyboardShortcut("h", modifiers: [.command, .shift])
         Divider()
+        #endif
         // Within-stack navigation needs a focused stack window.
         Group {
             Button("Back") { navigation?.goPrevious() }
@@ -75,17 +67,21 @@ private struct GoCommands: View {
                 .keyboardShortcut(.downArrow, modifiers: .command)
         }
         .disabled(navigation == nil)
+        #if os(macOS)
         Divider()
         Button("Reset Home to Default…") {
             HomeStack.reset()
             openHome()
         }
+        #endif
     }
 
+    #if os(macOS)
     private func openHome() {
         let url = HomeStack.ensureSeeded()
         Task { try? await openDocument(at: url) }
     }
+    #endif
 }
 
 @main
@@ -122,8 +118,6 @@ struct ContraptApp: App {
             NewDocumentButton("Learn HyperTalk", for: StackDocument.self) {
                 StackDocument(stack: .tutorial())
             }
-        } background: {
-            FirstLaunchHomeOpener()
         }
         #endif
     }
