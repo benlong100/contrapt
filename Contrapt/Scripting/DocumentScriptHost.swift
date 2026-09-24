@@ -119,6 +119,8 @@ final class DocumentScriptHost: HyperTalkHost {
             switch property {
             case "name": return stack.name
             case "cards": return String(stack.cards.count)
+            case "width": return numberText(stack.cardSize.width)
+            case "height": return numberText(stack.cardSize.height)
             default: throw Self.noSuchProperty(property, of: "this stack")
             }
         }
@@ -146,8 +148,12 @@ final class DocumentScriptHost: HyperTalkHost {
             }
             stackBinding.wrappedValue.backgrounds[index].name = value
         case .thisStack:
-            guard property == "name" else { throw Self.noSuchProperty(property, of: "this stack") }
-            stackBinding.wrappedValue.name = value
+            switch property {
+            case "name": stackBinding.wrappedValue.name = value
+            case "width": stackBinding.wrappedValue.cardSize.width = try number(value, for: property)
+            case "height": stackBinding.wrappedValue.cardSize.height = try number(value, for: property)
+            default: throw Self.noSuchProperty(property, of: "this stack")
+            }
         }
     }
 

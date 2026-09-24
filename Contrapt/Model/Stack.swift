@@ -25,6 +25,25 @@ nonisolated struct CardSize: Codable, Hashable {
     var height: Double
 }
 
+/// A named card-size choice for the Stack inspector — HyperCard's classic
+/// sizes (Classic 9″ is the original compact-Mac screen) plus modern ones.
+nonisolated struct CardSizePreset: Identifiable, Hashable {
+    let name: String
+    let size: CardSize
+    var id: String { name }
+
+    static let all: [CardSizePreset] = [
+        CardSizePreset(name: "Classic (9″)", size: CardSize(width: 512, height: 342)),
+        CardSizePreset(name: "Small", size: CardSize(width: 416, height: 240)),
+        CardSizePreset(name: "PowerBook", size: CardSize(width: 640, height: 400)),
+        CardSizePreset(name: "Large", size: CardSize(width: 640, height: 480)),
+        CardSizePreset(name: "iPad Landscape", size: CardSize(width: 1024, height: 768)),
+        CardSizePreset(name: "iPad Portrait", size: CardSize(width: 768, height: 1024)),
+        CardSizePreset(name: "Widescreen", size: CardSize(width: 1280, height: 720)),
+        CardSizePreset(name: "Square", size: CardSize(width: 768, height: 768)),
+    ]
+}
+
 /// A part's position and size in logical card coordinates.
 nonisolated struct PartFrame: Codable, Hashable {
     var x: Double

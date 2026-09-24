@@ -42,11 +42,48 @@ struct ObjectScriptsInspector: View {
                     Toggle("Can't Delete Card", isOn: $stack.cards[cardIndex].cantDelete)
                 }
             }
+            if scope == .stack {
+                Section {
+                    TextField("Name", text: $stack.name)
+                    Menu {
+                        ForEach(CardSizePreset.all) { preset in
+                            Button("\(preset.name)  ·  \(Int(preset.size.width)) × \(Int(preset.size.height))") {
+                                stack.cardSize = preset.size
+                            }
+                        }
+                    } label: {
+                        LabeledContent("Card Size", value: cardSizeLabel)
+                    }
+                    geometryRow("Width", value: $stack.cardSize.width)
+                    geometryRow("Height", value: $stack.cardSize.height)
+                } header: {
+                    Text("Stack")
+                } footer: {
+                    Text("Card size applies to every card in the stack. Parts keep their positions, so shrinking may move some off the card.")
+                }
+            }
             ScriptFormSection(title: scriptTitle, script: scriptBinding, onExpand: { isEditorExpanded = true })
                 .id(scope)
         }
         .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: scriptTitle, script: scriptBinding)
+        }
+    }
+
+    /// Shows the preset name when the size matches one, else the dimensions.
+    private var cardSizeLabel: String {
+        let size = stack.cardSize
+        if let preset = CardSizePreset.all.first(where: { $0.size == size }) {
+            return preset.name
+        }
+        return "\(Int(size.width)) × \(Int(size.height))"
+    }
+
+    private func geometryRow(_ title: String, value: Binding<Double>) -> some View {
+        LabeledContent(title) {
+            TextField(title, value: value, format: .number)
+                .multilineTextAlignment(.trailing)
+                .numericPunctuationKeyboard()
         }
     }
 
