@@ -65,6 +65,13 @@ nonisolated struct Stack: Identifiable, Hashable {
     /// Allocator for scriptIDs — the short permanent numbers scripts use
     /// (`button id 6`). Never decremented; IDs are never reused.
     var nextID: Int = 1
+    /// Opens the stack full-screen, filling the space around the card with
+    /// `paddingColor` and hiding the app chrome — like classic HyperCard
+    /// taking over the screen. Scriptable as `the fullScreen of this stack`.
+    var isFullScreen: Bool = false
+    /// The fill behind the card in full-screen mode: a color name (black,
+    /// white, gray, …) or #RRGGBB hex. `the paddingColor of this stack`.
+    var paddingColor: String = "black"
 
     /// Claims the next permanent scriptID.
     mutating func claimScriptID() -> Int {
@@ -77,6 +84,7 @@ nonisolated struct Stack: Identifiable, Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
+        case isFullScreen, paddingColor
     }
 
     init(from decoder: Decoder) throws {
@@ -89,6 +97,8 @@ extension Stack: Codable {
         backgrounds = try container.decode([Background].self, forKey: .backgrounds)
         cards = try container.decode([Card].self, forKey: .cards)
         nextID = try container.decodeIfPresent(Int.self, forKey: .nextID) ?? 1
+        isFullScreen = try container.decodeIfPresent(Bool.self, forKey: .isFullScreen) ?? false
+        paddingColor = try container.decodeIfPresent(String.self, forKey: .paddingColor) ?? "black"
     }
 }
 

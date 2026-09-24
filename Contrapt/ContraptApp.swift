@@ -20,6 +20,13 @@ import AppKit
 /// dock reopen with no windows. Opening a specific stack from Finder still
 /// works normally (this hook isn't called in that case).
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Suppress AppKit's automatic "Enter Full Screen" View-menu item —
+        // Contrapt's full-screen is its own presentation mode. Set before the
+        // menu is built. (collectionBehavior alone doesn't remove this item.)
+        UserDefaults.standard.set(false, forKey: "NSFullScreenMenuItemEverywhere")
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The DocumentGroup's launch panel is suppressed (see the scene's
         // defaultLaunchBehavior). Open Home ourselves, deferred a beat so
@@ -28,6 +35,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async {
             guard NSApp.windows.allSatisfy({ !$0.isVisible }) else { return }
             self.openHome()
+        }
+        // Contrapt's full-screen is our own presentation mode (see
+        // StackPresentation), so strip macOS's native full-screen. Remove the
+        // green-button capability per window…
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeMainNotification, object: nil, queue: .main
+        ) { notification in
+            guard let window = notification.object as? NSWindow else { return }
+            window.collectionBehavior.remove(.fullScreenPrimary)
+            window.collectionBehavior.remove(.fullScreenAuxiliary)
+        }
+        // …and delete the native "Enter Full Screen" item each time a menu is
+        // about to open, since SwiftUI re-adds it after a one-time removal.
+        NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
+        ) { _ in
+            Self.removeNativeFullScreenMenuItem()
+        }
+    }
+
+    /// Removes AppKit's automatic Full Screen item (action `toggleFullScreen:`)
+    /// wherever it landed in the menu, leaving Contrapt's own command.
+    private static func removeNativeFullScreenMenuItem() {
+        let toggle = NSSelectorFromString("toggleFullScreen:")
+        for submenu in NSApp.mainMenu?.items.compactMap(\.submenu) ?? [] {
+            for item in submenu.items where item.action == toggle {
+                submenu.removeItem(item)
+            }
         }
     }
 
@@ -86,6 +121,19 @@ private struct GoCommands: View {
     #endif
 }
 
+/// The View menu's Full Screen toggle, enabled when a stack is focused.
+private struct FullScreenCommand: View {
+    @FocusedBinding(\.stackFullScreen) private var isFullScreen: Bool?
+
+    var body: some View {
+        Button(isFullScreen == true ? "Exit Full Screen" : "Enter Full Screen") {
+            isFullScreen?.toggle()
+        }
+        .keyboardShortcut("f", modifiers: [.command, .shift])
+        .disabled(isFullScreen == nil)
+    }
+}
+
 @main
 struct ContraptApp: App {
     #if os(macOS)
@@ -109,6 +157,9 @@ struct ContraptApp: App {
         // HyperCard's Go menu, driven by the focused document. Also
         // reaches iPad when a hardware keyboard is attached.
         .commands {
+            CommandGroup(after: .toolbar) {
+                FullScreenCommand()
+            }
             CommandMenu("Go") {
                 GoCommands()
             }

@@ -242,6 +242,8 @@ final class DocumentScriptHost: HyperTalkHost {
             case "cards": return String(stack.cards.count)
             case "width": return numberText(stack.cardSize.width)
             case "height": return numberText(stack.cardSize.height)
+            case "fullscreen": return stack.isFullScreen ? "true" : "false"
+            case "paddingcolor": return stack.paddingColor
             default: throw Self.noSuchProperty(property, of: "this stack")
             }
         }
@@ -277,6 +279,8 @@ final class DocumentScriptHost: HyperTalkHost {
             case "name": stackBinding.wrappedValue.name = value
             case "width": stackBinding.wrappedValue.cardSize.width = try number(value, for: property)
             case "height": stackBinding.wrappedValue.cardSize.height = try number(value, for: property)
+            case "fullscreen": stackBinding.wrappedValue.isFullScreen = try boolean(value, for: property)
+            case "paddingcolor": stackBinding.wrappedValue.paddingColor = value
             default: throw Self.noSuchProperty(property, of: "this stack")
             }
         }

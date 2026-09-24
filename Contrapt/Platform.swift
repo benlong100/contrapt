@@ -103,6 +103,115 @@ struct DeleteKeyCatcher: NSViewRepresentable {
 }
 #endif
 
+// MARK: - Full-screen presentation (macOS)
+
+#if os(macOS)
+/// Drives true presentation mode: the window covers the whole screen with
+/// its title bar hidden, and the menu bar and Dock are hidden — the stack
+/// owns the screen, as classic HyperCard did. Escape leaves. Restores the
+/// window exactly on exit.
+struct StackPresentation: NSViewRepresentable {
+    var isPresenting: Bool
+    var paddingColor: Color
+    var onExit: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.onExit = onExit
+        let presenting = isPresenting
+        let color = NSColor(paddingColor)
+        DispatchQueue.main.async {
+            context.coordinator.setPresenting(presenting, color: color, window: nsView.window)
+        }
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.setPresenting(false, color: nil, window: nil)
+    }
+
+    final class Coordinator {
+        var onExit: () -> Void = {}
+        private var isPresenting = false
+        private weak var window: NSWindow?
+        private var escapeMonitor: Any?
+        private struct Saved {
+            let styleMask: NSWindow.StyleMask
+            let frame: NSRect
+            let level: NSWindow.Level
+            let backgroundColor: NSColor
+            let isOpaque: Bool
+            let toolbar: NSToolbar?
+        }
+        private var saved: Saved?
+
+        func setPresenting(_ presenting: Bool, color: NSColor?, window newWindow: NSWindow?) {
+            // Keep the fill in sync even when the presenting state is unchanged
+            // (e.g. the padding color was edited while full-screen).
+            if presenting, isPresenting, let color, let window {
+                window.backgroundColor = color
+            }
+            guard presenting != isPresenting else { return }
+            if presenting {
+                guard let window = newWindow, let screen = window.screen ?? NSScreen.main else { return }
+                self.window = window
+                saved = Saved(
+                    styleMask: window.styleMask, frame: window.frame, level: window.level,
+                    backgroundColor: window.backgroundColor, isOpaque: window.isOpaque,
+                    toolbar: window.toolbar
+                )
+                NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+                // Borderless so the window is square-cornered and edge-to-edge:
+                // a titled window covering the screen shows its rounded corners
+                // (desktop peeks through) and a titlebar hairline at the top.
+                window.styleMask = [.borderless]
+                // Paint the window itself so the whole screen is filled
+                // immediately, before SwiftUI relays out to the new size.
+                if let color {
+                    window.isOpaque = true
+                    window.backgroundColor = color
+                }
+                window.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
+                window.setFrame(screen.frame, display: true)
+                window.makeKeyAndOrderFront(nil)
+                installEscapeMonitor()
+                isPresenting = true
+            } else {
+                NSApp.presentationOptions = []
+                if let window = self.window, let saved {
+                    window.styleMask = saved.styleMask
+                    // Going borderless dropped the window's NSToolbar (SwiftUI's
+                    // toolbar bridges to it); restoring the style mask alone
+                    // doesn't bring it back, so reattach it.
+                    if window.toolbar == nil { window.toolbar = saved.toolbar }
+                    window.isOpaque = saved.isOpaque
+                    window.backgroundColor = saved.backgroundColor
+                    window.level = saved.level
+                    window.setFrame(saved.frame, display: true)
+                }
+                saved = nil
+                removeEscapeMonitor()
+                isPresenting = false
+            }
+        }
+
+        private func installEscapeMonitor() {
+            escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, event.keyCode == 53 else { return event } // 53 = Escape
+                self.onExit()
+                return nil
+            }
+        }
+
+        private func removeEscapeMonitor() {
+            if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
+            escapeMonitor = nil
+        }
+    }
+}
+#endif
+
 extension Image {
     /// Builds a SwiftUI image from asset bytes, nil if undecodable.
     init?(assetData data: Data) {
@@ -112,6 +221,80 @@ extension Image {
         #elseif canImport(AppKit)
         self.init(nsImage: image)
         #endif
+    }
+}
+
+// MARK: - Stack colors
+
+extension Color {
+    /// Parses a stack color string — a color name (black, white, gray, …)
+    /// or #RRGGBB / #RGB hex — falling back to black. Used for the stack's
+    /// scriptable `paddingColor`.
+    init(stackColor string: String) {
+        let text = string.trimmingCharacters(in: .whitespaces).lowercased()
+        // SwiftUI's built-in named colors…
+        let named: [String: Color] = [
+            "black": .black, "white": .white, "gray": .gray, "grey": .gray,
+            "red": .red, "orange": .orange, "yellow": .yellow, "green": .green,
+            "mint": .mint, "teal": .teal, "cyan": .cyan, "blue": .blue,
+            "indigo": .indigo, "purple": .purple, "pink": .pink, "brown": .brown,
+            "clear": .clear,
+        ]
+        if let color = named[text] {
+            self = color
+            return
+        }
+        // …plus common CSS color names SwiftUI doesn't provide, as hex.
+        let namedHex: [String: String] = [
+            "navy": "#000080", "maroon": "#800000", "olive": "#808000",
+            "lime": "#00FF00", "aqua": "#00FFFF", "fuchsia": "#FF00FF",
+            "magenta": "#FF00FF", "silver": "#C0C0C0", "gold": "#FFD700",
+            "violet": "#EE82EE", "tan": "#D2B48C", "beige": "#F5F5DC",
+            "ivory": "#FFFFF0", "coral": "#FF7F50", "salmon": "#FA8072",
+            "crimson": "#DC143C", "khaki": "#F0E68C", "lavender": "#E6E6FA",
+            "turquoise": "#40E0D0", "plum": "#DDA0DD", "orchid": "#DA70D6",
+            "darkgray": "#404040", "darkgrey": "#404040", "lightgray": "#D3D3D3",
+            "lightgrey": "#D3D3D3", "midnightblue": "#191970", "darkblue": "#00008B",
+        ]
+        if let hex = namedHex[text], let rgb = Color.rgbComponents(fromHex: hex) {
+            self = Color(.sRGB, red: rgb.r, green: rgb.g, blue: rgb.b)
+            return
+        }
+        if text.hasPrefix("#"), let rgb = Color.rgbComponents(fromHex: text) {
+            self = Color(.sRGB, red: rgb.r, green: rgb.g, blue: rgb.b)
+            return
+        }
+        self = .black
+    }
+
+    /// This color as a #RRGGBB hex string, for storing what a ColorPicker
+    /// produced back into the stack's `paddingColor`.
+    var stackHexString: String {
+        #if canImport(UIKit)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        #elseif canImport(AppKit)
+        let resolved = NSColor(self).usingColorSpace(.sRGB) ?? .black
+        let r = resolved.redComponent, g = resolved.greenComponent, b = resolved.blueComponent
+        #endif
+        return String(format: "#%02X%02X%02X",
+                      Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
+    }
+
+    /// Red/green/blue in 0…1 from #RGB or #RRGGBB, nil if malformed.
+    private static func rgbComponents(fromHex hex: String) -> (r: Double, g: Double, b: Double)? {
+        var digits = hex
+        digits.removeFirst() // '#'
+        if digits.count == 3 {
+            // #RGB → #RRGGBB
+            digits = digits.map { "\($0)\($0)" }.joined()
+        }
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        return (
+            Double((value >> 16) & 0xFF) / 255,
+            Double((value >> 8) & 0xFF) / 255,
+            Double(value & 0xFF) / 255
+        )
     }
 }
 

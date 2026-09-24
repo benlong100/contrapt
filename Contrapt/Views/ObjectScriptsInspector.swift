@@ -68,6 +68,14 @@ struct ObjectScriptsInspector: View {
                 } footer: {
                     Text("Card size applies to every card in the stack. Parts keep their positions, so shrinking may move some off the card.")
                 }
+                Section {
+                    Toggle("Open Full Screen", isOn: $stack.isFullScreen)
+                    ColorPicker("Padding Color", selection: paddingColorBinding, supportsOpacity: false)
+                } header: {
+                    Text("Presentation")
+                } footer: {
+                    Text("Full screen fills the space around the card with the padding color and hides the app chrome. Press Escape to leave.")
+                }
             }
             ScriptFormSection(title: scriptTitle, script: scriptBinding, onExpand: { isEditorExpanded = true })
                 .id(scope)
@@ -75,6 +83,15 @@ struct ObjectScriptsInspector: View {
         .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: scriptTitle, script: scriptBinding)
         }
+    }
+
+    /// Bridges the stored padding-color string to a ColorPicker; edits are
+    /// written back as #RRGGBB hex.
+    private var paddingColorBinding: Binding<Color> {
+        Binding(
+            get: { Color(stackColor: stack.paddingColor) },
+            set: { stack.paddingColor = $0.stackHexString }
+        )
     }
 
     /// The current card's background index, if any.

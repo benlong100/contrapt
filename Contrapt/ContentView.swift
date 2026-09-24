@@ -91,7 +91,7 @@ struct ContentView: View {
         }
         .environment(\.stackAssets, document.assets)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.cardBackdrop)
+        .background(backdropColor)
         // In edit mode, the Delete key removes the selected part. A local
         // key monitor handles it (SwiftUI's onKeyPress never gets the key
         // while the card's part gestures own focus); it defers to any field
@@ -315,6 +315,55 @@ struct ContentView: View {
             }
         }
         .focusedValue(\.cardNavigation, cardNavigation)
+        .focusedSceneValue(\.stackFullScreen, fullScreenBinding)
+        // Full-screen (presentation) mode: hide the app chrome and let the
+        // padding color own the space around the card.
+        .toolbar(isPresentingFullScreen ? .hidden : .automatic)
+        #if os(macOS)
+        .background(
+            StackPresentation(
+                isPresenting: isPresentingFullScreen,
+                paddingColor: Color(stackColor: document.stack.paddingColor),
+                onExit: exitFullScreen
+            )
+        )
+        #else
+        .overlay(alignment: .topTrailing) {
+            if isPresentingFullScreen {
+                Button("Exit Full Screen", systemImage: "arrow.down.right.and.arrow.up.left") {
+                    exitFullScreen()
+                }
+                .labelStyle(.iconOnly)
+                .padding(12)
+                .background(.ultraThinMaterial, in: Circle())
+                .padding()
+            }
+        }
+        #endif
+    }
+
+    /// Presentation is on when the stack asks for it, we're browsing (edit
+    /// mode needs the chrome), and there's a card to show.
+    private var isPresentingFullScreen: Bool {
+        document.stack.isFullScreen && !isEditing && !document.stack.cards.isEmpty
+    }
+
+    private var backdropColor: Color {
+        isPresentingFullScreen ? Color(stackColor: document.stack.paddingColor) : Color.cardBackdrop
+    }
+
+    /// A binding to the stack's full-screen flag, published to the scene so
+    /// the View menu's toggle can drive it (via @FocusedBinding). Writes go
+    /// through the undo choke point, like every other edit.
+    private var fullScreenBinding: Binding<Bool> {
+        Binding(
+            get: { document.stack.isFullScreen },
+            set: { stack.wrappedValue.isFullScreen = $0 }
+        )
+    }
+
+    private func exitFullScreen() {
+        if document.stack.isFullScreen { stack.wrappedValue.isFullScreen = false }
     }
 
     // MARK: - Link To
@@ -872,10 +921,21 @@ struct CardNavigationKey: FocusedValueKey {
     typealias Value = CardNavigation
 }
 
+/// Carries a binding to the focused stack's full-screen flag, so the View
+/// menu's toggle can read and flip it through @FocusedBinding.
+struct StackFullScreenKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
 extension FocusedValues {
     var cardNavigation: CardNavigation? {
         get { self[CardNavigationKey.self] }
         set { self[CardNavigationKey.self] = newValue }
+    }
+
+    var stackFullScreen: Binding<Bool>? {
+        get { self[StackFullScreenKey.self] }
+        set { self[StackFullScreenKey.self] = newValue }
     }
 }
 
