@@ -497,6 +497,10 @@ final class Runtime {
                 Int(try Value.number(from: try evaluate(expression, line: line), line: line))
             }
 
+        case .chunkCount(let kind, let sourceExpression):
+            let source = try evaluate(sourceExpression, line: line)
+            return String(ChunkResolver.count(kind: kind, in: source))
+
         case .call(let name, let argumentExpressions):
             let arguments = try argumentExpressions.map { try evaluate($0, line: line) }
             if let builtin = try evaluateBuiltin(name, arguments, line: line) {
@@ -595,9 +599,56 @@ final class Runtime {
             }
             let n = Int(try Value.number(from: arguments[0], line: line))
             return n >= 1 ? String(Int.random(in: 1...n)) : "0"
+        case "round":
+            let x = try number(arguments, count: 1, line: line, name: "round")[0]
+            return Value.string(from: x.rounded(.toNearestOrAwayFromZero))
+        case "trunc":
+            let x = try number(arguments, count: 1, line: line, name: "trunc")[0]
+            return Value.string(from: x.rounded(.towardZero))
+        case "abs":
+            let x = try number(arguments, count: 1, line: line, name: "abs")[0]
+            return Value.string(from: Swift.abs(x))
+        case "min":
+            let xs = try numbers(arguments, line: line, name: "min")
+            return Value.string(from: xs.min() ?? 0)
+        case "max":
+            let xs = try numbers(arguments, line: line, name: "max")
+            return Value.string(from: xs.max() ?? 0)
+        case "offset":
+            guard arguments.count == 2 else {
+                throw ScriptError(line: line, message: "offset expects two values, like offset(\"lo\", \"hello\").")
+            }
+            // 1-based position of the first argument in the second, 0 if
+            // absent; case-insensitive, as in HyperCard.
+            if arguments[0].isEmpty { return "0" }
+            guard let range = arguments[1].range(of: arguments[0], options: .caseInsensitive) else {
+                return "0"
+            }
+            return String(arguments[1].distance(from: arguments[1].startIndex, to: range.lowerBound) + 1)
+        case "chartonum":
+            guard let scalar = arguments.first?.unicodeScalars.first else { return "0" }
+            return String(scalar.value)
+        case "numtochar":
+            let n = Int(try Value.number(from: arguments.first ?? "", line: line))
+            guard let scalar = Unicode.Scalar(UInt32(max(0, n))) else { return "" }
+            return String(Character(scalar))
         default:
             return nil
         }
+    }
+
+    private func numbers(_ arguments: [String], line: Int, name: String) throws -> [Double] {
+        guard !arguments.isEmpty else {
+            throw ScriptError(line: line, message: "\(name) expects at least one number.")
+        }
+        return try arguments.map { try Value.number(from: $0, line: line) }
+    }
+
+    private func number(_ arguments: [String], count: Int, line: Int, name: String) throws -> [Double] {
+        guard arguments.count == count else {
+            throw ScriptError(line: line, message: "\(name) expects \(count) number\(count == 1 ? "" : "s").")
+        }
+        return try arguments.map { try Value.number(from: $0, line: line) }
     }
 
     private func resolveObject(_ object: ObjectExpr, line: Int) throws -> HyperTalkObject {

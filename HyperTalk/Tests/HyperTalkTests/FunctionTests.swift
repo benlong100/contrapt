@@ -191,3 +191,85 @@ import Testing
         #expect((1...6).contains(value))
     }
 }
+
+// MARK: - Counts and more built-ins
+
+@Test func numberOfLinesOfAField() throws {
+    let host = MockHost(fields: ["out": "", "src": "one\ntwo\nthree"])
+    try run("""
+    on mouseUp
+      put the number of lines of field "src" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "3")
+}
+
+@Test func numberOfWordsAndItems() throws {
+    let host = MockHost(fields: ["a": "", "b": "", "c": ""])
+    try run("""
+    on mouseUp
+      put the number of words of "the quick brown fox" into field "a"
+      put the number of items of "a,b,c" into field "b"
+      put the number of chars of "hello" into field "c"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["a"] == "4")
+    #expect(host.fields["b"] == "3")
+    #expect(host.fields["c"] == "5")
+}
+
+@Test func theNumberOfThisCardStillWorks() throws {
+    // Ensure the count parse doesn't shadow the card `number` property.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["this card.number"] = "3"
+    try run("""
+    on mouseUp
+      put the number of this card into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "3")
+}
+
+@Test func theLengthOf() throws {
+    let host = MockHost(fields: ["out": ""])
+    try run("""
+    on mouseUp
+      put the length of "HyperTalk" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "9")
+}
+
+@Test func mathBuiltins() throws {
+    let host = MockHost(fields: ["a": "", "b": "", "c": "", "d": "", "e": ""])
+    try run("""
+    on mouseUp
+      put round(2.6) into field "a"
+      put trunc(2.9) into field "b"
+      put abs(0 - 5) into field "c"
+      put min(3, 1, 2) into field "d"
+      put max(3, 1, 2) into field "e"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["a"] == "3")
+    #expect(host.fields["b"] == "2")
+    #expect(host.fields["c"] == "5")
+    #expect(host.fields["d"] == "1")
+    #expect(host.fields["e"] == "3")
+}
+
+@Test func offsetAndCharConversions() throws {
+    let host = MockHost(fields: ["a": "", "b": "", "c": "", "d": ""])
+    try run("""
+    on mouseUp
+      put offset("brown", "the quick brown fox") into field "a"
+      put offset("zzz", "hello") into field "b"
+      put charToNum("A") into field "c"
+      put numToChar(66) into field "d"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["a"] == "11")
+    #expect(host.fields["b"] == "0")
+    #expect(host.fields["c"] == "65")
+    #expect(host.fields["d"] == "B")
+}

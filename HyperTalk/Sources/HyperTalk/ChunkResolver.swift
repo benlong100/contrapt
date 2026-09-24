@@ -37,6 +37,12 @@ enum ChunkResolver {
         return units[lo..<hi].joined(separator: delimiter(kind))
     }
 
+    /// How many units of `kind` are in `source` (empty text has none).
+    static func count(kind: ChunkKind, in source: String) -> Int {
+        guard !source.isEmpty else { return 0 }
+        return kind == .character ? source.count : split(source, kind: kind).count
+    }
+
     // MARK: - Splitting
 
     private static func split(_ source: String, kind: ChunkKind) -> [String] {

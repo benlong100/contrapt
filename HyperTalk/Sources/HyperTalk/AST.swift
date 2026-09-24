@@ -94,6 +94,8 @@ indirect enum Expr {
     case property(String, ObjectExpr)
     /// A chunk of text: `word 2 of X`, `char 1 to 5 of X`, `the last line of X`.
     case chunk(ChunkKind, ChunkSelector, Expr)
+    /// `the number of words of X` — how many chunks of a kind are in X.
+    case chunkCount(ChunkKind, Expr)
     /// A function call in an expression: `myFunc(a, b)`, `length(x)`.
     case call(String, [Expr])
     /// `the result` — the value returned by the last command/function.

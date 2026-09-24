@@ -675,6 +675,24 @@ struct Parser {
                 advance()
                 return .result
             }
+            // `the length of X` → character count.
+            if peekIdentifier() == "length", peekIdentifier(1) == "of" {
+                advance() // length
+                advance() // of
+                return .call("length", [try parsePrimary()])
+            }
+            // `the number of words of X` → chunk count (but not
+            // `the number of this card`, which is a card property).
+            if peekIdentifier() == "number", peekIdentifier(1) == "of",
+               let kindWord = peekIdentifier(2), let kind = Self.chunkKinds[kindWord] {
+                advance() // number
+                advance() // of
+                advance() // kind
+                guard consumeWord("of") else {
+                    throw ScriptError(line: line, message: "Expected 'of' after 'the number of \(kindWord)'.")
+                }
+                return .chunkCount(kind, try parsePrimary())
+            }
             // `the first word of X`, `the last line of X`, etc.
             if let ordinalWord = peekIdentifier(),
                let selector = Self.ordinalSelector(ordinalWord),

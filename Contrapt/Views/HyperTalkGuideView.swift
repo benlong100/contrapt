@@ -50,7 +50,7 @@ struct HyperTalkGuideView: View {
                     go to card "Home"
                     """)
 
-                    section("Functions and globals", body: "Define your own functions with `function … end`, call them with parentheses, and return a value. `the result` holds the last command's return. `global` shares a variable across handlers and across taps. Built-ins: length(x), random(n).", example: """
+                    section("Functions and globals", body: "Define your own functions with `function … end`, call them with parentheses, and return a value. `the result` holds the last command's return. `global` shares a variable across handlers and across taps. Built-ins: length(x), random(n), round/trunc/abs, min/max, offset(a,b), charToNum/numToChar, and the number of words/items/lines/chars of X.", example: """
                     on mouseUp
                       put greet("Ada") into field "out"
                     end mouseUp

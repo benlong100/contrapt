@@ -44,7 +44,7 @@ enum SyntaxScanner {
         "repeat", "forever", "while", "until", "with", "times", "down", "to", "for",
         "go", "put", "into", "after", "before", "beep", "get", "set", "this", "of",
         "and", "or", "not", "is", "contains", "div", "mod",
-        "the", "card", "field",
+        "the", "card", "field", "number", "length",
         "char", "character", "chars", "characters", "word", "words",
         "item", "items", "line", "lines",
         "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
