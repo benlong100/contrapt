@@ -25,7 +25,7 @@ struct PartInspector: View {
                 geometryRow("Width", value: $part.frame.width)
                 geometryRow("Height", value: $part.frame.height)
             }
-            ScriptFormSection(title: "Script", script: $part.script)
+            ScriptFormSection(title: "Script", editorTitle: "Script of \(part.name)", script: $part.script)
                 .id(part.id)
             Section {
                 Button("Delete Part", role: .destructive) {
