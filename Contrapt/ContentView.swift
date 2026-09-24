@@ -153,7 +153,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if isEditing {
-                    Menu("Add", systemImage: "plus") {
+                    Menu("Add Part", systemImage: "plus") {
                         Button("Button", systemImage: "hand.tap") {
                             addPart(.button(ButtonPart(title: "New Button")))
                         }
@@ -166,7 +166,8 @@ struct ContentView: View {
                         Button("Image…", systemImage: "photo") {
                             isPhotoPickerPresented = true
                         }
-                        Divider()
+                    }
+                    Menu("Cards", systemImage: "rectangle.stack") {
                         Button("New Card", systemImage: "rectangle.badge.plus") {
                             addCard()
                         }
