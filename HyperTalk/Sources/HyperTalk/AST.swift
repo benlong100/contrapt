@@ -44,6 +44,9 @@ indirect enum StmtKind {
     case set(property: String, object: ObjectExpr, value: Expr)
     /// `set the itemDelimiter to <value>` — a global (object-less) property.
     case setGlobalProperty(String, Expr)
+    /// `convert <target> [from <format>] to <format>` — reformats a date or
+    /// time. A container is rewritten in place; a bare value lands in `it`.
+    case convert(ConvertTarget, from: [ConvertFormat], to: [ConvertFormat])
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
@@ -68,6 +71,13 @@ indirect enum Container {
     case field(FieldRef)
     /// A chunk of another container: `word 2 of field "X"`.
     case chunk(ChunkKind, ChunkSelector, Container)
+}
+
+/// What `convert` operates on: a container (rewritten in place) or a bare
+/// source expression like `the date` (whose result lands in `it`).
+indirect enum ConvertTarget {
+    case container(Container)
+    case expression(Expr)
 }
 
 enum GoTarget {

@@ -115,6 +115,95 @@ final class MockHost: HyperTalkHost {
         case .ticks: "121181184000"
         }
     }
+
+    /// A deterministic `convert`: a UTC calendar and fixed patterns so tests
+    /// don't depend on the machine's locale or time zone.
+    private var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    func convert(_ value: String, from: [ConvertFormat], to: [ConvertFormat]) throws -> String {
+        let date = try convertParse(value, from: from)
+        return try convertFormat(date, to: to)
+    }
+
+    private func patterns(_ format: ConvertFormat) -> String? {
+        switch format {
+        case .shortDate: "M/d/yy"
+        case .longDate: "EEEE, MMMM d, yyyy"
+        case .abbreviatedDate: "MMM d, yyyy"
+        case .shortTime: "h:mm a"
+        case .longTime: "h:mm:ss a"
+        case .seconds, .dateItems: nil
+        }
+    }
+
+    private func formatter(_ pattern: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = utcCalendar
+        formatter.timeZone = utcCalendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = pattern
+        return formatter
+    }
+
+    private func convertParse(_ value: String, from: [ConvertFormat]) throws -> Date {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        let effective: [ConvertFormat]
+        if !from.isEmpty {
+            effective = from
+        } else if let seconds = Double(trimmed) {
+            return Date(timeIntervalSince1970: seconds)
+        } else if trimmed.contains(",") {
+            effective = [.dateItems]
+        } else {
+            // Try the pattern combinations until one reads the value.
+            let candidates: [[ConvertFormat]] = [
+                [.shortDate, .shortTime], [.longDate, .longTime],
+                [.longDate], [.abbreviatedDate], [.shortDate],
+                [.longTime], [.shortTime],
+            ]
+            for candidate in candidates {
+                let pattern = candidate.compactMap(patterns).joined(separator: " ")
+                if let date = formatter(pattern).date(from: trimmed) { return date }
+            }
+            throw HostError("Can't read \"\(value)\" as a date or time.")
+        }
+
+        if effective == [.seconds] {
+            guard let seconds = Double(trimmed) else { throw HostError("Can't read \"\(value)\" as seconds.") }
+            return Date(timeIntervalSince1970: seconds)
+        }
+        if effective == [.dateItems] {
+            let parts = trimmed.split(separator: ",").map { Int($0.trimmingCharacters(in: .whitespaces)) ?? 0 }
+            guard parts.count >= 3 else { throw HostError("Expected at least year, month, day in dateItems.") }
+            var components = DateComponents()
+            components.year = parts[0]; components.month = parts[1]; components.day = parts[2]
+            if parts.count > 3 { components.hour = parts[3] }
+            if parts.count > 4 { components.minute = parts[4] }
+            if parts.count > 5 { components.second = parts[5] }
+            guard let date = utcCalendar.date(from: components) else { throw HostError("Bad dateItems.") }
+            return date
+        }
+        let pattern = effective.compactMap(patterns).joined(separator: " ")
+        guard let date = formatter(pattern).date(from: trimmed) else {
+            throw HostError("Can't read \"\(value)\" as a date or time.")
+        }
+        return date
+    }
+
+    private func convertFormat(_ date: Date, to: [ConvertFormat]) throws -> String {
+        if to == [.seconds] { return String(Int(date.timeIntervalSince1970)) }
+        if to == [.dateItems] {
+            let c = utcCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: date)
+            return [c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!, c.weekday!].map(String.init).joined(separator: ",")
+        }
+        let pattern = to.compactMap(patterns).joined(separator: " ")
+        guard !pattern.isEmpty else { throw HostError("Can't convert to that format.") }
+        return formatter(pattern).string(from: date)
+    }
 }
 
 @discardableResult

@@ -14,6 +14,18 @@ public enum ClockField: Sendable, Equatable {
     case seconds, ticks
 }
 
+/// A date/time format for the `convert` command. `convert` reads a value
+/// (in the `from` format, or auto-detected) and rewrites it in the `to`
+/// format. `dateItems` is the seven comma-separated numbers year, month,
+/// day, hour, minute, second, and day-of-week; `seconds` is a count from a
+/// fixed epoch. Date and time components combine with `and`.
+public enum ConvertFormat: Sendable, Equatable {
+    case seconds
+    case dateItems
+    case shortDate, longDate, abbreviatedDate
+    case shortTime, longTime
+}
+
 /// Where a `go` command should land.
 public enum GoDestination: Equatable, Sendable {
     case next
@@ -80,6 +92,10 @@ public protocol HyperTalkHost: AnyObject {
     /// `the date` / `the time` / `the seconds` / `the ticks` — the host
     /// reads the clock and formats for the current locale.
     func clock(_ field: ClockField) -> String
+    /// `convert` — reinterpret `value` (parsed as `from`, or auto-detected
+    /// when `from` is empty) and re-render it in the `to` format. The host
+    /// owns the calendar and locale; it throws if the value can't be read.
+    func convert(_ value: String, from: [ConvertFormat], to: [ConvertFormat]) throws -> String
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

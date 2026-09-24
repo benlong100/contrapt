@@ -47,6 +47,7 @@ enum SyntaxScanner {
         "and", "or", "not", "is", "contains", "div", "mod",
         "the", "card", "field", "number", "length",
         "date", "time", "seconds", "secs", "ticks", "long", "short", "abbreviated",
+        "convert", "dateitems", "from",
         "char", "character", "chars", "characters", "word", "words",
         "item", "items", "line", "lines", "itemdelimiter",
         "first", "second", "third", "fourth", "fifth", "sixth", "seventh",

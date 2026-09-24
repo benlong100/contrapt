@@ -365,6 +365,23 @@ final class Runtime {
             try hostCall(line: statement.line) { try host.setProperty(property, of: object, to: value) }
             return .normal
 
+        case .convert(let target, let from, let to):
+            let source: String
+            switch target {
+            case .container(let container):
+                source = try containerValue(container, line: statement.line)
+            case .expression(let expression):
+                source = try evaluate(expression, line: statement.line)
+            }
+            let converted = try hostCall(line: statement.line) { try host.convert(source, from: from, to: to) }
+            switch target {
+            case .container(let container):
+                try setContainer(container, to: converted, line: statement.line)
+            case .expression:
+                setVariable("it", to: converted)
+            }
+            return .normal
+
         case .setGlobalProperty(let property, let valueExpression):
             let value = try evaluate(valueExpression, line: statement.line)
             switch property {

@@ -67,6 +67,14 @@ struct HyperTalkGuideView: View {
                     end tally
                     """)
 
+                    section("Dates and times", body: "`the date`, `the long date`, `the abbreviated date`, `the time`, `the long time`, `the seconds` (since 1970), and `the ticks` read the clock. `convert` reformats between them: give a container to rewrite it in place, or a bare value to land the result in `it`. Formats are seconds, dateItems (year,month,day,hour,minute,second,weekday), short/long/abbreviated date, and short/long time — combine date and time with `and`. Add `from <format>` when the input's format is ambiguous.", example: """
+                    put the long date          -- Sunday, January 1, 2034
+                    convert the date to seconds
+                    convert field "when" to short date and short time
+                    put "2034,1,1,0,0,0" into t
+                    convert t from dateItems to long date
+                    """)
+
                     section("Chunks", body: "Reach into text by character, word, item (comma-separated), or line — by number, by ordinal (first…tenth, last, middle), or by range. Chunks nest and work on any text, including fields. `set the itemDelimiter` changes what `item` splits on, so you can parse any delimited text.", example: """
                     put word 3 of "the quick brown fox"   -- brown
                     put the last word of field "Name"

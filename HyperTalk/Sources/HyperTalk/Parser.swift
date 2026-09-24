@@ -258,6 +258,17 @@ struct Parser {
             let expression = try parseExpression()
             try expectNewline()
             return Stmt(kind: .get(expression), line: line)
+        case "convert":
+            advance()
+            let target = try parseConvertTarget(line: line)
+            var from: [ConvertFormat] = []
+            if consumeWord("from") { from = try parseConvertFormat(line: line) }
+            guard consumeWord("to") else {
+                throw ScriptError(line: line, message: "Expected 'to <format>' in 'convert', like: convert the date to seconds.")
+            }
+            let to = try parseConvertFormat(line: line)
+            try expectNewline()
+            return Stmt(kind: .convert(target, from: from, to: to), line: line)
         case "set":
             advance()
             _ = consumeWord("the")
@@ -351,6 +362,73 @@ struct Parser {
             return .variable(name)
         }
         throw ScriptError(line: line, message: "Expected a variable, field, or chunk here.")
+    }
+
+    /// The thing `convert` acts on. Clear container forms (a field, a chunk,
+    /// or a lone variable followed by `from`/`to`) are rewritten in place;
+    /// anything else (`the date`, a function, a literal) is a source
+    /// expression whose result lands in `it`.
+    private mutating func parseConvertTarget(line: Int) throws -> ConvertTarget {
+        if startsConvertContainer() {
+            return .container(try parseContainer(line: line))
+        }
+        return .expression(try parseExpression())
+    }
+
+    /// True when the tokens here begin a container `convert` can rewrite.
+    private func startsConvertContainer() -> Bool {
+        // A chunk expression: `word 2 of …`.
+        if let word = peekIdentifier(), Self.chunkKinds[word] != nil { return true }
+        // An ordinal chunk, optionally led by `the`: `the last word of …`.
+        let ordinalOffset = peekIdentifier() == "the" ? 1 : 0
+        if let ordinalWord = peekIdentifier(ordinalOffset), Self.ordinalSelector(ordinalWord) != nil,
+           let kindWord = peekIdentifier(ordinalOffset + 1), Self.chunkKinds[kindWord] != nil {
+            return true
+        }
+        // A field reference: `field …`, `card field …`, `background field …`.
+        if peekIdentifier() == "field" { return true }
+        if (peekIdentifier() == "card" || peekIdentifier() == "background" || peekIdentifier() == "bg"),
+           peekIdentifier(1) == "field" {
+            return true
+        }
+        // A lone variable, e.g. `convert myDate to seconds` — the whole
+        // target is one identifier followed immediately by `from`/`to`.
+        if let name = peekIdentifier(), name != "the",
+           peekIdentifier(1) == "from" || peekIdentifier(1) == "to" {
+            return true
+        }
+        return false
+    }
+
+    /// A `convert` format phrase: one or more units joined by `and`, e.g.
+    /// `seconds`, `dateItems`, `short date`, `long date and long time`.
+    private mutating func parseConvertFormat(line: Int) throws -> [ConvertFormat] {
+        var formats: [ConvertFormat] = []
+        repeat {
+            formats.append(try parseConvertFormatUnit(line: line))
+        } while consumeWord("and")
+        return formats
+    }
+
+    private mutating func parseConvertFormatUnit(line: Int) throws -> ConvertFormat {
+        if consumeWord("seconds") || consumeWord("secs") { return .seconds }
+        if consumeWord("dateitems") { return .dateItems }
+
+        let adjectives: Set<String> = ["long", "short", "abbreviated", "abbrev", "abbr"]
+        let adjective = adjectives.contains(peekIdentifier() ?? "") ? peekIdentifier() : nil
+        if adjective != nil { advance() }
+
+        if consumeWord("date") {
+            switch adjective {
+            case "long": return .longDate
+            case "abbreviated", "abbrev", "abbr": return .abbreviatedDate
+            default: return .shortDate
+            }
+        }
+        if consumeWord("time") {
+            return adjective == "long" ? .longTime : .shortTime
+        }
+        throw ScriptError(line: line, message: "Expected a date/time format here, like seconds, dateItems, short date, or long time.")
     }
 
     private mutating func parseGo(line: Int) throws -> Stmt {

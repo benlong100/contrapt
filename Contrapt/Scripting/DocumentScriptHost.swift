@@ -130,6 +130,85 @@ final class DocumentScriptHost: HyperTalkHost {
         }
     }
 
+    // MARK: - Convert
+
+    /// Reformats a date/time, matching the styles `the date` / `the time`
+    /// produce so values round-trip. Uses the user's calendar and locale;
+    /// `seconds` counts from the Unix epoch, as `the seconds` does.
+    func convert(_ value: String, from: [ConvertFormat], to: [ConvertFormat]) throws -> String {
+        let date = try convertParse(value, from: from)
+        return try convertRender(date, to: to)
+    }
+
+    private func convertFormatter(_ formats: [ConvertFormat]) -> DateFormatter? {
+        let formatter = DateFormatter()
+        for format in formats {
+            switch format {
+            case .shortDate: formatter.dateStyle = .short
+            case .longDate: formatter.dateStyle = .full
+            case .abbreviatedDate: formatter.dateStyle = .medium
+            case .shortTime: formatter.timeStyle = .short
+            case .longTime: formatter.timeStyle = .medium
+            case .seconds, .dateItems: return nil
+            }
+        }
+        return formatter
+    }
+
+    private func convertParse(_ value: String, from: [ConvertFormat]) throws -> Date {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        if from == [.seconds] || (from.isEmpty && Double(trimmed) != nil) {
+            guard let seconds = Double(trimmed) else {
+                throw HostError("Can't read \"\(value)\" as seconds.")
+            }
+            return Date(timeIntervalSince1970: seconds)
+        }
+        if from == [.dateItems] || (from.isEmpty && trimmed.contains(",")) {
+            let parts = trimmed.split(separator: ",").map { Int($0.trimmingCharacters(in: .whitespaces)) ?? 0 }
+            guard parts.count >= 3 else {
+                throw HostError("Expected at least year, month, and day in dateItems.")
+            }
+            var components = DateComponents()
+            components.year = parts[0]; components.month = parts[1]; components.day = parts[2]
+            if parts.count > 3 { components.hour = parts[3] }
+            if parts.count > 4 { components.minute = parts[4] }
+            if parts.count > 5 { components.second = parts[5] }
+            guard let date = Calendar.current.date(from: components) else {
+                throw HostError("Can't read \"\(value)\" as dateItems.")
+            }
+            return date
+        }
+        if !from.isEmpty {
+            guard let date = convertFormatter(from)?.date(from: trimmed) else {
+                throw HostError("Can't read \"\(value)\" in that format.")
+            }
+            return date
+        }
+        // Auto-detect: try the style combinations until one reads it.
+        let candidates: [[ConvertFormat]] = [
+            [.shortDate, .shortTime], [.longDate, .longTime],
+            [.longDate], [.abbreviatedDate], [.shortDate],
+            [.longTime], [.shortTime],
+        ]
+        for candidate in candidates {
+            if let date = convertFormatter(candidate)?.date(from: trimmed) { return date }
+        }
+        throw HostError("Can't read \"\(value)\" as a date or time.")
+    }
+
+    private func convertRender(_ date: Date, to: [ConvertFormat]) throws -> String {
+        if to == [.seconds] { return String(Int(date.timeIntervalSince1970)) }
+        if to == [.dateItems] {
+            let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: date)
+            return [c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!, c.weekday!]
+                .map(String.init).joined(separator: ",")
+        }
+        guard let formatter = convertFormatter(to) else {
+            throw HostError("Can't convert to that combination of formats.")
+        }
+        return formatter.string(from: date)
+    }
+
     // MARK: - Properties
 
     func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String {
