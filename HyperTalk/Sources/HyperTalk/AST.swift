@@ -47,6 +47,9 @@ indirect enum StmtKind {
     /// `convert <target> [from <format>] to <format>` — reformats a date or
     /// time. A container is rewritten in place; a bare value lands in `it`.
     case convert(ConvertTarget, from: [ConvertFormat], to: [ConvertFormat])
+    /// `do <expr>` — evaluate a string and run it as HyperTalk statements in
+    /// the current handler's context.
+    case doCommand(Expr)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])

@@ -258,6 +258,11 @@ struct Parser {
             let expression = try parseExpression()
             try expectNewline()
             return Stmt(kind: .get(expression), line: line)
+        case "do":
+            advance()
+            let expression = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .doCommand(expression), line: line)
         case "convert":
             advance()
             let target = try parseConvertTarget(line: line)
@@ -839,6 +844,12 @@ struct Parser {
             if peekIdentifier() == "target", peekIdentifier(1) != "of" {
                 advance()
                 return .property("name", .target)
+            }
+            // `the value of X` → evaluate X (a string) as an expression.
+            if peekIdentifier() == "value", peekIdentifier(1) == "of" {
+                advance() // value
+                advance() // of
+                return .call("value", [try parsePrimary()])
             }
             // `the length of X` → character count.
             if peekIdentifier() == "length", peekIdentifier(1) == "of" {

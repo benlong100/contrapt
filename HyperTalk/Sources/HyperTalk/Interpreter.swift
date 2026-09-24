@@ -382,6 +382,17 @@ final class Runtime {
             }
             return .normal
 
+        case .doCommand(let expression):
+            let source = try evaluate(expression, line: statement.line)
+            let statements: [Stmt]
+            do {
+                statements = try Parser.parseLooseStatements(source)
+            } catch let error as ScriptError {
+                throw ScriptError(line: statement.line, message: "Can't do \"\(source)\": \(error.message)")
+            }
+            // Runs in the current frame, so `do` sees and sets local variables.
+            return try execute(statements)
+
         case .setGlobalProperty(let property, let valueExpression):
             let value = try evaluate(valueExpression, line: statement.line)
             switch property {
@@ -701,6 +712,18 @@ final class Runtime {
             let n = Int(try Value.number(from: arguments.first ?? "", line: line))
             guard let scalar = Unicode.Scalar(UInt32(max(0, n))) else { return "" }
             return String(Character(scalar))
+        case "value":
+            guard arguments.count == 1 else {
+                throw ScriptError(line: line, message: "value expects one string, like value(\"2 + 3\").")
+            }
+            let expression: Expr
+            do {
+                expression = try Parser.parseSoleExpression(arguments[0])
+            } catch {
+                // A string that isn't an expression evaluates to itself.
+                return arguments[0]
+            }
+            return try evaluate(expression, line: line)
         default:
             return nil
         }

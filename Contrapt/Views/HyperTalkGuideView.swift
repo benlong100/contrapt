@@ -128,6 +128,13 @@ struct HyperTalkGuideView: View {
                     if name contains "an" then beep
                     """)
 
+                    section("do and value", body: "`do` runs a string as commands, and `the value of` (or value(…)) evaluates a string as an expression — both in the current handler's context, so they see your variables. Handy for building HyperTalk on the fly.", example: """
+                    put 10 into n
+                    do "put n + 5 into n"           -- n is now 15
+                    put the value of "2 + 3 * 4"    -- 14
+                    put value("n * 2")              -- 30
+                    """)
+
                     section("Constants and more", body: "empty, space, comma, quote, return, tab, true, false. `beep` beeps (or `beep 3`). `exit mouseUp` ends a handler early. Comments start with two dashes.", example: """
                     put empty into field "Log"
                     put "a" & comma & space & "b"  -- a, b
