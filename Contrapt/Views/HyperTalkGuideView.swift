@@ -50,6 +50,15 @@ struct HyperTalkGuideView: View {
                     go to card "Home"
                     """)
 
+                    section("Chunks", body: "Reach into text by character, word, item (comma-separated), or line — by number, by ordinal (first…tenth, last, middle), or by range. Chunks nest and work on any text, including fields.", example: """
+                    put word 3 of "the quick brown fox"   -- brown
+                    put the last word of field "Name"
+                    put char 1 to 5 of field "Title"
+                    put item 2 of "red,green,blue"        -- green
+                    put line 3 of field "Log"
+                    put the first char of the last word of s
+                    """)
+
                     section("get and set", body: "Every object has properties. `set` changes them; `the … of …` reads them anywhere an expression fits; `get` reads one into the special variable `it`. Parts have name, visible, title or text, and geometry (left, top, right, bottom, width, height). Buttons also have style (roundRect, rectangle, shadow, opaque, transparent, checkbox, radio), showName, autoHilite, and hilite (the check-box/radio on-state). Fields have textFont (system, serif, monospaced, rounded), textSize, textStyle (bold, italic, underline, or plain), and textAlign (left, center, right). Cards have name, number, marked, cantDelete, and dontSearch; the stack has name, cards, width, and height. Refer to parts three ways: by name (button \"OK\"), by ordinal (field 1 — position among that kind, and `the number of` reads it back), or by permanent id (button id 6 — shown in the Inspector, and it survives renames). Add `card` or `background` before the kind to pick the layer: card field 1, background button \"Next\".", example: """
                     set the name of card field 1 to "blah"
                     set the visible of button "Secret" to false

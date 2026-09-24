@@ -594,6 +594,26 @@ struct Parser {
         throw ScriptError(line: line, message: "Expected an object here, like button \"OK\", field \"Name\", card 2, or this card.")
     }
 
+    static let chunkKinds: [String: ChunkKind] = [
+        "char": .character, "character": .character, "chars": .character, "characters": .character,
+        "word": .word, "words": .word,
+        "item": .item, "items": .item,
+        "line": .line, "lines": .line,
+    ]
+
+    private static let ordinals: [String: Int] = [
+        "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+        "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+    ]
+
+    /// Maps an ordinal word (or last/middle) to a chunk selector.
+    static func ordinalSelector(_ word: String) -> ChunkSelector? {
+        if let n = ordinals[word] { return .index(.numberLiteral(Double(n))) }
+        if word == "last" { return .last }
+        if word == "middle" { return .middle }
+        return nil
+    }
+
     private mutating func parsePrimary() throws -> Expr {
         let line = current.line
         switch current.kind {
@@ -623,6 +643,17 @@ struct Parser {
             throw ScriptError(line: current.line, message: "Expected a value here.")
         case .identifier("the"):
             advance()
+            // `the first word of X`, `the last line of X`, etc.
+            if let ordinalWord = peekIdentifier(),
+               let selector = Self.ordinalSelector(ordinalWord),
+               let kindWord = peekIdentifier(1), let kind = Self.chunkKinds[kindWord] {
+                advance() // ordinal
+                advance() // kind
+                guard consumeWord("of") else {
+                    throw ScriptError(line: line, message: "Expected 'of' after '\(ordinalWord) \(kindWord)'.")
+                }
+                return .chunk(kind, selector, try parsePrimary())
+            }
             // `the <property> of <object>`; otherwise "the" is a noise
             // word before a value ("the date" → the unquoted literal).
             if peekIdentifier() != nil, peekIdentifier(1) == "of" {
@@ -632,6 +663,18 @@ struct Parser {
                 return .property(property.lowercased(), try parseObjectExpr())
             }
             return try parsePrimary()
+        case .identifier(let word) where Self.chunkKinds[word] != nil:
+            // `word 2 of X`, `char 1 to 5 of X`.
+            let kind = Self.chunkKinds[word]!
+            advance()
+            let start = try parsePrimary()
+            let selector: ChunkSelector = consumeWord("to")
+                ? .range(start, try parsePrimary())
+                : .index(start)
+            guard consumeWord("of") else {
+                throw ScriptError(line: line, message: "Expected 'of' after '\(word)', like: \(word) 2 of field \"Notes\".")
+            }
+            return .chunk(kind, selector, try parsePrimary())
         case .identifier(let word):
             advance()
             return .variable(word)

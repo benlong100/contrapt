@@ -86,8 +86,23 @@ indirect enum Expr {
     case field(FieldRef)
     /// `the <property> of <object>`.
     case property(String, ObjectExpr)
+    /// A chunk of text: `word 2 of X`, `char 1 to 5 of X`, `the last line of X`.
+    case chunk(ChunkKind, ChunkSelector, Expr)
     case binary(BinaryOp, Expr, Expr)
     case unary(UnaryOp, Expr)
+}
+
+/// The units a chunk expression addresses.
+enum ChunkKind {
+    case character, word, item, line
+}
+
+/// Which unit(s) a chunk selects.
+indirect enum ChunkSelector {
+    case index(Expr)            // word 2  (ordinals first…tenth become a literal)
+    case range(Expr, Expr)      // word 2 to 4
+    case last
+    case middle
 }
 
 /// An object reference in source: `button "OK"`, `card field 1`,

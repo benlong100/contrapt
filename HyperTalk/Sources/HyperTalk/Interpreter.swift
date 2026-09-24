@@ -426,6 +426,12 @@ final class Runtime {
             let object = try resolveObject(objectExpression, line: line)
             return try hostCall(line: line) { try host.propertyValue(property, of: object) }
 
+        case .chunk(let kind, let selector, let sourceExpression):
+            let source = try evaluate(sourceExpression, line: line)
+            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source) { expression in
+                Int(try Value.number(from: try evaluate(expression, line: line), line: line))
+            }
+
         case .unary(let op, let operand):
             let value = try evaluate(operand, line: line)
             switch op {
