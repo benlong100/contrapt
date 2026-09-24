@@ -282,6 +282,12 @@ struct Parser {
             if consumeWord("with") { initialAnswer = try parseExpression() }
             try expectNewline()
             return Stmt(kind: .ask(prompt, initialAnswer: initialAnswer), line: line)
+        case "visual":
+            advance()
+            _ = consumeWord("effect")
+            let effect = try parseVisualEffect(line: line)
+            try expectNewline()
+            return Stmt(kind: .visualEffect(effect), line: line)
         case "convert":
             advance()
             let target = try parseConvertTarget(line: line)
@@ -453,6 +459,59 @@ struct Parser {
             return adjective == "long" ? .longTime : .shortTime
         }
         throw ScriptError(line: line, message: "Expected a date/time format here, like seconds, dateItems, short date, or long time.")
+    }
+
+    /// Parses `<kind> [<direction>] [[very] <speed>]` after `visual effect`,
+    /// e.g. `dissolve`, `wipe left`, `iris open slowly`, `zoom out very fast`.
+    /// An optional `to <image>` clause is tolerated but ignored for now.
+    private mutating func parseVisualEffect(line: Int) throws -> ScreenEffect {
+        guard let first = peekIdentifier() else {
+            throw ScriptError(line: line, message: "Expected an effect after 'visual effect', like dissolve or wipe left.")
+        }
+        advance()
+        let kind: ScreenEffect.Kind
+        switch first {
+        case "dissolve": kind = .dissolve
+        case "wipe": kind = .wipe
+        case "scroll": kind = .scroll
+        case "zoom": kind = .zoom
+        case "iris": kind = .iris
+        case "checkerboard": kind = .checkerboard
+        case "plain": kind = .plain
+        case "barn":
+            guard consumeWord("door") else {
+                throw ScriptError(line: line, message: "Expected 'door' after 'barn'.")
+            }
+            kind = .barnDoor
+        case "venetian":
+            guard consumeWord("blinds") else {
+                throw ScriptError(line: line, message: "Expected 'blinds' after 'venetian'.")
+            }
+            kind = .venetianBlinds
+        default:
+            throw ScriptError(line: line, message: "Unknown visual effect '\(first)'.")
+        }
+
+        var direction: ScreenEffect.Direction?
+        if let word = peekIdentifier(), let parsed = ScreenEffect.Direction(rawValue: word) {
+            advance()
+            direction = parsed
+        }
+
+        var speed: ScreenEffect.Speed = .normal
+        if consumeWord("very") {
+            if consumeWord("fast") { speed = .veryFast }
+            else if consumeWord("slow") || consumeWord("slowly") { speed = .verySlow }
+        } else if consumeWord("fast") {
+            speed = .fast
+        } else if consumeWord("slow") || consumeWord("slowly") {
+            speed = .slow
+        }
+
+        // `visual effect dissolve to white` — accept and ignore the target.
+        if consumeWord("to") { _ = peekIdentifier().map { _ in advance() } }
+
+        return ScreenEffect(kind: kind, direction: direction, speed: speed)
     }
 
     private mutating func parseGo(line: Int) throws -> Stmt {

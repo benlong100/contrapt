@@ -26,6 +26,32 @@ public enum ConvertFormat: Sendable, Equatable {
     case shortTime, longTime
 }
 
+/// A screen transition queued by `visual effect`, played by the next `go`.
+/// The interpreter parses it; the host (the UI) renders it.
+public struct ScreenEffect: Sendable, Equatable {
+    public enum Kind: String, Sendable {
+        case dissolve, wipe, scroll, zoom, iris
+        case barnDoor, checkerboard, venetianBlinds, plain
+    }
+    /// Where the effect moves or how it opens: `wipe left`, `iris open`, etc.
+    public enum Direction: String, Sendable {
+        case left, right, up, down, open, close, `in`, out
+    }
+    public enum Speed: String, Sendable {
+        case verySlow, slow, normal, fast, veryFast
+    }
+
+    public let kind: Kind
+    public let direction: Direction?
+    public let speed: Speed
+
+    public init(kind: Kind, direction: Direction? = nil, speed: Speed = .normal) {
+        self.kind = kind
+        self.direction = direction
+        self.speed = speed
+    }
+}
+
 /// Where a `go` command should land.
 public enum GoDestination: Equatable, Sendable {
     case next
@@ -71,7 +97,9 @@ public enum HyperTalkObject: Sendable, Equatable {
 /// scripts can do nothing the host doesn't offer (D7: the interpreter is
 /// the sandbox).
 public protocol HyperTalkHost: AnyObject {
-    func goToCard(_ destination: GoDestination) throws
+    /// `go` to another card, optionally playing the effects queued by
+    /// `visual effect` since the last `go` (empty for a plain cut).
+    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
     /// optionally restricted to the card or background layer.
     func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String

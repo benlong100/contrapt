@@ -17,8 +17,12 @@ final class MockHost: HyperTalkHost {
         self.fields = Dictionary(uniqueKeysWithValues: fields.map { ($0.key.lowercased(), $0.value) })
     }
 
-    func goToCard(_ destination: GoDestination) throws {
+    /// The effects passed with each `go`, in order.
+    var goEffects: [[ScreenEffect]] = []
+
+    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws {
         destinations.append(destination)
+        goEffects.append(effects)
     }
 
     /// Content lookups key the dictionary by the reference text, prefixed

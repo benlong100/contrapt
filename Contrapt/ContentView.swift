@@ -52,6 +52,8 @@ struct ContentView: View {
     /// A pending `answer` / `ask` dialog and its text field's contents.
     @State private var scriptDialog: ScriptDialog?
     @State private var askFieldText = ""
+    /// The visual effect for the current scripted card transition, if any.
+    @State private var cardTransition: ScreenEffect?
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
 
@@ -89,6 +91,10 @@ struct ContentView: View {
                     onMouseMessage: sendMouseMessage,
                     onOpenInspector: { isInspectorPresented = true }
                 )
+                // A scripted `go` with a visual effect animates this swap;
+                // plain navigation changes the id without an animation.
+                .id(cardIndex)
+                .transition(cardTransition?.transition ?? .identity)
                 .padding()
             }
         }
@@ -486,6 +492,17 @@ struct ContentView: View {
                     scriptDialog = ScriptDialog(prompt: prompt, kind: .ask) { result in
                         continuation.resume(returning: result)
                     }
+                }
+            },
+            // A scripted `go`: play the first queued effect as an animated
+            // card swap, or cut instantly when there's none.
+            onNavigate: { index, effects in
+                if let effect = effects.first {
+                    cardTransition = effect
+                    withAnimation(effect.animation) { currentCardIndex = index }
+                } else {
+                    cardTransition = nil
+                    currentCardIndex = index
                 }
             }
         )

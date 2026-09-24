@@ -148,6 +148,10 @@ final class Runtime {
     /// property — a comma by default, changeable at run time.
     private var itemDelimiter = ","
 
+    /// Effects queued by `visual effect`, played (and cleared) by the next
+    /// `go`, as in HyperCard.
+    private var pendingVisualEffects: [ScreenEffect] = []
+
     private static let maxMessageDepth = 64
     private static let constants: [String: String] = [
         "empty": "",
@@ -393,6 +397,10 @@ final class Runtime {
             }
             return .normal
 
+        case .visualEffect(let effect):
+            pendingVisualEffects.append(effect)
+            return .normal
+
         case .doCommand(let expression):
             let source = try await evaluate(expression, line: statement.line)
             let statements: [Stmt]
@@ -526,7 +534,10 @@ final class Runtime {
         case .idExpression(let expression):
             destination = .id(try await evaluate(expression, line: line))
         }
-        try hostCall(line: line) { try host.goToCard(destination) }
+        // The go consumes any queued visual effects, whether or not it succeeds.
+        let effects = pendingVisualEffects
+        pendingVisualEffects = []
+        try hostCall(line: line) { try host.goToCard(destination, effects: effects) }
     }
 
     private func executeRepeat(_ kind: RepeatKind, _ body: [Stmt], line: Int) async throws -> Flow {

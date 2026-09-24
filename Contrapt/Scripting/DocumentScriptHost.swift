@@ -24,19 +24,22 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onMessage: (String) -> Void
     private let onAnswer: (String, [String]) async -> String
     private let onAsk: (String, String) async -> String?
+    private let onNavigate: (Int, [ScreenEffect]) -> Void
 
     init(
         stack: Binding<Stack>,
         currentCardIndex: Binding<Int>,
         onMessage: @escaping (String) -> Void,
         onAnswer: @escaping (String, [String]) async -> String,
-        onAsk: @escaping (String, String) async -> String?
+        onAsk: @escaping (String, String) async -> String?,
+        onNavigate: @escaping (Int, [ScreenEffect]) -> Void
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
         self.onMessage = onMessage
         self.onAnswer = onAnswer
         self.onAsk = onAsk
+        self.onNavigate = onNavigate
     }
 
     private var stack: Stack { stackBinding.wrappedValue }
@@ -47,35 +50,38 @@ final class DocumentScriptHost: HyperTalkHost {
 
     // MARK: - HyperTalkHost
 
-    func goToCard(_ destination: GoDestination) throws {
+    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
+        let target: Int
         switch destination {
         case .next:
-            currentCardIndex.wrappedValue = (cardIndex + 1) % count
+            target = (cardIndex + 1) % count
         case .previous:
-            currentCardIndex.wrappedValue = (cardIndex + count - 1) % count
+            target = (cardIndex + count - 1) % count
         case .first:
-            currentCardIndex.wrappedValue = 0
+            target = 0
         case .last:
-            currentCardIndex.wrappedValue = count - 1
+            target = count - 1
         case .number(let number):
             guard (1...count).contains(number) else {
                 throw HostError("There is no card \(number) — this stack has \(count) card\(count == 1 ? "" : "s").")
             }
-            currentCardIndex.wrappedValue = number - 1
+            target = number - 1
         case .named(let name):
             guard let index = stack.cards.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
                 throw HostError("There is no card named \"\(name)\".")
             }
-            currentCardIndex.wrappedValue = index
+            target = index
         case .id(let id):
             let wanted = id.trimmingCharacters(in: .whitespaces)
             guard let index = stack.cards.firstIndex(where: { String($0.scriptID) == wanted }) else {
                 throw HostError("There is no card with id \(id).")
             }
-            currentCardIndex.wrappedValue = index
+            target = index
         }
+        // The view owns the animated transition (see ContentView.navigate).
+        onNavigate(target, effects)
     }
 
     func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String {

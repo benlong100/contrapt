@@ -56,6 +56,9 @@ indirect enum StmtKind {
     /// `ask <prompt> [with <default>]` — a modal text prompt; the entered
     /// text (empty if cancelled) lands in `it`.
     case ask(Expr, initialAnswer: Expr?)
+    /// `visual [effect] <effect> [<direction>] [<speed>]` — queues a screen
+    /// transition for the next `go`.
+    case visualEffect(ScreenEffect)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])

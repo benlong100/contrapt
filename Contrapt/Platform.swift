@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import HyperTalk
 
 #if canImport(UIKit)
 import UIKit
@@ -221,6 +222,49 @@ extension Image {
         #elseif canImport(AppKit)
         self.init(nsImage: image)
         #endif
+    }
+}
+
+// MARK: - Visual effects
+
+extension ScreenEffect {
+    /// The SwiftUI transition that renders this effect on a card swap.
+    /// Effects without a native SwiftUI analogue (barn door, checkerboard,
+    /// venetian blinds) fall back to a dissolve for now.
+    var transition: AnyTransition {
+        switch kind {
+        case .plain:
+            return .identity
+        case .dissolve, .barnDoor, .checkerboard, .venetianBlinds:
+            return .opacity
+        case .wipe:
+            switch direction {
+            case .right: return .push(from: .leading)
+            case .up: return .push(from: .bottom)
+            case .down: return .push(from: .top)
+            default: return .push(from: .trailing) // left, or unspecified
+            }
+        case .scroll:
+            switch direction {
+            case .right: return .move(edge: .leading)
+            case .up: return .move(edge: .bottom)
+            case .down: return .move(edge: .top)
+            default: return .move(edge: .trailing)
+            }
+        case .zoom, .iris:
+            return .scale.combined(with: .opacity)
+        }
+    }
+
+    /// The timing curve and duration for this effect's speed.
+    var animation: Animation {
+        switch speed {
+        case .verySlow: .easeInOut(duration: 1.3)
+        case .slow: .easeInOut(duration: 0.9)
+        case .normal: .easeInOut(duration: 0.5)
+        case .fast: .easeInOut(duration: 0.28)
+        case .veryFast: .easeInOut(duration: 0.12)
+        }
     }
 }
 

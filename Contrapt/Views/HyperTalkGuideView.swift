@@ -60,6 +60,17 @@ struct HyperTalkGuideView: View {
                     go to card "Home"
                     """)
 
+                    section("visual effect", body: "Queue a transition for the next `go`: dissolve, wipe or scroll (left/right/up/down), zoom or iris (open/close), plus barn door, checkerboard, and venetian blinds. Add a speed — slow, fast, very slow, very fast. Several queue up and play in order.", example: """
+                    visual effect dissolve
+                    go to next card
+
+                    visual effect wipe left fast
+                    go to card "Menu"
+
+                    visual iris open slowly
+                    go to first card
+                    """)
+
                     section("Functions and globals", body: "Define your own functions with `function … end`, call them with parentheses, and return a value. `the result` holds the last command's return. `global` shares a variable across handlers and across taps. Built-ins: length(x), random(n), round/trunc/abs, min/max, sum/average (of a list or arguments), offset(a,b), charToNum/numToChar, math functions sqrt, sin, cos, tan, atan, exp/exp1/exp2, ln/ln1, log2, annuity(rate,n), compound(rate,n) — each also readable as `the sqrt of x` — the number of words/items/lines/chars of X, and the date / the long date / the time / the seconds / the ticks.", example: """
                     on mouseUp
                       put greet("Ada") into field "out"
