@@ -90,18 +90,27 @@ style as a tribute option.
 
 ## Deferred (with decision gates)
 
-### N1. Real product name — gate: first external distribution
-"HyperPad" is a **working title only**. An existing app-creation product named
-hyperPad (hyperpad.com) occupies this exact category, so the working title
-must not be used publicly (public repo, TestFlight external, App Store,
-marketing). The real name, trademark search, bundle ID, UTType identifier,
-and file extension are all settled together at this gate — none of them lock
-in before first external distribution.
+### N1. Product name — RESOLVED 2026-09-23: **Contrapt**
+The app is **Contrapt** (from "contraption," clipped into a verb: what you
+do in it, and what you make with it — a coined/fanciful mark, the strongest
+trademark category). The original working title "HyperPad" was blocked by
+an existing product (hyperpad.com) in the same category.
 
-### N2. Identifier hygiene
-Bundle ID, iCloud container ID, UTType, and file extension all embed a name
-and become permanent at first release. Leave as-is during development; choose
-deliberately alongside N1.
+Clearance evidence at decision time:
+- App Store search for "Contrapt": no results (checked on-device)
+- USPTO trademark search: no results
+- Web search: no software product, company, GitHub project, or App Store
+  app; only an obscure 2015 experimental music album and a game-wiki
+  entity. Urban Dictionary documents "contrapt" as workshop slang for
+  building a gadget — the intended meaning
+- Nearest neighbor: "Contraptor" (small game / open hardware project) —
+  different mark, different product category, no registration found
+
+### N2. Identifier hygiene — RESOLVED with N1
+Locked in: bundle ID `com.trompingmarmots.contrapt`, UTType
+`com.trompingmarmots.contrapt.stack`, file extension `.contrapt`.
+These are now permanent once stacks circulate. The HyperTalk *package*
+keeps its name — it's the language (D9), as in the original.
 
 ### N3. Possible v2 ideas (explicitly out of scope for v1)
 - Adaptive/anchored card layout for varying screen sizes

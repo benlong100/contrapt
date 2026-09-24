@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  HyperPad
+//  Contrapt
 //
 
 import PencilKit

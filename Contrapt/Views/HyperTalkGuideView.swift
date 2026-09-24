@@ -1,6 +1,6 @@
 //
 //  HyperTalkGuideView.swift
-//  HyperPad
+//  Contrapt
 //
 
 import SwiftUI

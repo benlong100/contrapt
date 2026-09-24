@@ -1,6 +1,6 @@
 //
 //  PaintEditor.swift
-//  HyperPad
+//  Contrapt
 //
 
 import PencilKit

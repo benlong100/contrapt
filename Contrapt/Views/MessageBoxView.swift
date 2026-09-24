@@ -1,6 +1,6 @@
 //
 //  MessageBoxView.swift
-//  HyperPad
+//  Contrapt
 //
 
 import SwiftUI

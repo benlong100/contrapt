@@ -1,6 +1,6 @@
 //
 //  DocumentScriptHost.swift
-//  HyperPad
+//  Contrapt
 //
 
 import AudioToolbox

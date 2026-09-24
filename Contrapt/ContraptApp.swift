@@ -1,6 +1,6 @@
 //
-//  HyperPadApp.swift
-//  HyperPad
+//  ContraptApp.swift
+//  Contrapt
 //
 //  Created by Happy Wanderer on 9/23/26.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct HyperPadApp: App {
+struct ContraptApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: { StackDocument() }) { file in
             ContentView(document: file.document, fileURL: file.fileURL)

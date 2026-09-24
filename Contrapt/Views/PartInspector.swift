@@ -1,6 +1,6 @@
 //
 //  PartInspector.swift
-//  HyperPad
+//  Contrapt
 //
 
 import SwiftUI

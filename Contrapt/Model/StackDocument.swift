@@ -1,6 +1,6 @@
 //
 //  StackDocument.swift
-//  HyperPad
+//  Contrapt
 //
 
 import Combine // required for @Published / ReferenceFileDocument's ObservableObject
@@ -8,9 +8,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 nonisolated extension UTType {
-    /// Placeholder identifier and extension — finalized together with the
-    /// product name at first external distribution (DECISIONS.md N1/N2).
-    static let cardStack = UTType(exportedAs: "com.trompingmarmots.cardstack")
+    /// A Contrapt stack: the flat zip container (D4). Finalized with the
+    /// product name (DECISIONS.md N1) — this identifier and the .contrapt
+    /// extension are permanent once stacks circulate.
+    static let contraptStack = UTType(exportedAs: "com.trompingmarmots.contrapt.stack")
 }
 
 /// What gets written: the manifest plus the assets it references.
@@ -38,7 +39,7 @@ nonisolated final class StackDocument: ReferenceFileDocument {
     private var lastChangeAt: Date?
     private static let coalescingWindow: TimeInterval = 0.8
 
-    static var readableContentTypes: [UTType] { [.cardStack] }
+    static var readableContentTypes: [UTType] { [.contraptStack] }
 
     init(stack: Stack = .makeNew()) {
         self.stack = stack

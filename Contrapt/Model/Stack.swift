@@ -1,6 +1,6 @@
 //
 //  Stack.swift
-//  HyperPad
+//  Contrapt
 //
 
 import Foundation

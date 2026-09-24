@@ -1,6 +1,6 @@
 //
 //  ObjectScriptsInspector.swift
-//  HyperPad
+//  Contrapt
 //
 
 import SwiftUI

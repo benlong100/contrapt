@@ -6,40 +6,36 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>Card Stack</string>
+			<string>Contrapt Stack</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>com.trompingmarmots.cardstack</string>
+				<string>com.trompingmarmots.contrapt.stack</string>
 			</array>
 		</dict>
 	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>com.trompingmarmots.cardstack</string>
-			<key>UTTypeDescription</key>
-			<string>Card Stack</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
 			</array>
+			<key>UTTypeDescription</key>
+			<string>Contrapt Stack</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.trompingmarmots.contrapt.stack</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
-					<string>cardstack</string>
+					<string>contrapt</string>
 				</array>
 			</dict>
 		</dict>
 	</array>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
-	<key>UISupportsDocumentBrowser</key>
-	<true/>
 </dict>
 </plist>

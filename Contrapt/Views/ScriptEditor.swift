@@ -1,6 +1,6 @@
 //
 //  ScriptEditor.swift
-//  HyperPad
+//  Contrapt
 //
 
 import SwiftUI
