@@ -6,6 +6,13 @@
 import SwiftUI
 import HyperTalk
 
+/// Session-wide HyperTalk globals — shared across cards and stacks while
+/// the app runs, as in HyperCard.
+@MainActor final class GlobalStore {
+    static let shared = GlobalStore()
+    var values: [String: String] = [:]
+}
+
 /// Bridges a running script to the open document: `go` moves the current
 /// card, `field` reads and writes field parts on the current card and its
 /// background. Scripts can reach nothing else (D7: the interpreter is the
@@ -88,6 +95,16 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func beep() {
         Beeper.shared.beep()
+    }
+
+    // MARK: - Globals
+
+    func globalValue(_ name: String) -> String? {
+        GlobalStore.shared.values[name]
+    }
+
+    func setGlobalValue(_ name: String, to value: String) {
+        GlobalStore.shared.values[name] = value
     }
 
     // MARK: - Properties

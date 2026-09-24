@@ -92,6 +92,16 @@ final class MockHost: HyperTalkHost {
     func setProperty(_ property: String, of object: HyperTalkObject, to value: String) throws {
         properties[propertyKey(property, object)] = value
     }
+
+    var globals: [String: String] = [:]
+
+    func globalValue(_ name: String) -> String? {
+        globals[name]
+    }
+
+    func setGlobalValue(_ name: String, to value: String) {
+        globals[name] = value
+    }
 }
 
 @discardableResult

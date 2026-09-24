@@ -39,7 +39,7 @@ enum SyntaxScanner {
     /// Words colored as keywords: commands, control flow, operators-as-words,
     /// and the built-in constants.
     static let keywords: Set<String> = [
-        "on", "end", "exit", "next",
+        "on", "end", "exit", "next", "function", "global", "result",
         "if", "then", "else",
         "repeat", "forever", "while", "until", "with", "times", "down", "to", "for",
         "go", "put", "into", "after", "before", "beep", "get", "set", "this", "of",

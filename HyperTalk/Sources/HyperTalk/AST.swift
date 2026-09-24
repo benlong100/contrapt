@@ -6,8 +6,10 @@
 import Foundation
 
 struct ParsedScript {
-    /// Handlers keyed by lowercased name.
+    /// Message handlers (`on …`) and user functions (`function …`), each
+    /// keyed by lowercased name.
     let handlers: [String: Handler]
+    let functions: [String: Handler]
 }
 
 struct Handler {
@@ -30,6 +32,10 @@ indirect enum StmtKind {
     case exitRepeat
     case nextRepeat
     case exitHandler
+    /// `global a, b` — declares names global for the enclosing handler.
+    case declareGlobals([String])
+    /// `return <expr>` — exits the handler/function, yielding a value.
+    case returnStatement(Expr?)
     /// `beep` or `beep <count>`.
     case beep(Expr?)
     /// `get <expr>` — evaluates into the variable `it`.
@@ -88,6 +94,10 @@ indirect enum Expr {
     case property(String, ObjectExpr)
     /// A chunk of text: `word 2 of X`, `char 1 to 5 of X`, `the last line of X`.
     case chunk(ChunkKind, ChunkSelector, Expr)
+    /// A function call in an expression: `myFunc(a, b)`, `length(x)`.
+    case call(String, [Expr])
+    /// `the result` — the value returned by the last command/function.
+    case result
     case binary(BinaryOp, Expr, Expr)
     case unary(UnaryOp, Expr)
 }

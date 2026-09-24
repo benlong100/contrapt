@@ -64,6 +64,10 @@ public protocol HyperTalkHost: AnyObject {
     func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String
     /// `set the <property> of <object> to <value>`.
     func setProperty(_ property: String, of object: HyperTalkObject, to value: String) throws
+    /// Global variables (`global x`), which persist across handlers and
+    /// across separate script runs — so the host owns their storage.
+    func globalValue(_ name: String) -> String?
+    func setGlobalValue(_ name: String, to value: String)
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

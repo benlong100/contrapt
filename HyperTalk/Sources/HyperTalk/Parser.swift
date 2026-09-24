@@ -120,25 +120,33 @@ struct Parser {
 
     private mutating func parseScript() throws -> ParsedScript {
         var handlers: [String: Handler] = [:]
+        var functions: [String: Handler] = [:]
         while true {
             skipNewlines()
             if current.kind == .endOfScript { break }
-            guard consumeWord("on") else {
-                throw ScriptError(line: current.line, message: "Expected 'on <handlerName>' here, but found \(describe(current)).")
+            if consumeWord("on") {
+                let handler = try parseHandler(keyword: "on")
+                if handlers[handler.name] != nil {
+                    throw ScriptError(line: handler.line, message: "There is more than one handler named '\(handler.name)'.")
+                }
+                handlers[handler.name] = handler
+            } else if consumeWord("function") {
+                let function = try parseHandler(keyword: "function")
+                if functions[function.name] != nil {
+                    throw ScriptError(line: function.line, message: "There is more than one function named '\(function.name)'.")
+                }
+                functions[function.name] = function
+            } else {
+                throw ScriptError(line: current.line, message: "Expected 'on <handlerName>' or 'function <name>' here, but found \(describe(current)).")
             }
-            let handler = try parseHandler()
-            if handlers[handler.name] != nil {
-                throw ScriptError(line: handler.line, message: "There is more than one handler named '\(handler.name)'.")
-            }
-            handlers[handler.name] = handler
         }
-        return ParsedScript(handlers: handlers)
+        return ParsedScript(handlers: handlers, functions: functions)
     }
 
-    private mutating func parseHandler() throws -> Handler {
+    private mutating func parseHandler(keyword: String) throws -> Handler {
         let startLine = current.line
         guard let name = peekIdentifier() else {
-            throw ScriptError(line: current.line, message: "Expected a handler name after 'on'.")
+            throw ScriptError(line: current.line, message: "Expected a name after '\(keyword)'.")
         }
         advance()
 
@@ -218,6 +226,25 @@ struct Parser {
             }
             try expectNewline()
             return Stmt(kind: .nextRepeat, line: line)
+        case "global":
+            advance()
+            var names: [String] = []
+            while let name = peekIdentifier() {
+                advance()
+                names.append(name)
+                if !consumeSymbol(",") { break }
+            }
+            guard !names.isEmpty else {
+                throw ScriptError(line: line, message: "Expected one or more variable names after 'global'.")
+            }
+            try expectNewline()
+            return Stmt(kind: .declareGlobals(names), line: line)
+        case "return":
+            advance()
+            let value: Expr? = (current.kind == .newline || current.kind == .endOfScript)
+                ? nil : try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .returnStatement(value), line: line)
         case "beep":
             advance()
             var count: Expr?
@@ -643,6 +670,11 @@ struct Parser {
             throw ScriptError(line: current.line, message: "Expected a value here.")
         case .identifier("the"):
             advance()
+            // `the result` — the last command/function return value.
+            if peekIdentifier() == "result" {
+                advance()
+                return .result
+            }
             // `the first word of X`, `the last line of X`, etc.
             if let ordinalWord = peekIdentifier(),
                let selector = Self.ordinalSelector(ordinalWord),
@@ -677,6 +709,20 @@ struct Parser {
             return .chunk(kind, selector, try parsePrimary())
         case .identifier(let word):
             advance()
+            // `name(args)` — a function call. Otherwise a plain variable.
+            if case .symbol("(") = current.kind {
+                advance()
+                var arguments: [Expr] = []
+                if case .symbol(")") = current.kind {} else {
+                    repeat {
+                        arguments.append(try parseExpression())
+                    } while consumeSymbol(",")
+                }
+                guard consumeSymbol(")") else {
+                    throw ScriptError(line: line, message: "This function call is missing its closing ')'.")
+                }
+                return .call(word, arguments)
+            }
             return .variable(word)
         default:
             throw ScriptError(line: line, message: "Expected a value here, but found \(describe(current)).")

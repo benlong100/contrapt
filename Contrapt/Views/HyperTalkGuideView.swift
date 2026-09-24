@@ -50,6 +50,21 @@ struct HyperTalkGuideView: View {
                     go to card "Home"
                     """)
 
+                    section("Functions and globals", body: "Define your own functions with `function … end`, call them with parentheses, and return a value. `the result` holds the last command's return. `global` shares a variable across handlers and across taps. Built-ins: length(x), random(n).", example: """
+                    on mouseUp
+                      put greet("Ada") into field "out"
+                    end mouseUp
+
+                    function greet who
+                      return "Hello," && who
+                    end greet
+
+                    on tally
+                      global count
+                      put count + 1 into count
+                    end tally
+                    """)
+
                     section("Chunks", body: "Reach into text by character, word, item (comma-separated), or line — by number, by ordinal (first…tenth, last, middle), or by range. Chunks nest and work on any text, including fields.", example: """
                     put word 3 of "the quick brown fox"   -- brown
                     put the last word of field "Name"

@@ -95,7 +95,11 @@ enum Value {
     }
 
     static func number(from text: String, line: Int) throws -> Double {
-        guard let number = Double(text.trimmingCharacters(in: .whitespaces)) else {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        // Empty counts as zero in numeric context — so uninitialized
+        // globals and counters (`put counter + 1 into counter`) just work.
+        if trimmed.isEmpty { return 0 }
+        guard let number = Double(trimmed) else {
             throw ScriptError(line: line, message: "Expected a number here, but got \"\(text)\".")
         }
         return number
@@ -120,13 +124,20 @@ final class Runtime {
     private var parsedLayers: [Int: ParsedScript] = [:]
 
     /// One frame per handler invocation: HyperTalk variables are local,
-    /// pre-seeded with the built-in constants.
+    /// pre-seeded with the built-in constants. Names listed in `global`
+    /// read/write the host's global store instead.
     private struct Frame {
         var variables: [String: String]
         let layerIndex: Int
+        var globalNames: Set<String> = []
     }
 
     private var frames: [Frame] = []
+
+    /// The value of the last `return`, read by `the result`.
+    private var lastResult = ""
+    /// Set by a `return` statement while a handler/function body runs.
+    private var pendingReturn: String?
 
     private static let maxMessageDepth = 64
     private static let constants: [String: String] = [
@@ -177,14 +188,53 @@ final class Runtime {
             }
             frames.append(Frame(variables: variables, layerIndex: index))
             defer { frames.removeLast() }
+            let savedReturn = pendingReturn
+            pendingReturn = nil
             do {
                 _ = try execute(handler.body)
             } catch let error as ScriptError {
                 throw annotated(error, layerIndex: index)
             }
+            lastResult = pendingReturn ?? ""
+            pendingReturn = savedReturn
             return true
         }
         return false
+    }
+
+    /// Calls a user function found along the path from the current layer,
+    /// returning its `return` value ("" if it returns nothing).
+    func callFunction(_ name: String, arguments: [String], line: Int) throws -> String {
+        let key = name.lowercased()
+        for index in currentLayerIndex..<path.count {
+            let script: ParsedScript
+            do {
+                script = try parsedScript(at: index)
+            } catch let error as ScriptError {
+                throw annotated(error, layerIndex: index)
+            }
+            guard let function = script.functions[key] else { continue }
+            guard frames.count < Self.maxMessageDepth else {
+                throw ScriptError(line: line, message: "Too many functions within functions — is a function calling itself?")
+            }
+            var variables = Self.constants
+            for (offset, parameter) in function.parameters.enumerated() {
+                variables[parameter] = offset < arguments.count ? arguments[offset] : ""
+            }
+            frames.append(Frame(variables: variables, layerIndex: index))
+            defer { frames.removeLast() }
+            let savedReturn = pendingReturn
+            pendingReturn = nil
+            do {
+                _ = try execute(function.body)
+            } catch let error as ScriptError {
+                throw annotated(error, layerIndex: index)
+            }
+            let value = pendingReturn ?? ""
+            pendingReturn = savedReturn
+            return value
+        }
+        throw ScriptError(line: line, message: "Can't find a function named '\(name)'.")
     }
 
     /// Runs loose statements (a message box line) in a fresh frame rooted
@@ -220,12 +270,19 @@ final class Runtime {
     // MARK: Variables
 
     private func variableValue(_ name: String) -> String? {
-        frames.last?.variables[name]
+        if frames.last?.globalNames.contains(name) == true {
+            return host.globalValue(name) ?? ""
+        }
+        return frames.last?.variables[name]
     }
 
     private func setVariable(_ name: String, to value: String) {
         guard !frames.isEmpty else { return }
-        frames[frames.count - 1].variables[name] = value
+        if frames[frames.count - 1].globalNames.contains(name) {
+            host.setGlobalValue(name, to: value)
+        } else {
+            frames[frames.count - 1].variables[name] = value
+        }
     }
 
     private var currentLayerIndex: Int {
@@ -268,6 +325,14 @@ final class Runtime {
             return .nextRepeat
 
         case .exitHandler:
+            return .exitHandler
+
+        case .declareGlobals(let names):
+            if !frames.isEmpty { frames[frames.count - 1].globalNames.formUnion(names) }
+            return .normal
+
+        case .returnStatement(let expression):
+            pendingReturn = try expression.map { try evaluate($0, line: statement.line) } ?? ""
             return .exitHandler
 
         case .beep(let countExpression):
@@ -432,6 +497,16 @@ final class Runtime {
                 Int(try Value.number(from: try evaluate(expression, line: line), line: line))
             }
 
+        case .call(let name, let argumentExpressions):
+            let arguments = try argumentExpressions.map { try evaluate($0, line: line) }
+            if let builtin = try evaluateBuiltin(name, arguments, line: line) {
+                return builtin
+            }
+            return try callFunction(name, arguments: arguments, line: line)
+
+        case .result:
+            return lastResult
+
         case .unary(let op, let operand):
             let value = try evaluate(operand, line: line)
             switch op {
@@ -502,6 +577,26 @@ final class Runtime {
             let (a, b) = try bools(); return bool(a && b)
         case .or:
             let (a, b) = try bools(); return bool(a || b)
+        }
+    }
+
+    /// Built-in functions callable with parens. Returns nil if `name` isn't
+    /// a built-in (so a user function is tried instead).
+    private func evaluateBuiltin(_ name: String, _ arguments: [String], line: Int) throws -> String? {
+        switch name.lowercased() {
+        case "length":
+            guard arguments.count == 1 else {
+                throw ScriptError(line: line, message: "length expects one value, like length(field \"Name\").")
+            }
+            return String(arguments[0].count)
+        case "random":
+            guard arguments.count == 1 else {
+                throw ScriptError(line: line, message: "random expects one number, like random(6).")
+            }
+            let n = Int(try Value.number(from: arguments[0], line: line))
+            return n >= 1 ? String(Int.random(in: 1...n)) : "0"
+        default:
+            return nil
         }
     }
 
