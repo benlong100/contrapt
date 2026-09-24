@@ -47,7 +47,7 @@ enum SyntaxScanner {
         "the", "card", "field", "number", "length",
         "date", "time", "seconds", "secs", "ticks", "long", "short", "abbreviated",
         "char", "character", "chars", "characters", "word", "words",
-        "item", "items", "line", "lines",
+        "item", "items", "line", "lines", "itemdelimiter",
         "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
         "eighth", "ninth", "tenth", "middle",
         "previous", "prev", "first", "last",

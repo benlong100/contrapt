@@ -166,6 +166,59 @@ import Testing
     #expect(host.fields["out"] != nil)
 }
 
+// MARK: - itemDelimiter
+
+@Test func itemDelimiterChangesSplitCharacter() throws {
+    let host = try run("""
+    on mouseUp
+      set the itemDelimiter to ";"
+      put item 2 of "a;b;c" into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "b")
+}
+
+@Test func itemDelimiterIsReadable() throws {
+    let host = try run("""
+    on mouseUp
+      set the itemDelimiter to "/"
+      put the itemDelimiter into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "/")
+}
+
+@Test func itemDelimiterAffectsRejoinAndCount() throws {
+    let host = try run("""
+    on mouseUp
+      set the itemDelimiter to ";"
+      put item 1 to 2 of "a;b;c" into field "joined"
+      put the number of items of "a;b;c" into field "count"
+    end mouseUp
+    """, host: MockHost(fields: ["joined": "", "count": ""]))
+    #expect(host.fields["joined"] == "a;b")
+    #expect(host.fields["count"] == "3")
+}
+
+@Test func itemDelimiterAffectsPutIntoItem() throws {
+    let host = try run("""
+    on mouseUp
+      set the itemDelimiter to "-"
+      put "X" into item 2 of field "data"
+    end mouseUp
+    """, host: MockHost(fields: ["data": "a-b-c"]))
+    #expect(host.fields["data"] == "a-X-c")
+}
+
+@Test func itemDelimiterDefaultsToComma() throws {
+    let host = try run("""
+    on mouseUp
+      put item 3 of "a,b,c" into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "c")
+}
+
 @Test func replaceCharRange() throws {
     let host = try run("""
     on mouseUp

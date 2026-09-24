@@ -42,6 +42,8 @@ indirect enum StmtKind {
     case get(Expr)
     /// `set [the] <property> of <object> to <value>`.
     case set(property: String, object: ObjectExpr, value: Expr)
+    /// `set the itemDelimiter to <value>` — a global (object-less) property.
+    case setGlobalProperty(String, Expr)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
@@ -102,6 +104,8 @@ indirect enum Expr {
     case call(String, [Expr])
     /// `the result` — the value returned by the last command/function.
     case result
+    /// A global (object-less) property, e.g. `the itemDelimiter`.
+    case globalProperty(String)
     /// `the date`, `the long time`, `the seconds`, etc.
     case clock(ClockField)
     case binary(BinaryOp, Expr, Expr)

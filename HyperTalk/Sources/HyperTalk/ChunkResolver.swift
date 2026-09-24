@@ -17,6 +17,7 @@ enum ChunkResolver {
         kind: ChunkKind,
         selector: ChunkSelector,
         in source: String,
+        itemDelimiter: String = ",",
         evaluateIndex: (Expr) throws -> Int
     ) rethrows -> String {
         // Characters operate on the raw string; other kinds split into units.
@@ -29,12 +30,12 @@ enum ChunkResolver {
             return String(characters[lo..<hi])
         }
 
-        let units = split(source, kind: kind)
+        let units = split(source, kind: kind, itemDelimiter: itemDelimiter)
         let (start, end) = try bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
         guard start <= end, start >= 1, start <= units.count else { return "" }
         let lo = max(1, start) - 1
         let hi = min(units.count, end)
-        return units[lo..<hi].joined(separator: delimiter(kind))
+        return units[lo..<hi].joined(separator: delimiter(kind, itemDelimiter: itemDelimiter))
     }
 
     /// Returns `source` with the selected chunk replaced by `replacement`.
@@ -45,6 +46,7 @@ enum ChunkResolver {
         selector: ChunkSelector,
         in source: String,
         with replacement: String,
+        itemDelimiter: String = ",",
         evaluateIndex: (Expr) throws -> Int
     ) rethrows -> String {
         if kind == .character {
@@ -57,25 +59,25 @@ enum ChunkResolver {
             return String(characters)
         }
 
-        var units = split(source, kind: kind)
+        var units = split(source, kind: kind, itemDelimiter: itemDelimiter)
         let (start, end) = try bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
         guard start >= 1 else { return source }
         while units.count < start { units.append("") }
         let lo = start - 1
         let hi = min(max(end, start), units.count)
         units.replaceSubrange(lo..<hi, with: [replacement])
-        return units.joined(separator: delimiter(kind))
+        return units.joined(separator: delimiter(kind, itemDelimiter: itemDelimiter))
     }
 
     /// How many units of `kind` are in `source` (empty text has none).
-    static func count(kind: ChunkKind, in source: String) -> Int {
+    static func count(kind: ChunkKind, in source: String, itemDelimiter: String = ",") -> Int {
         guard !source.isEmpty else { return 0 }
-        return kind == .character ? source.count : split(source, kind: kind).count
+        return kind == .character ? source.count : split(source, kind: kind, itemDelimiter: itemDelimiter).count
     }
 
     // MARK: - Splitting
 
-    private static func split(_ source: String, kind: ChunkKind) -> [String] {
+    private static func split(_ source: String, kind: ChunkKind, itemDelimiter: String) -> [String] {
         switch kind {
         case .character:
             return source.map(String.init)
@@ -83,18 +85,20 @@ enum ChunkResolver {
             // Runs of whitespace separate words; empties dropped.
             return source.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init)
         case .item:
-            // Comma-delimited; empties kept (item 2 of "a,,c" is empty).
-            return source.components(separatedBy: ",")
+            // Delimited by the itemDelimiter (comma by default); empties kept
+            // (item 2 of "a,,c" is empty). An empty delimiter yields one item.
+            guard !itemDelimiter.isEmpty else { return [source] }
+            return source.components(separatedBy: itemDelimiter)
         case .line:
             return source.components(separatedBy: "\n")
         }
     }
 
-    private static func delimiter(_ kind: ChunkKind) -> String {
+    private static func delimiter(_ kind: ChunkKind, itemDelimiter: String) -> String {
         switch kind {
         case .character: ""
         case .word: " "
-        case .item: ","
+        case .item: itemDelimiter
         case .line: "\n"
         }
     }

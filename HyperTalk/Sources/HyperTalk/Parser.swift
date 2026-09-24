@@ -265,16 +265,22 @@ struct Parser {
                 throw ScriptError(line: line, message: "Expected a property name after 'set'.")
             }
             advance()
-            guard consumeWord("of") else {
-                throw ScriptError(line: line, message: "Expected 'of' after the property name, like: set the width of button \"OK\" to 200.")
+            if consumeWord("of") {
+                let object = try parseObjectExpr()
+                guard consumeWord("to") else {
+                    throw ScriptError(line: line, message: "Expected 'to' and a value at the end of 'set'.")
+                }
+                let value = try parseExpression()
+                try expectNewline()
+                return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
             }
-            let object = try parseObjectExpr()
+            // Object-less property: `set the itemDelimiter to ";"`.
             guard consumeWord("to") else {
-                throw ScriptError(line: line, message: "Expected 'to' and a value at the end of 'set'.")
+                throw ScriptError(line: line, message: "Expected 'of <object> to …' or 'to …' after 'set the \(property)'.")
             }
             let value = try parseExpression()
             try expectNewline()
-            return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
+            return Stmt(kind: .setGlobalProperty(property.lowercased(), value), line: line)
         default:
             // An unknown word is a message send: it travels the message
             // path at run time (HyperCard semantics), so `doGreeting "Bill"`
@@ -738,6 +744,11 @@ struct Parser {
             // `the [long|short|abbreviated] date/time`, `the seconds/ticks`.
             if let field = parseClockField() {
                 return .clock(field)
+            }
+            // `the itemDelimiter` — an object-less property.
+            if peekIdentifier() == "itemdelimiter", peekIdentifier(1) != "of" {
+                advance()
+                return .globalProperty("itemdelimiter")
             }
             // `the length of X` → character count.
             if peekIdentifier() == "length", peekIdentifier(1) == "of" {

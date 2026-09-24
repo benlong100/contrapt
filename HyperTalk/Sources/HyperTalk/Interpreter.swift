@@ -139,6 +139,10 @@ final class Runtime {
     /// Set by a `return` statement while a handler/function body runs.
     private var pendingReturn: String?
 
+    /// The delimiter `item` chunks split on. HyperTalk's `itemDelimiter`
+    /// property — a comma by default, changeable at run time.
+    private var itemDelimiter = ","
+
     private static let maxMessageDepth = 64
     private static let constants: [String: String] = [
         "empty": "",
@@ -356,6 +360,17 @@ final class Runtime {
             try hostCall(line: statement.line) { try host.setProperty(property, of: object, to: value) }
             return .normal
 
+        case .setGlobalProperty(let property, let valueExpression):
+            let value = try evaluate(valueExpression, line: statement.line)
+            switch property {
+            case "itemdelimiter":
+                // HyperCard uses only the first character of the delimiter.
+                itemDelimiter = value.isEmpty ? "" : String(value.first!)
+            default:
+                throw ScriptError(line: statement.line, message: "Can't set the '\(property)'.")
+            }
+            return .normal
+
         case .send(let name, let argumentExpressions):
             let arguments = try argumentExpressions.map { try evaluate($0, line: statement.line) }
             let handled = try send(name, arguments: arguments, fromLayer: currentLayerIndex, line: statement.line)
@@ -394,7 +409,7 @@ final class Runtime {
             return try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
         case .chunk(let kind, let selector, let base):
             let source = try containerValue(base, line: line)
-            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source) {
+            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
                 Int(try Value.number(from: try evaluate($0, line: line), line: line))
             }
         }
@@ -410,7 +425,7 @@ final class Runtime {
             try hostCall(line: line) { try host.setFieldText(reference, domain: domain, to: value) }
         case .chunk(let kind, let selector, let base):
             let source = try containerValue(base, line: line)
-            let updated = try ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value) {
+            let updated = try ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value, itemDelimiter: itemDelimiter) {
                 Int(try Value.number(from: try evaluate($0, line: line), line: line))
             }
             try setContainer(base, to: updated, line: line)
@@ -514,13 +529,13 @@ final class Runtime {
 
         case .chunk(let kind, let selector, let sourceExpression):
             let source = try evaluate(sourceExpression, line: line)
-            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source) { expression in
+            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) { expression in
                 Int(try Value.number(from: try evaluate(expression, line: line), line: line))
             }
 
         case .chunkCount(let kind, let sourceExpression):
             let source = try evaluate(sourceExpression, line: line)
-            return String(ChunkResolver.count(kind: kind, in: source))
+            return String(ChunkResolver.count(kind: kind, in: source, itemDelimiter: itemDelimiter))
 
         case .call(let name, let argumentExpressions):
             let arguments = try argumentExpressions.map { try evaluate($0, line: line) }
@@ -531,6 +546,14 @@ final class Runtime {
 
         case .result:
             return lastResult
+
+        case .globalProperty(let property):
+            switch property {
+            case "itemdelimiter":
+                return itemDelimiter
+            default:
+                throw ScriptError(line: line, message: "Can't read the '\(property)'.")
+            }
 
         case .clock(let field):
             return host.clock(field)
