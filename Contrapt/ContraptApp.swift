@@ -20,9 +20,15 @@ import AppKit
 /// dock reopen with no windows. Opening a specific stack from Finder still
 /// works normally (this hook isn't called in that case).
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationOpenUntitledFile(_ sender: NSApplication) -> Bool {
-        openHome()
-        return true
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // The DocumentGroup's launch panel is suppressed (see the scene's
+        // defaultLaunchBehavior). Open Home ourselves, deferred a beat so
+        // the document scene is ready. Skipped if a document is already
+        // opening (e.g. launched by opening a stack from Finder).
+        DispatchQueue.main.async {
+            guard NSApp.windows.allSatisfy({ !$0.isVisible }) else { return }
+            self.openHome()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -97,6 +103,8 @@ struct ContraptApp: App {
         // Open new document windows large enough to show a whole card
         // comfortably with room for the inspector.
         .defaultSize(width: 1280, height: 900)
+        // Don't show the open panel on launch; the app delegate opens Home.
+        .defaultLaunchBehavior(.suppressed)
         #endif
         // HyperCard's Go menu, driven by the focused document. Also
         // reaches iPad when a hardware keyboard is attached.
