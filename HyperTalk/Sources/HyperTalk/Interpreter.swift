@@ -270,6 +270,16 @@ final class Runtime {
         case .exitHandler:
             return .exitHandler
 
+        case .beep(let countExpression):
+            var count = 1
+            if let countExpression {
+                count = Int(try Value.number(from: try evaluate(countExpression, line: statement.line), line: statement.line))
+            }
+            for _ in 0..<max(0, min(count, 50)) {
+                host.beep()
+            }
+            return .normal
+
         case .send(let name, let argumentExpressions):
             let arguments = try argumentExpressions.map { try evaluate($0, line: statement.line) }
             let handled = try send(name, arguments: arguments, fromLayer: currentLayerIndex, line: statement.line)

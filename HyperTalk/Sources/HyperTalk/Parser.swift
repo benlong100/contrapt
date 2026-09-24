@@ -218,6 +218,14 @@ struct Parser {
             }
             try expectNewline()
             return Stmt(kind: .nextRepeat, line: line)
+        case "beep":
+            advance()
+            var count: Expr?
+            if current.kind != .newline, current.kind != .endOfScript {
+                count = try parseExpression()
+            }
+            try expectNewline()
+            return Stmt(kind: .beep(count), line: line)
         default:
             // An unknown word is a message send: it travels the message
             // path at run time (HyperCard semantics), so `doGreeting "Bill"`

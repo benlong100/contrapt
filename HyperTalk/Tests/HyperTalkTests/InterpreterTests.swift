@@ -38,6 +38,12 @@ final class MockHost: HyperTalkHost {
     func showMessage(_ text: String) {
         messages.append(text)
     }
+
+    var beeps = 0
+
+    func beep() {
+        beeps += 1
+    }
 }
 
 @discardableResult
@@ -492,4 +498,14 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     } catch let error as ScriptError {
         #expect(error.line == 2)
     }
+}
+
+@Test func beepBeepsOnceOrCounted() throws {
+    let host = try run("""
+    on mouseUp
+      beep
+      beep 3
+    end mouseUp
+    """)
+    #expect(host.beeps == 4)
 }

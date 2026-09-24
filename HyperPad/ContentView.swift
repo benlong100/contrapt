@@ -3,6 +3,7 @@
 //  HyperPad
 //
 
+import PhotosUI
 import SwiftUI
 import HyperTalk
 
@@ -21,6 +22,8 @@ struct ContentView: View {
     @State private var isMessageBoxVisible = false
     @State private var scriptErrorText: String?
     @State private var undoFlushTask: Task<Void, Never>?
+    @State private var isPhotoPickerPresented = false
+    @State private var selectedPhoto: PhotosPickerItem?
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
 
@@ -61,8 +64,19 @@ struct ContentView: View {
                 .padding()
             }
         }
+        .environment(\.stackAssets, document.assets)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.secondarySystemBackground))
+        .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhoto, matching: .images)
+        .onChange(of: selectedPhoto) { _, item in
+            guard let item else { return }
+            selectedPhoto = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { return }
+                addImagePart(data: data, imageSize: image.size)
+            }
+        }
         .overlay(alignment: .bottom) {
             if isMessageBoxVisible {
                 MessageBoxView(output: messageBoxText, onCommand: runMessageBoxCommand)
@@ -112,6 +126,9 @@ struct ContentView: View {
                         }
                         Button("Label", systemImage: "textformat") {
                             addPart(.label(LabelPart(text: "New Label")))
+                        }
+                        Button("Image…", systemImage: "photo") {
+                            isPhotoPickerPresented = true
                         }
                         Divider()
                         Button("New Card", systemImage: "rectangle.badge.plus") {
@@ -198,6 +215,7 @@ struct ContentView: View {
             case .button: "button"
             case .field: "field"
             case .label: "label"
+            case .image: "image"
             }
             layers.append(ScriptLayer(name: "\(kind) \"\(part.name)\" script", source: part.script))
         }
@@ -255,6 +273,7 @@ struct ContentView: View {
         let size: (width: Double, height: Double) = switch kind {
         case .button: (160, 56)
         case .field, .label: (320, 56)
+        case .image: (320, 320) // images arrive via addImagePart instead
         }
         let cardSize = document.stack.cardSize
         let script = if case .button = kind {
@@ -278,11 +297,37 @@ struct ContentView: View {
         selectedPartID = part.id
     }
 
+    /// Imports picked image data as an asset and places an image part
+    /// sized to fit, centered on the current card.
+    private func addImagePart(data: Data, imageSize: CGSize) {
+        let assetName = document.storeAsset(data)
+        let maxSide: Double = 400
+        let scale = min(1, min(maxSide / imageSize.width, maxSide / imageSize.height))
+        let width = imageSize.width * scale
+        let height = imageSize.height * scale
+        let cardSize = document.stack.cardSize
+        let part = Part(
+            id: UUID(),
+            name: defaultName(for: .image(ImagePart(assetName: assetName))),
+            frame: PartFrame(
+                x: (cardSize.width - width) / 2,
+                y: (cardSize.height - height) / 2,
+                width: width,
+                height: height
+            ),
+            script: "",
+            kind: .image(ImagePart(assetName: assetName))
+        )
+        stack.wrappedValue.cards[cardIndex].parts.append(part)
+        selectedPartID = part.id
+    }
+
     private func defaultName(for kind: PartKind) -> String {
         let base = switch kind {
         case .button: "Button"
         case .field: "Field"
         case .label: "Label"
+        case .image: "Image"
         }
         let existing = document.stack.cards[cardIndex].parts.count
         return "\(base) \(existing + 1)"

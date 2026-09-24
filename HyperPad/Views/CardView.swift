@@ -330,6 +330,18 @@ private struct EditablePart: View {
     }
 }
 
+/// The open document's media assets, for image parts.
+private struct StackAssetsKey: EnvironmentKey {
+    static let defaultValue: [String: Data] = [:]
+}
+
+extension EnvironmentValues {
+    var stackAssets: [String: Data] {
+        get { self[StackAssetsKey.self] }
+        set { self[StackAssetsKey.self] = newValue }
+    }
+}
+
 /// Renders a single part as its native SwiftUI control (D5). Unstyled parts
 /// keep the native look; per-kind style properties come later.
 struct PartView: View {
@@ -337,6 +349,7 @@ struct PartView: View {
     var onTap: () -> Void
     var onMouseDown: () -> Void = {}
 
+    @Environment(\.stackAssets) private var stackAssets
     @State private var isPressed = false
 
     var body: some View {
@@ -363,6 +376,21 @@ struct PartView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .gesture(labelPressGesture)
+        case .image(let properties):
+            Group {
+                if let data = stackAssets[properties.assetName], let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Image(systemName: "photo")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(labelPressGesture)
         }
     }
 

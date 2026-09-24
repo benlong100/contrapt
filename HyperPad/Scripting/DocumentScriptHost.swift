@@ -3,6 +3,7 @@
 //  HyperPad
 //
 
+import AudioToolbox
 import SwiftUI
 import HyperTalk
 
@@ -78,6 +79,10 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func showMessage(_ text: String) {
         onMessage(text)
+    }
+
+    func beep() {
+        AudioServicesPlaySystemSound(1103) // classic short "tink"
     }
 
     // MARK: - Field lookup

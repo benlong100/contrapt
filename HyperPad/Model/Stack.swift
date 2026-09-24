@@ -77,6 +77,7 @@ nonisolated enum PartKind: Hashable {
     case button(ButtonPart)
     case field(FieldPart)
     case label(LabelPart)
+    case image(ImagePart)
 }
 
 nonisolated struct ButtonPart: Codable, Hashable {
@@ -92,6 +93,11 @@ nonisolated struct LabelPart: Codable, Hashable {
     var text: String
 }
 
+/// References an image stored in the stack archive's assets (D4).
+nonisolated struct ImagePart: Codable, Hashable {
+    var assetName: String
+}
+
 // MARK: - Part coding
 
 /// Custom Codable so a part encodes as `"type": "button"` plus a per-kind
@@ -102,7 +108,7 @@ nonisolated struct LabelPart: Codable, Hashable {
 /// so older builds refuse newer stacks instead of failing mid-decode.
 extension Part: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, name, frame, script, type, button, field, label
+        case id, name, frame, script, type, button, field, label, image
     }
 
     init(from decoder: Decoder) throws {
@@ -119,6 +125,8 @@ extension Part: Codable {
             kind = .field(try container.decode(FieldPart.self, forKey: .field))
         case "label":
             kind = .label(try container.decode(LabelPart.self, forKey: .label))
+        case "image":
+            kind = .image(try container.decode(ImagePart.self, forKey: .image))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,
@@ -144,6 +152,30 @@ extension Part: Codable {
         case .label(let properties):
             try container.encode("label", forKey: .type)
             try container.encode(properties, forKey: .label)
+        case .image(let properties):
+            try container.encode("image", forKey: .type)
+            try container.encode(properties, forKey: .image)
         }
+    }
+}
+
+// MARK: - Assets
+
+nonisolated extension Stack {
+    /// Every asset name the stack still references; unreferenced assets
+    /// are dropped at save time.
+    func referencedAssetNames() -> Set<String> {
+        var names: Set<String> = []
+        for card in cards {
+            for part in card.parts {
+                if case .image(let image) = part.kind { names.insert(image.assetName) }
+            }
+        }
+        for background in backgrounds {
+            for part in background.parts {
+                if case .image(let image) = part.kind { names.insert(image.assetName) }
+            }
+        }
+        return names
     }
 }

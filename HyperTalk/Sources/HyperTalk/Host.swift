@@ -24,6 +24,8 @@ public protocol HyperTalkHost: AnyObject {
     func setFieldText(named name: String, to text: String) throws
     /// `put <expr>` with no destination — HyperCard's message box.
     func showMessage(_ text: String)
+    /// `beep` — one system beep per call.
+    func beep()
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

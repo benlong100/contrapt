@@ -13,12 +13,22 @@ nonisolated extension UTType {
     static let cardStack = UTType(exportedAs: "com.trompingmarmots.cardstack")
 }
 
+/// What gets written: the manifest plus the assets it references.
+nonisolated struct StackFileSnapshot: Sendable {
+    let stack: Stack
+    let assets: [String: Data]
+}
+
 /// The document wrapper around a `Stack`. A reference document so edits
 /// register undo actions — which is also how SwiftUI learns the document
-/// is dirty. The zip container for media assets arrives in Phase 6; until
-/// then a stack file is the JSON manifest alone.
+/// is dirty. On disk a stack is a flat store-only zip (D4): `stack.json`
+/// plus `assets/*`; development-era plain-JSON stacks remain readable.
 nonisolated final class StackDocument: ReferenceFileDocument {
     @Published var stack: Stack
+    /// Media assets by name (image bytes, later paint and sounds). Asset
+    /// bytes aren't undo-tracked; the parts referencing them are, and
+    /// unreferenced assets are dropped at save time.
+    @Published var assets: [String: Data] = [:]
 
     /// Bursts of changes (a drag, a typing run) coalesce into one undo step:
     /// the burst's opening snapshot is stashed here and registered when the
@@ -38,15 +48,49 @@ nonisolated final class StackDocument: ReferenceFileDocument {
         guard let data = configuration.file.regularFileContents else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        stack = try Stack(fileData: data)
+        if data.starts(with: [0x50, 0x4B]) { // "PK": the zip container
+            let entries = try ZipArchive.extract(data)
+            guard let manifest = entries["stack.json"] else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            stack = try Stack(fileData: manifest)
+            var loaded: [String: Data] = [:]
+            for (name, bytes) in entries where name.hasPrefix("assets/") {
+                loaded[String(name.dropFirst("assets/".count))] = bytes
+            }
+            assets = loaded
+        } else {
+            // Legacy development-era plain JSON.
+            stack = try Stack(fileData: data)
+        }
     }
 
-    func snapshot(contentType: UTType) throws -> Stack {
-        stack
+    func snapshot(contentType: UTType) throws -> StackFileSnapshot {
+        StackFileSnapshot(stack: stack, assets: assets)
     }
 
-    func fileWrapper(snapshot: Stack, configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: try snapshot.fileData())
+    func fileWrapper(snapshot: StackFileSnapshot, configuration: WriteConfiguration) throws -> FileWrapper {
+        var entries: [String: Data] = ["stack.json": try snapshot.stack.fileData()]
+        let referenced = snapshot.stack.referencedAssetNames()
+        for (name, data) in snapshot.assets where referenced.contains(name) {
+            entries["assets/\(name)"] = data
+        }
+        return FileWrapper(regularFileWithContents: ZipArchive.archive(entries))
+    }
+
+    /// Stores asset bytes under a fresh name and returns it, sniffing the
+    /// extension so unzipped stacks stay human-friendly.
+    func storeAsset(_ data: Data) -> String {
+        let ext: String = if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+            "png"
+        } else if data.starts(with: [0xFF, 0xD8]) {
+            "jpg"
+        } else {
+            "dat"
+        }
+        let name = UUID().uuidString.lowercased() + "." + ext
+        assets[name] = data
+        return name
     }
 
     // MARK: - Mutation choke point

@@ -45,6 +45,7 @@ struct PartInspector: View {
         case .button: "Button"
         case .field: "Field"
         case .label: "Label"
+        case .image: "Image"
         }
     }
 
@@ -63,6 +64,10 @@ struct PartInspector: View {
         case .label:
             Section("Label") {
                 TextField("Text", text: labelText)
+            }
+        case .image(let properties):
+            Section("Image") {
+                LabeledContent("Asset", value: properties.assetName)
             }
         }
     }

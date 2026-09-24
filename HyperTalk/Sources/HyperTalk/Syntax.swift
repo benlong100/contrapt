@@ -42,7 +42,7 @@ enum SyntaxScanner {
         "on", "end", "exit", "next",
         "if", "then", "else",
         "repeat", "forever", "while", "until", "with", "times", "down", "to", "for",
-        "go", "put", "into", "after", "before",
+        "go", "put", "into", "after", "before", "beep",
         "and", "or", "not", "is", "contains", "div", "mod",
         "the", "card", "field",
         "previous", "prev", "first", "last",

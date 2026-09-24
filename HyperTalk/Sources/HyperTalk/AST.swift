@@ -30,6 +30,8 @@ indirect enum StmtKind {
     case exitRepeat
     case nextRepeat
     case exitHandler
+    /// `beep` or `beep <count>`.
+    case beep(Expr?)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
