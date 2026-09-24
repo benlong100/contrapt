@@ -59,6 +59,8 @@ indirect enum StmtKind {
     /// `visual [effect] <effect> [<direction>] [<speed>]` — queues a screen
     /// transition for the next `go`.
     case visualEffect(ScreenEffect)
+    /// `wait <n> [seconds|ticks]`, `wait until <cond>`, `wait while <cond>`.
+    case wait(WaitKind)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
@@ -90,6 +92,17 @@ indirect enum Container {
 indirect enum ConvertTarget {
     case container(Container)
     case expression(Expr)
+}
+
+/// How long / until what a `wait` command pauses.
+indirect enum WaitKind {
+    case duration(Expr, WaitUnit)
+    case untilTrue(Expr)
+    case whileTrue(Expr)
+}
+
+enum WaitUnit {
+    case seconds, ticks // a tick is 1/60 second
 }
 
 enum GoTarget {

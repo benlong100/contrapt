@@ -151,6 +151,13 @@ final class MockHost: HyperTalkHost {
         return askResponse
     }
 
+    /// Seconds requested by each `wait`; instant so tests don't actually pause.
+    var waits: [Double] = []
+
+    func wait(seconds: Double) async {
+        waits.append(seconds)
+    }
+
     private func patterns(_ format: ConvertFormat) -> String? {
         switch format {
         case .shortDate: "M/d/yy"

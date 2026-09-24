@@ -132,6 +132,13 @@ struct HyperTalkGuideView: View {
                     end if
                     """)
 
+                    section("wait", body: "Pauses the handler: a duration in seconds or ticks (a tick is 1/60 second; a bare number is ticks), or until/while a condition.", example: """
+                    wait 2 seconds
+                    wait 30 ticks
+                    wait until field "Ready" is "yes"
+                    wait while field "Busy" is "yes"
+                    """)
+
                     section("repeat", body: "Five shapes. `exit repeat` leaves early; `next repeat` skips ahead. A runaway loop is stopped safely.", example: """
                     repeat 5 times
                     repeat with i = 1 to 10

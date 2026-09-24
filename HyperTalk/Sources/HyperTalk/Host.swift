@@ -131,6 +131,9 @@ public protocol HyperTalkHost: AnyObject {
     /// `ask <prompt> with <default>` — a modal text prompt. Returns the text
     /// entered, or nil if the user cancels.
     func ask(_ prompt: String, initialAnswer: String) async -> String?
+    /// `wait` — pause the script for `seconds`. The host owns real time (as
+    /// with the clock), so tests can make it instant.
+    func wait(seconds: Double) async
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

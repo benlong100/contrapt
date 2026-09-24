@@ -401,6 +401,25 @@ final class Runtime {
             pendingVisualEffects.append(effect)
             return .normal
 
+        case .wait(let kind):
+            switch kind {
+            case .duration(let expression, let unit):
+                let amount = try Value.number(from: try await evaluate(expression, line: statement.line), line: statement.line)
+                let seconds = unit == .seconds ? amount : amount / 60.0
+                if seconds > 0 { await host.wait(seconds: seconds) }
+            case .untilTrue(let condition):
+                while try !Value.bool(from: try await evaluate(condition, line: statement.line), line: statement.line) {
+                    try spendStep(line: statement.line)
+                    await host.wait(seconds: 1.0 / 60.0)
+                }
+            case .whileTrue(let condition):
+                while try Value.bool(from: try await evaluate(condition, line: statement.line), line: statement.line) {
+                    try spendStep(line: statement.line)
+                    await host.wait(seconds: 1.0 / 60.0)
+                }
+            }
+            return .normal
+
         case .doCommand(let expression):
             let source = try await evaluate(expression, line: statement.line)
             let statements: [Stmt]

@@ -42,6 +42,7 @@ enum SyntaxScanner {
         "on", "end", "exit", "next", "function", "global", "result",
         "if", "then", "else",
         "repeat", "forever", "while", "until", "with", "times", "down", "to", "for",
+        "wait", "second", "sec", "tick",
         "go", "put", "into", "after", "before", "beep", "get", "set", "this", "of",
         "me", "target", "do", "value", "answer", "ask",
         "visual", "effect", "dissolve", "wipe", "scroll", "zoom", "iris",

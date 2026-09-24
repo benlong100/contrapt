@@ -288,6 +288,26 @@ struct Parser {
             let effect = try parseVisualEffect(line: line)
             try expectNewline()
             return Stmt(kind: .visualEffect(effect), line: line)
+        case "wait":
+            advance()
+            let kind: WaitKind
+            if consumeWord("until") {
+                kind = .untilTrue(try parseExpression())
+            } else if consumeWord("while") {
+                kind = .whileTrue(try parseExpression())
+            } else {
+                _ = consumeWord("for") // optional: `wait for 2 seconds`
+                let amount = try parseExpression()
+                var unit: WaitUnit = .ticks // bare number is ticks, as in HyperCard
+                if consumeWord("seconds") || consumeWord("second") || consumeWord("secs") || consumeWord("sec") {
+                    unit = .seconds
+                } else if consumeWord("ticks") || consumeWord("tick") {
+                    unit = .ticks
+                }
+                kind = .duration(amount, unit)
+            }
+            try expectNewline()
+            return Stmt(kind: .wait(kind), line: line)
         case "convert":
             advance()
             let target = try parseConvertTarget(line: line)

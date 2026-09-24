@@ -162,6 +162,10 @@ final class DocumentScriptHost: HyperTalkHost {
         await onAsk(prompt, initialAnswer)
     }
 
+    func wait(seconds: Double) async {
+        try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+    }
+
     private func convertFormatter(_ formats: [ConvertFormat]) -> DateFormatter? {
         let formatter = DateFormatter()
         for format in formats {
