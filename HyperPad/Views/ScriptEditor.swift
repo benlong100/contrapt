@@ -13,9 +13,10 @@ import HyperTalk
 struct ScriptEditor: View {
     @Binding var script: String
     @State private var text = AttributedString()
+    @State private var selection = AttributedTextSelection()
 
     var body: some View {
-        TextEditor(text: $text)
+        TextEditor(text: $text, selection: $selection)
             .font(.system(.callout, design: .monospaced))
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
@@ -31,6 +32,18 @@ struct ScriptEditor: View {
             }
             .onChange(of: text) { _, newText in
                 let plain = String(newText.characters)
+
+                // A newly typed return re-indents the whole script from its
+                // block structure, HyperCard style.
+                if plain != script, newlineCount(of: plain) > newlineCount(of: script) {
+                    let reindented = HyperTalk.reindent(plain)
+                    if reindented != plain {
+                        script = reindented
+                        applyReindented(reindented, basedOn: newText)
+                        return
+                    }
+                }
+
                 if plain != script {
                     script = plain
                 }
@@ -39,6 +52,45 @@ struct ScriptEditor: View {
                     text = recolored
                 }
             }
+    }
+
+    private func newlineCount(of string: String) -> Int {
+        string.lazy.filter { $0 == "\n" }.count
+    }
+
+    /// Replaces the text with the re-indented script and puts the caret at
+    /// the end of its line's new leading whitespace.
+    private func applyReindented(_ reindented: String, basedOn current: AttributedString) {
+        // Which line is the caret on now?
+        let caretOffset: Int
+        switch selection.indices(in: current) {
+        case .insertionPoint(let index):
+            caretOffset = current.characters.distance(from: current.startIndex, to: index)
+        case .ranges(let ranges):
+            if let first = ranges.ranges.first {
+                caretOffset = current.characters.distance(from: current.startIndex, to: first.lowerBound)
+            } else {
+                caretOffset = 0
+            }
+        @unknown default:
+            caretOffset = 0
+        }
+        let plainBefore = String(current.characters)
+        let lineIndex = plainBefore.prefix(caretOffset).lazy.filter { $0 == "\n" }.count
+
+        // Same line in the re-indented text, after its leading spaces.
+        let lines = reindented.components(separatedBy: "\n")
+        var offset = 0
+        for line in lines.prefix(lineIndex) { offset += line.count + 1 }
+        if lineIndex < lines.count {
+            offset += lines[lineIndex].prefix(while: { $0 == " " }).count
+        }
+        offset = min(offset, reindented.count)
+
+        let updated = highlighted(AttributedString(reindented))
+        let caret = updated.characters.index(updated.startIndex, offsetBy: offset)
+        text = updated
+        selection = AttributedTextSelection(insertionPoint: caret)
     }
 
     private func highlighted(_ source: AttributedString) -> AttributedString {
