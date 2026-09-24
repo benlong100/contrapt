@@ -46,6 +46,8 @@ enum SyntaxScanner {
         "me", "target", "do", "value",
         "and", "or", "not", "is", "contains", "div", "mod",
         "the", "card", "field", "number", "length",
+        "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
+        "ln", "ln1", "log2", "annuity", "compound", "average", "avg", "sum",
         "date", "time", "seconds", "secs", "ticks", "long", "short", "abbreviated",
         "convert", "dateitems", "from",
         "char", "character", "chars", "characters", "word", "words",

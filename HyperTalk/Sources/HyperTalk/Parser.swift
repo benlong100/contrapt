@@ -745,6 +745,12 @@ struct Parser {
         throw ScriptError(line: line, message: "Expected an object here, like button \"OK\", field \"Name\", card 2, or this card.")
     }
 
+    /// Functions readable as `the <fn> of X`, not just `fn(X)`.
+    static let oneArgFunctions: Set<String> = [
+        "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
+        "ln", "ln1", "log2", "abs", "trunc", "round", "average", "sum",
+    ]
+
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,
         "word": .word, "words": .word,
@@ -856,6 +862,13 @@ struct Parser {
                 advance() // length
                 advance() // of
                 return .call("length", [try parsePrimary()])
+            }
+            // `the sqrt of X`, `the sin of X`, etc. — one-argument functions.
+            if let function = peekIdentifier(), Self.oneArgFunctions.contains(function),
+               peekIdentifier(1) == "of" {
+                advance() // function
+                advance() // of
+                return .call(function, [try parsePrimary()])
             }
             // `the number of words of X` → chunk count (but not
             // `the number of this card`, which is a card property).

@@ -694,6 +694,11 @@ final class Runtime {
         case "max":
             let xs = try numbers(arguments, line: line, name: "max")
             return Value.string(from: xs.max() ?? 0)
+        case "sum":
+            return Value.string(from: try statisticalValues(arguments, line: line).reduce(0, +))
+        case "average", "avg":
+            let xs = try statisticalValues(arguments, line: line)
+            return Value.string(from: xs.isEmpty ? 0 : xs.reduce(0, +) / Double(xs.count))
         case "offset":
             guard arguments.count == 2 else {
                 throw ScriptError(line: line, message: "offset expects two values, like offset(\"lo\", \"hello\").")
@@ -712,6 +717,37 @@ final class Runtime {
             let n = Int(try Value.number(from: arguments.first ?? "", line: line))
             guard let scalar = Unicode.Scalar(UInt32(max(0, n))) else { return "" }
             return String(Character(scalar))
+        case "sqrt":
+            return Value.string(from: try number(arguments, count: 1, line: line, name: "sqrt")[0].squareRoot())
+        case "sin":
+            return Value.string(from: sin(try number(arguments, count: 1, line: line, name: "sin")[0]))
+        case "cos":
+            return Value.string(from: cos(try number(arguments, count: 1, line: line, name: "cos")[0]))
+        case "tan":
+            return Value.string(from: tan(try number(arguments, count: 1, line: line, name: "tan")[0]))
+        case "atan":
+            return Value.string(from: atan(try number(arguments, count: 1, line: line, name: "atan")[0]))
+        case "exp":
+            return Value.string(from: exp(try number(arguments, count: 1, line: line, name: "exp")[0]))
+        case "exp1":
+            return Value.string(from: expm1(try number(arguments, count: 1, line: line, name: "exp1")[0]))
+        case "exp2":
+            return Value.string(from: exp2(try number(arguments, count: 1, line: line, name: "exp2")[0]))
+        case "ln":
+            return Value.string(from: log(try number(arguments, count: 1, line: line, name: "ln")[0]))
+        case "ln1":
+            return Value.string(from: log1p(try number(arguments, count: 1, line: line, name: "ln1")[0]))
+        case "log2":
+            return Value.string(from: log2(try number(arguments, count: 1, line: line, name: "log2")[0]))
+        case "annuity":
+            // (1 - (1 + rate)^-periods) / rate — present value of an annuity.
+            let a = try number(arguments, count: 2, line: line, name: "annuity")
+            let (rate, periods) = (a[0], a[1])
+            return Value.string(from: rate == 0 ? periods : (1 - pow(1 + rate, -periods)) / rate)
+        case "compound":
+            // (1 + rate)^periods — compound growth of a principal.
+            let a = try number(arguments, count: 2, line: line, name: "compound")
+            return Value.string(from: pow(1 + a[0], a[1]))
         case "value":
             guard arguments.count == 1 else {
                 throw ScriptError(line: line, message: "value expects one string, like value(\"2 + 3\").")
@@ -734,6 +770,19 @@ final class Runtime {
             throw ScriptError(line: line, message: "\(name) expects at least one number.")
         }
         return try arguments.map { try Value.number(from: $0, line: line) }
+    }
+
+    /// Flattens `sum`/`average` arguments into numbers, so both `sum(1,2,3)`
+    /// and `sum(field "list")` (one comma/space/line-separated value) work.
+    private func statisticalValues(_ arguments: [String], line: Int) throws -> [Double] {
+        var values: [Double] = []
+        for argument in arguments {
+            let tokens = argument.split(whereSeparator: { $0 == "," || $0 == " " || $0 == "\n" || $0 == "\t" })
+            for token in tokens {
+                values.append(try Value.number(from: String(token), line: line))
+            }
+        }
+        return values
     }
 
     private func number(_ arguments: [String], count: Int, line: Int, name: String) throws -> [Double] {
