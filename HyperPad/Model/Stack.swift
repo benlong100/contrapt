@@ -164,6 +164,95 @@ extension Part: Codable {
     }
 }
 
+// MARK: - Sanitizing untrusted stacks
+
+nonisolated extension Stack {
+    /// Repairs a decoded stack so that hostile or damaged files can't
+    /// break the app (D7): geometry is clamped to finite, sane bounds;
+    /// structural invariants (at least one background and one card, no
+    /// dangling background references, unique IDs) are restored; and
+    /// scripts are capped. Applied to every loaded document.
+    func sanitized() -> Stack {
+        var stack = self
+
+        // Card size: finite and within reason.
+        if !stack.cardSize.width.isFinite || !stack.cardSize.height.isFinite {
+            stack.cardSize = CardSize(width: 1024, height: 768)
+        }
+        stack.cardSize.width = min(max(stack.cardSize.width, 200), 8192)
+        stack.cardSize.height = min(max(stack.cardSize.height, 200), 8192)
+
+        // Structural invariants.
+        if stack.backgrounds.isEmpty {
+            stack.backgrounds = [Background(id: UUID(), name: "Background 1", script: "", parts: [])]
+        }
+        if stack.cards.isEmpty {
+            stack.cards = [Card(id: UUID(), name: "Card 1", backgroundID: stack.backgrounds[0].id, script: "", parts: [])]
+        }
+        // Unique IDs — duplicates make ForEach behavior undefined. When a
+        // background is re-identified, references to it are remapped.
+        var seen: Set<UUID> = []
+        func uniqued(_ id: UUID) -> UUID {
+            if seen.contains(id) { return UUID() }
+            seen.insert(id)
+            return id
+        }
+        stack.id = uniqued(stack.id)
+        var backgroundRemap: [UUID: UUID] = [:]
+        for index in stack.backgrounds.indices {
+            let original = stack.backgrounds[index].id
+            let unique = uniqued(original)
+            if unique != original { backgroundRemap[original] = unique }
+            stack.backgrounds[index].id = unique
+            stack.backgrounds[index].parts = sanitizedParts(stack.backgrounds[index].parts, cardSize: stack.cardSize, uniqued: uniqued)
+        }
+        for index in stack.cards.indices {
+            stack.cards[index].id = uniqued(stack.cards[index].id)
+            if let mapped = backgroundRemap[stack.cards[index].backgroundID] {
+                stack.cards[index].backgroundID = mapped
+            }
+            stack.cards[index].parts = sanitizedParts(stack.cards[index].parts, cardSize: stack.cardSize, uniqued: uniqued)
+            stack.cards[index].script = Self.cappedScript(stack.cards[index].script)
+        }
+
+        // Dangling background references — repaired after re-identification.
+        let backgroundIDs = Set(stack.backgrounds.map(\.id))
+        for index in stack.cards.indices where !backgroundIDs.contains(stack.cards[index].backgroundID) {
+            stack.cards[index].backgroundID = stack.backgrounds[0].id
+        }
+        stack.script = Self.cappedScript(stack.script)
+        for index in stack.backgrounds.indices {
+            stack.backgrounds[index].script = Self.cappedScript(stack.backgrounds[index].script)
+        }
+        return stack
+    }
+
+    private func sanitizedParts(_ parts: [Part], cardSize: CardSize, uniqued: (UUID) -> UUID) -> [Part] {
+        parts.map { part in
+            var part = part
+            part.id = uniqued(part.id)
+            part.script = Self.cappedScript(part.script)
+            var frame = part.frame
+            if !frame.x.isFinite { frame.x = 0 }
+            if !frame.y.isFinite { frame.y = 0 }
+            if !frame.width.isFinite { frame.width = 100 }
+            if !frame.height.isFinite { frame.height = 44 }
+            frame.width = min(max(frame.width, 16), cardSize.width)
+            frame.height = min(max(frame.height, 16), cardSize.height)
+            frame.x = min(max(frame.x, 0), cardSize.width - 16)
+            frame.y = min(max(frame.y, 0), cardSize.height - 16)
+            part.frame = frame
+            return part
+        }
+    }
+
+    /// A script longer than any plausible hand-written one is truncated
+    /// rather than fed to the tokenizer wholesale.
+    private static func cappedScript(_ script: String) -> String {
+        script.count > 1_000_000 ? String(script.prefix(1_000_000)) : script
+    }
+}
+
 // MARK: - Assets
 
 nonisolated extension Stack {

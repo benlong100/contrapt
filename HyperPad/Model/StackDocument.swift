@@ -53,7 +53,7 @@ nonisolated final class StackDocument: ReferenceFileDocument {
             guard let manifest = entries["stack.json"] else {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            stack = try Stack(fileData: manifest)
+            stack = try Stack(fileData: manifest).sanitized()
             var loaded: [String: Data] = [:]
             for (name, bytes) in entries where name.hasPrefix("assets/") {
                 loaded[String(name.dropFirst("assets/".count))] = bytes
@@ -61,7 +61,7 @@ nonisolated final class StackDocument: ReferenceFileDocument {
             assets = loaded
         } else {
             // Legacy development-era plain JSON.
-            stack = try Stack(fileData: data)
+            stack = try Stack(fileData: data).sanitized()
         }
     }
 

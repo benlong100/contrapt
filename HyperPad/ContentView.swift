@@ -13,6 +13,8 @@ import HyperTalk
 /// parts selectable, movable, and resizable, with a property inspector.
 struct ContentView: View {
     @ObservedObject var document: StackDocument
+    /// The document's location on disk, for sharing. Nil until first save.
+    var fileURL: URL?
     @Environment(\.undoManager) private var undoManager
 
     @State private var currentCardIndex = 0
@@ -156,6 +158,11 @@ struct ContentView: View {
                     .toggleStyle(.button)
                     Button("Inspector", systemImage: "slider.horizontal.3") {
                         isInspectorPresented = true
+                    }
+                }
+                if let fileURL {
+                    ShareLink(item: fileURL) {
+                        Label("Share Stack", systemImage: "square.and.arrow.up")
                     }
                 }
                 Button("Message Box", systemImage: "text.and.command.macwindow") {

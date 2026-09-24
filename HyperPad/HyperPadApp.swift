@@ -11,7 +11,7 @@ import SwiftUI
 struct HyperPadApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: { StackDocument() }) { file in
-            ContentView(document: file.document)
+            ContentView(document: file.document, fileURL: file.fileURL)
         }
     }
 }
