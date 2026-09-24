@@ -177,6 +177,12 @@ final class DocumentScriptHost: HyperTalkHost {
         case "autohilite", "autohighlight":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.autoHilite ? "true" : "false"
+        case "style":
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.style.rawValue
+        case "hilite", "highlight":
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.hilite ? "true" : "false"
         case "text":
             switch part.kind {
             case .field(let properties): return properties.text
@@ -214,6 +220,17 @@ final class DocumentScriptHost: HyperTalkHost {
         case "autohilite", "autohighlight":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.autoHilite = try boolean(value, for: property)
+            part.kind = .button(properties)
+        case "style":
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            guard let style = ButtonStyleKind.parse(value) else {
+                throw HostError("Unknown button style \"\(value)\". Try roundRect, rectangle, shadow, opaque, transparent, checkbox, or radio.")
+            }
+            properties.style = style
+            part.kind = .button(properties)
+        case "hilite", "highlight":
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            properties.hilite = try boolean(value, for: property)
             part.kind = .button(properties)
         case "text":
             switch part.kind {

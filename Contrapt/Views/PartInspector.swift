@@ -57,11 +57,20 @@ struct PartInspector: View {
     @ViewBuilder
     private var kindSection: some View {
         switch part.kind {
-        case .button:
+        case .button(let properties):
             Section("Button") {
                 TextField("Title", text: buttonTitle)
+                Picker("Style", selection: buttonStyle) {
+                    ForEach(ButtonStyleKind.allCases, id: \.self) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
                 Toggle("Show Name", isOn: buttonShowName)
-                Toggle("Auto Hilite", isOn: buttonAutoHilite)
+                if properties.style.isToggle {
+                    Toggle("Hilite (on)", isOn: buttonHilite)
+                } else {
+                    Toggle("Auto Hilite", isOn: buttonAutoHilite)
+                }
                 Button("Link To…", systemImage: "link") {
                     onLinkTo()
                 }
@@ -103,6 +112,34 @@ struct PartInspector: View {
             set: {
                 guard case .button(var properties) = part.kind else { return }
                 properties.title = $0
+                part.kind = .button(properties)
+            }
+        )
+    }
+
+    private var buttonStyle: Binding<ButtonStyleKind> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return .roundRect }
+                return properties.style
+            },
+            set: {
+                guard case .button(var properties) = part.kind else { return }
+                properties.style = $0
+                part.kind = .button(properties)
+            }
+        )
+    }
+
+    private var buttonHilite: Binding<Bool> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return false }
+                return properties.hilite
+            },
+            set: {
+                guard case .button(var properties) = part.kind else { return }
+                properties.hilite = $0
                 part.kind = .button(properties)
             }
         )

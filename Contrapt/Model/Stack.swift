@@ -199,29 +199,75 @@ nonisolated enum PartKind: Hashable {
     }
 }
 
+/// HyperCard's button styles.
+nonisolated enum ButtonStyleKind: String, Codable, CaseIterable, Hashable {
+    case roundRect
+    case rectangle
+    case shadow
+    case opaque
+    case transparent
+    case checkbox
+    case radio
+
+    var label: String {
+        switch self {
+        case .roundRect: "Round Rect"
+        case .rectangle: "Rectangle"
+        case .shadow: "Shadow"
+        case .opaque: "Opaque"
+        case .transparent: "Transparent"
+        case .checkbox: "Check Box"
+        case .radio: "Radio Button"
+        }
+    }
+
+    /// Check box and radio carry a persistent on/off (hilite) state and
+    /// toggle it when tapped, rather than highlighting momentarily.
+    var isToggle: Bool { self == .checkbox || self == .radio }
+
+    /// Lenient parse for scripts: accepts the raw case, the display label,
+    /// with or without spaces ("check box", "checkBox", "roundRect").
+    static func parse(_ text: String) -> ButtonStyleKind? {
+        let normalized = text.lowercased().replacingOccurrences(of: " ", with: "")
+        return allCases.first {
+            $0.rawValue.lowercased() == normalized
+                || $0.label.lowercased().replacingOccurrences(of: " ", with: "") == normalized
+        }
+    }
+}
+
 nonisolated struct ButtonPart: Hashable {
     var title: String
     /// Whether the title draws (off = a nameless button / hot-zone).
     var showName: Bool
     /// Whether the button highlights while pressed.
     var autoHilite: Bool
+    var style: ButtonStyleKind
+    /// The persistent on/off state — the check/selection for check-box and
+    /// radio styles; scriptable as `the hilite of button`.
+    var hilite: Bool
 
-    init(title: String, showName: Bool = true, autoHilite: Bool = true) {
+    init(title: String, showName: Bool = true, autoHilite: Bool = true,
+         style: ButtonStyleKind = .roundRect, hilite: Bool = false) {
         self.title = title
         self.showName = showName
         self.autoHilite = autoHilite
+        self.style = style
+        self.hilite = hilite
     }
 }
 
-/// Manual Codable so older manifests without the new flags still decode.
+/// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         title = try container.decode(String.self, forKey: .title)
         showName = try container.decodeIfPresent(Bool.self, forKey: .showName) ?? true
         autoHilite = try container.decodeIfPresent(Bool.self, forKey: .autoHilite) ?? true
+        style = try container.decodeIfPresent(ButtonStyleKind.self, forKey: .style) ?? .roundRect
+        hilite = try container.decodeIfPresent(Bool.self, forKey: .hilite) ?? false
     }
 }
 

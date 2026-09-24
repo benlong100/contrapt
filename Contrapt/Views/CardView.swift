@@ -350,25 +350,52 @@ private struct EditablePart: View {
     }
 }
 
-/// A HyperCard-style button: a rounded, tinted pill that inverts to the
-/// accent color while pressed — but only when Auto Hilite is on.
+/// Renders a button in one of HyperCard's styles. Rectangular styles
+/// invert to the accent color while pressed when Auto Hilite is on;
+/// transparent has no chrome (a hot-zone); check-box and radio show their
+/// glyph and don't momentary-highlight.
 struct CardButtonStyle: ButtonStyle {
+    var style: ButtonStyleKind
     var autoHilite: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        let lit = autoHilite && configuration.isPressed
+        let lit = autoHilite && configuration.isPressed && !style.isToggle
         return configuration.label
             .font(.body)
             .foregroundStyle(lit ? Color.white : Color.accentColor)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(lit ? Color.accentColor : Color.accentColor.opacity(0.12))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
-            )
+            .padding(.horizontal, style == .transparent ? 0 : 8)
+            .background(background(lit: lit))
+            .overlay(border)
+            .compositingGroup()
+            .shadow(color: style == .shadow ? .black.opacity(0.45) : .clear, radius: 0, x: 3, y: 3)
+            .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func background(lit: Bool) -> some View {
+        switch style {
+        case .transparent, .checkbox, .radio:
+            if lit { shape.fill(Color.accentColor.opacity(0.25)) } else { Color.clear }
+        case .roundRect:
+            shape.fill(lit ? Color.accentColor : Color.accentColor.opacity(0.12))
+        case .opaque, .rectangle, .shadow:
+            shape.fill(lit ? Color.accentColor : Color.cardSurface)
+        }
+    }
+
+    @ViewBuilder
+    private var border: some View {
+        switch style {
+        case .transparent, .opaque, .checkbox, .radio:
+            EmptyView()
+        case .roundRect, .rectangle, .shadow:
+            shape.stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
+        }
+    }
+
+    private var shape: some InsettableShape {
+        RoundedRectangle(cornerRadius: style == .roundRect ? 8 : 0)
     }
 }
 
@@ -398,14 +425,14 @@ struct PartView: View {
         switch part.kind {
         case .button(let properties):
             // The Button's action is HyperCard's mouseUp: it fires on
-            // release inside. The simultaneous gesture adds mouseDown.
+            // release inside. Toggle styles flip their hilite as well.
             Button {
+                if properties.style.isToggle { toggleHilite() }
                 onTap()
             } label: {
-                Text(properties.showName ? properties.title : "")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                buttonLabel(properties)
             }
-            .buttonStyle(CardButtonStyle(autoHilite: properties.autoHilite))
+            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite))
             .simultaneousGesture(pressDetector)
         case .field(let properties):
             if properties.isMultiline {
@@ -456,6 +483,39 @@ struct PartView: View {
             .contentShape(Rectangle())
             .gesture(labelPressGesture)
         }
+    }
+
+    /// The button's label: check-box/radio show a glyph before the name;
+    /// other styles show the (optional) centered title.
+    @ViewBuilder
+    private func buttonLabel(_ properties: ButtonPart) -> some View {
+        switch properties.style {
+        case .checkbox, .radio:
+            HStack(spacing: 8) {
+                Image(systemName: toggleGlyph(properties))
+                if properties.showName {
+                    Text(properties.title)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        default:
+            Text(properties.showName ? properties.title : "")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func toggleGlyph(_ properties: ButtonPart) -> String {
+        switch properties.style {
+        case .radio: properties.hilite ? "largecircle.fill.circle" : "circle"
+        default: properties.hilite ? "checkmark.square.fill" : "square"
+        }
+    }
+
+    private func toggleHilite() {
+        guard case .button(var properties) = part.kind else { return }
+        properties.hilite.toggle()
+        part.kind = .button(properties)
     }
 
     private var pressDetector: some Gesture {
@@ -515,4 +575,28 @@ struct PartView: View {
     )
     .padding()
     .onAppear { selection = stack.cards[0].parts[2].id }
+}
+
+#Preview("Button Styles") {
+    @Previewable @State var selection: UUID?
+    var stack: Stack = {
+        var s = Stack.makeNew()
+        let styles: [(ButtonStyleKind, Bool)] = [
+            (.roundRect, false), (.rectangle, false), (.shadow, false),
+            (.opaque, false), (.transparent, false), (.checkbox, true), (.radio, true),
+        ]
+        var parts: [Part] = []
+        for (i, entry) in styles.enumerated() {
+            parts.append(Part(
+                id: UUID(), name: entry.0.label,
+                frame: PartFrame(x: 64, y: Double(60 + i * 90), width: 300, height: 60),
+                script: "",
+                kind: .button(ButtonPart(title: entry.0.label, style: entry.0, hilite: entry.1))
+            ))
+        }
+        s.cards[0].parts = parts
+        return s.sanitized()
+    }()
+    CardView(stack: .constant(stack), cardIndex: 0, selectedPartID: $selection)
+        .padding()
 }
