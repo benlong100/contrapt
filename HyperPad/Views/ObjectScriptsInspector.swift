@@ -20,6 +20,7 @@ struct ObjectScriptsInspector: View {
     }
 
     @State private var scope: Scope = .card
+    @State private var isEditorExpanded = false
 
     var body: some View {
         Form {
@@ -33,8 +34,11 @@ struct ObjectScriptsInspector: View {
             } footer: {
                 Text("These scripts receive messages that parts don't handle, and system messages like openCard and openStack.")
             }
-            ScriptFormSection(title: scriptTitle, script: scriptBinding)
+            ScriptFormSection(title: scriptTitle, script: scriptBinding, onExpand: { isEditorExpanded = true })
                 .id(scope)
+        }
+        .fullScreenCover(isPresented: $isEditorExpanded) {
+            LargeScriptEditor(title: scriptTitle, script: scriptBinding)
         }
     }
 

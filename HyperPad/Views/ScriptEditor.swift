@@ -178,15 +178,16 @@ struct ScriptCheckResult: Equatable {
 }
 
 /// A form section holding a script editor plus Check Script and an expand
-/// button opening the full-screen editor; shared by the part inspector and
-/// the object-scripts inspector.
+/// button; shared by the part inspector and the object-scripts inspector.
+/// The full-screen presentation itself is owned by the enclosing Form —
+/// presentations anchored inside a Form row get torn down when the row
+/// rebuilds (e.g. as the keyboard dismisses), closing the cover instantly.
 struct ScriptFormSection: View {
     let title: String
-    var editorTitle: String? = nil
     @Binding var script: String
+    var onExpand: () -> Void
 
     @State private var checkResult: ScriptCheckResult?
-    @State private var isExpanded = false
 
     var body: some View {
         Section(title) {
@@ -197,7 +198,7 @@ struct ScriptFormSection: View {
                 }
                 Spacer()
                 Button("Expand Editor", systemImage: "arrow.up.left.and.arrow.down.right") {
-                    isExpanded = true
+                    onExpand()
                 }
                 .labelStyle(.iconOnly)
             }
@@ -208,9 +209,6 @@ struct ScriptFormSection: View {
         }
         .onChange(of: script) {
             checkResult = nil
-        }
-        .fullScreenCover(isPresented: $isExpanded) {
-            LargeScriptEditor(title: editorTitle ?? title, script: $script)
         }
     }
 }

@@ -12,6 +12,8 @@ struct PartInspector: View {
     @Binding var part: Part
     var onDelete: () -> Void
 
+    @State private var isEditorExpanded = false
+
     var body: some View {
         Form {
             Section("Part") {
@@ -25,13 +27,16 @@ struct PartInspector: View {
                 geometryRow("Width", value: $part.frame.width)
                 geometryRow("Height", value: $part.frame.height)
             }
-            ScriptFormSection(title: "Script", editorTitle: "Script of \(part.name)", script: $part.script)
+            ScriptFormSection(title: "Script", script: $part.script, onExpand: { isEditorExpanded = true })
                 .id(part.id)
             Section {
                 Button("Delete Part", role: .destructive) {
                     onDelete()
                 }
             }
+        }
+        .fullScreenCover(isPresented: $isEditorExpanded) {
+            LargeScriptEditor(title: "Script of \(part.name)", script: $part.script)
         }
     }
 
