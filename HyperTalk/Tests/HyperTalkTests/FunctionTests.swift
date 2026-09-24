@@ -9,9 +9,9 @@ import Testing
 
 // MARK: - Globals
 
-@Test func globalPersistsAcrossHandlerCalls() throws {
+@Test func globalPersistsAcrossHandlerCalls() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       global tally
       put 0 into tally
@@ -28,7 +28,7 @@ import Testing
     #expect(host.fields["out"] == "2")
 }
 
-@Test func globalPersistsAcrossSeparateRuns() throws {
+@Test func globalPersistsAcrossSeparateRuns() async throws {
     let host = MockHost(fields: ["out": ""])
     let script = """
     on mouseUp
@@ -37,15 +37,15 @@ import Testing
       put counter into field "out"
     end mouseUp
     """
-    try run(script, host: host)
+    try await run(script, host: host)
     #expect(host.fields["out"] == "1")
-    try run(script, host: host)
+    try await run(script, host: host)
     #expect(host.fields["out"] == "2")
 }
 
-@Test func nonGlobalsStayLocal() throws {
+@Test func nonGlobalsStayLocal() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put "mine" into x
       helper
@@ -61,9 +61,9 @@ import Testing
 
 // MARK: - Functions
 
-@Test func userFunctionReturnsValue() throws {
+@Test func userFunctionReturnsValue() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put double(21) into field "out"
     end mouseUp
@@ -75,9 +75,9 @@ import Testing
     #expect(host.fields["out"] == "42")
 }
 
-@Test func functionWithMultipleArgs() throws {
+@Test func functionWithMultipleArgs() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put add(3, 4) into field "out"
     end mouseUp
@@ -89,9 +89,9 @@ import Testing
     #expect(host.fields["out"] == "7")
 }
 
-@Test func functionsCanCallFunctions() throws {
+@Test func functionsCanCallFunctions() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put quad(5) into field "out"
     end mouseUp
@@ -107,9 +107,9 @@ import Testing
     #expect(host.fields["out"] == "20")
 }
 
-@Test func functionWithNoReturnYieldsEmpty() throws {
+@Test func functionWithNoReturnYieldsEmpty() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       if silent() is empty then put "empty" into field "out"
     end mouseUp
@@ -121,9 +121,9 @@ import Testing
     #expect(host.fields["out"] == "empty")
 }
 
-@Test func unknownFunctionIsAFriendlyError() throws {
+@Test func unknownFunctionIsAFriendlyError() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           put mystery(1) into x
         end mouseUp
@@ -136,9 +136,9 @@ import Testing
 
 // MARK: - return and the result
 
-@Test func theResultHoldsAHandlersReturn() throws {
+@Test func theResultHoldsAHandlersReturn() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       validate
       put the result into field "out"
@@ -151,9 +151,9 @@ import Testing
     #expect(host.fields["out"] == "ok")
 }
 
-@Test func returnExitsTheHandlerEarly() throws {
+@Test func returnExitsTheHandlerEarly() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put grade(95) into field "out"
     end mouseUp
@@ -169,9 +169,9 @@ import Testing
 
 // MARK: - Built-in functions
 
-@Test func lengthCountsCharacters() throws {
+@Test func lengthCountsCharacters() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put length("HyperTalk") into field "out"
     end mouseUp
@@ -179,10 +179,10 @@ import Testing
     #expect(host.fields["out"] == "9")
 }
 
-@Test func randomIsInRange() throws {
+@Test func randomIsInRange() async throws {
     let host = MockHost(fields: ["out": ""])
     for _ in 0..<50 {
-        try run("""
+        try await run("""
         on mouseUp
           put random(6) into field "out"
         end mouseUp
@@ -194,9 +194,9 @@ import Testing
 
 // MARK: - Counts and more built-ins
 
-@Test func numberOfLinesOfAField() throws {
+@Test func numberOfLinesOfAField() async throws {
     let host = MockHost(fields: ["out": "", "src": "one\ntwo\nthree"])
-    try run("""
+    try await run("""
     on mouseUp
       put the number of lines of field "src" into field "out"
     end mouseUp
@@ -204,9 +204,9 @@ import Testing
     #expect(host.fields["out"] == "3")
 }
 
-@Test func numberOfWordsAndItems() throws {
+@Test func numberOfWordsAndItems() async throws {
     let host = MockHost(fields: ["a": "", "b": "", "c": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put the number of words of "the quick brown fox" into field "a"
       put the number of items of "a,b,c" into field "b"
@@ -218,11 +218,11 @@ import Testing
     #expect(host.fields["c"] == "5")
 }
 
-@Test func theNumberOfThisCardStillWorks() throws {
+@Test func theNumberOfThisCardStillWorks() async throws {
     // Ensure the count parse doesn't shadow the card `number` property.
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.number"] = "3"
-    try run("""
+    try await run("""
     on mouseUp
       put the number of this card into field "out"
     end mouseUp
@@ -230,9 +230,9 @@ import Testing
     #expect(host.fields["out"] == "3")
 }
 
-@Test func theLengthOf() throws {
+@Test func theLengthOf() async throws {
     let host = MockHost(fields: ["out": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put the length of "HyperTalk" into field "out"
     end mouseUp
@@ -240,9 +240,9 @@ import Testing
     #expect(host.fields["out"] == "9")
 }
 
-@Test func mathBuiltins() throws {
+@Test func mathBuiltins() async throws {
     let host = MockHost(fields: ["a": "", "b": "", "c": "", "d": "", "e": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put round(2.6) into field "a"
       put trunc(2.9) into field "b"
@@ -258,9 +258,9 @@ import Testing
     #expect(host.fields["e"] == "3")
 }
 
-@Test func offsetAndCharConversions() throws {
+@Test func offsetAndCharConversions() async throws {
     let host = MockHost(fields: ["a": "", "b": "", "c": "", "d": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put offset("brown", "the quick brown fox") into field "a"
       put offset("zzz", "hello") into field "b"
@@ -276,9 +276,9 @@ import Testing
 
 // MARK: - Date and time
 
-@Test func dateAndTimeForms() throws {
+@Test func dateAndTimeForms() async throws {
     let host = MockHost(fields: ["a": "", "b": "", "c": "", "d": "", "e": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put the date into field "a"
       put the long date into field "b"
@@ -294,9 +294,9 @@ import Testing
     #expect(host.fields["e"] == "3:45:07 PM")
 }
 
-@Test func secondsAndTicks() throws {
+@Test func secondsAndTicks() async throws {
     let host = MockHost(fields: ["a": "", "b": ""])
-    try run("""
+    try await run("""
     on mouseUp
       put the seconds into field "a"
       put the ticks into field "b"

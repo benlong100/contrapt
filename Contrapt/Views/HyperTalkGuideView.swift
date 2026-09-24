@@ -44,6 +44,14 @@ struct HyperTalkGuideView: View {
                     put "shown in the Message Box"
                     """)
 
+                    section("answer and ask", body: "`answer` shows a message with up to three buttons; the clicked button's label lands in `it`. `ask` shows a text prompt with an optional default; the entered text lands in `it` (empty if the user cancels, with `the result` set to \"Cancel\").", example: """
+                    answer "Save changes?" with "Yes" or "No" or "Cancel"
+                    if it is "Yes" then put "saving"
+
+                    ask "What is your name?" with "friend"
+                    put "Hello, " & it into field "Greeting"
+                    """)
+
                     section("go", body: "Moves between cards, by position, number, or name.", example: """
                     go to next card
                     go to previous card

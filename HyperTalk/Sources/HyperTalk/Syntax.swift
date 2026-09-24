@@ -43,7 +43,7 @@ enum SyntaxScanner {
         "if", "then", "else",
         "repeat", "forever", "while", "until", "with", "times", "down", "to", "for",
         "go", "put", "into", "after", "before", "beep", "get", "set", "this", "of",
-        "me", "target", "do", "value",
+        "me", "target", "do", "value", "answer", "ask",
         "and", "or", "not", "is", "in", "contains", "div", "mod",
         "integer", "logical", "boolean", "point", "rect", "rectangle",
         "the", "card", "field", "number", "length",

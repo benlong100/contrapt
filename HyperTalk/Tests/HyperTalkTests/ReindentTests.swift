@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import HyperTalk
 
-@Test func reindentsNestedBlocks() {
+@Test func reindentsNestedBlocks() async {
     let messy = """
     on mouseUp
     repeat with i = 1 to 10
@@ -33,7 +33,7 @@ import Testing
     #expect(HyperTalk.reindent(messy) == expected)
 }
 
-@Test func elseIfChainsAlignWithTheirIf() {
+@Test func elseIfChainsAlignWithTheirIf() async {
     let messy = """
     on mouseUp
     if x = 1 then
@@ -59,7 +59,7 @@ import Testing
     #expect(HyperTalk.reindent(messy) == expected)
 }
 
-@Test func singleLineIfDoesNotIndent() {
+@Test func singleLineIfDoesNotIndent() async {
     let source = """
     on mouseUp
       if x = 1 then put "one"
@@ -69,7 +69,7 @@ import Testing
     #expect(HyperTalk.reindent(source) == source)
 }
 
-@Test func elseAfterSingleLineIfStaysPut() {
+@Test func elseAfterSingleLineIfStaysPut() async {
     let source = """
     on mouseUp
       if x = 1 then put "one"
@@ -80,7 +80,7 @@ import Testing
     #expect(HyperTalk.reindent(source) == source)
 }
 
-@Test func keywordsInsideStringsAndCommentsAreIgnored() {
+@Test func keywordsInsideStringsAndCommentsAreIgnored() async {
     let source = """
     on mouseUp
       put "if then repeat" into x -- repeat forever
@@ -90,7 +90,7 @@ import Testing
     #expect(HyperTalk.reindent(source) == source)
 }
 
-@Test func multipleHandlersEachStartAtZero() {
+@Test func multipleHandlersEachStartAtZero() async {
     let messy = """
     on mouseUp
     go to next card
@@ -112,7 +112,7 @@ import Testing
     #expect(HyperTalk.reindent(messy) == expected)
 }
 
-@Test func unbalancedEndsClampAtZero() {
+@Test func unbalancedEndsClampAtZero() async {
     let source = """
     end repeat
     end if
@@ -123,26 +123,26 @@ import Testing
     #expect(result.contains("\nput \"still here\""))
 }
 
-@Test func incompleteCodeIsHandledGently() {
+@Test func incompleteCodeIsHandledGently() async {
     // Mid-typing states must not crash or misbehave badly.
     _ = HyperTalk.reindent("on mouseUp\n  if x = 1 then\n    put \"unterminated")
     _ = HyperTalk.reindent("repeat")
     _ = HyperTalk.reindent("")
 }
 
-@Test func caretLineGetsBlockDepthIndentationWhenRequested() {
+@Test func caretLineGetsBlockDepthIndentationWhenRequested() async {
     let source = "on mouseUp\n  put 1\n\nend mouseUp"
     let result = HyperTalk.reindent(source, indentingEmptyLine: 2)
     #expect(result == "on mouseUp\n  put 1\n  \nend mouseUp")
 }
 
-@Test func caretLineInsideNestedBlocksIndentsDeeper() {
+@Test func caretLineInsideNestedBlocksIndentsDeeper() async {
     let source = "on mouseUp\n  repeat 3 times\n\n  end repeat\nend mouseUp"
     let result = HyperTalk.reindent(source, indentingEmptyLine: 2)
     #expect(result == "on mouseUp\n  repeat 3 times\n    \n  end repeat\nend mouseUp")
 }
 
-@Test func otherBlankLinesStayEmpty() {
+@Test func otherBlankLinesStayEmpty() async {
     let source = "on mouseUp\n\n  put 1\n\nend mouseUp"
     let result = HyperTalk.reindent(source, indentingEmptyLine: 3)
     #expect(result == "on mouseUp\n\n  put 1\n  \nend mouseUp")

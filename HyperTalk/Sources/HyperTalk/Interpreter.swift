@@ -31,8 +31,8 @@ public enum HyperTalk {
         in scriptSource: String,
         host: HyperTalkHost,
         maxSteps: Int = 100_000
-    ) throws -> Bool {
-        try send(handlerName, along: [ScriptLayer(name: "script", source: scriptSource)], host: host, maxSteps: maxSteps)
+    ) async throws -> Bool {
+        try await send(handlerName, along: [ScriptLayer(name: "script", source: scriptSource)], host: host, maxSteps: maxSteps)
     }
 
     /// Sends a message along the HyperCard message path: the first layer
@@ -49,10 +49,10 @@ public enum HyperTalk {
         along path: [ScriptLayer],
         host: HyperTalkHost,
         maxSteps: Int = 100_000
-    ) throws -> Bool {
+    ) async throws -> Bool {
         guard !path.isEmpty else { return false }
         let runtime = Runtime(host: host, path: path, stepsRemaining: maxSteps)
-        return try runtime.send(message, arguments: arguments, fromLayer: 0, line: 0)
+        return try await runtime.send(message, arguments: arguments, fromLayer: 0, line: 0)
     }
 
     /// Executes one line typed into the message box, in the context of the
@@ -66,12 +66,12 @@ public enum HyperTalk {
         along path: [ScriptLayer],
         host: HyperTalkHost,
         maxSteps: Int = 100_000
-    ) throws -> String? {
+    ) async throws -> String? {
         let effectivePath = path.isEmpty ? [ScriptLayer(name: "message box", source: "")] : path
         let runtime = Runtime(host: host, path: effectivePath, stepsRemaining: maxSteps)
         do {
             let statements = try Parser.parseLooseStatements(line)
-            try runtime.runLoose(statements)
+            try await runtime.runLoose(statements)
             return nil
         } catch let statementError as ScriptError {
             // If it reads as a bare expression, evaluate it — preferring the
@@ -79,7 +79,7 @@ public enum HyperTalk {
             guard let expression = try? Parser.parseSoleExpression(line) else {
                 throw statementError
             }
-            return try runtime.evaluateLoose(expression)
+            return try await runtime.evaluateLoose(expression)
         }
     }
 }
@@ -185,7 +185,7 @@ final class Runtime {
     /// Walks the path from `fromLayer` looking for a handler. Scripts parse
     /// lazily — a syntax error in the stack script can't break a button
     /// whose own script handles the message.
-    func send(_ message: String, arguments: [String], fromLayer: Int, line: Int) throws -> Bool {
+    func send(_ message: String, arguments: [String], fromLayer: Int, line: Int) async throws -> Bool {
         let key = message.lowercased()
         for index in fromLayer..<path.count {
             let script: ParsedScript
@@ -207,7 +207,7 @@ final class Runtime {
             let savedReturn = pendingReturn
             pendingReturn = nil
             do {
-                _ = try execute(handler.body)
+                _ = try await execute(handler.body)
             } catch let error as ScriptError {
                 throw annotated(error, layerIndex: index)
             }
@@ -220,7 +220,7 @@ final class Runtime {
 
     /// Calls a user function found along the path from the current layer,
     /// returning its `return` value ("" if it returns nothing).
-    func callFunction(_ name: String, arguments: [String], line: Int) throws -> String {
+    func callFunction(_ name: String, arguments: [String], line: Int) async throws -> String {
         let key = name.lowercased()
         for index in currentLayerIndex..<path.count {
             let script: ParsedScript
@@ -242,7 +242,7 @@ final class Runtime {
             let savedReturn = pendingReturn
             pendingReturn = nil
             do {
-                _ = try execute(function.body)
+                _ = try await execute(function.body)
             } catch let error as ScriptError {
                 throw annotated(error, layerIndex: index)
             }
@@ -255,17 +255,17 @@ final class Runtime {
 
     /// Runs loose statements (a message box line) in a fresh frame rooted
     /// at the first layer, so message sends search the whole path.
-    func runLoose(_ statements: [Stmt]) throws {
+    func runLoose(_ statements: [Stmt]) async throws {
         frames.append(Frame(variables: Self.constants, layerIndex: 0))
         defer { frames.removeLast() }
-        _ = try execute(statements)
+        _ = try await execute(statements)
     }
 
     /// Evaluates a bare expression (a message box line) in a fresh frame.
-    func evaluateLoose(_ expression: Expr) throws -> String {
+    func evaluateLoose(_ expression: Expr) async throws -> String {
         frames.append(Frame(variables: Self.constants, layerIndex: 0))
         defer { frames.removeLast() }
-        return try evaluate(expression, line: 1)
+        return try await evaluate(expression, line: 1)
     }
 
     private func parsedScript(at index: Int) throws -> ParsedScript {
@@ -307,32 +307,32 @@ final class Runtime {
 
     // MARK: Statements
 
-    func execute(_ statements: [Stmt]) throws -> Flow {
+    func execute(_ statements: [Stmt]) async throws -> Flow {
         for statement in statements {
-            let flow = try execute(statement)
+            let flow = try await execute(statement)
             if case .normal = flow { continue }
             return flow
         }
         return .normal
     }
 
-    private func execute(_ statement: Stmt) throws -> Flow {
+    private func execute(_ statement: Stmt) async throws -> Flow {
         try spendStep(line: statement.line)
         switch statement.kind {
         case .put(let expression, let mode, let container):
-            try executePut(expression, mode, container, line: statement.line)
+            try await executePut(expression, mode, container, line: statement.line)
             return .normal
 
         case .go(let target):
-            try executeGo(target, line: statement.line)
+            try await executeGo(target, line: statement.line)
             return .normal
 
         case .ifThen(let condition, let thenBody, let elseBody):
-            let isTrue = try Value.bool(from: try evaluate(condition, line: statement.line), line: statement.line)
-            return try execute(isTrue ? thenBody : elseBody)
+            let isTrue = try Value.bool(from: try await evaluate(condition, line: statement.line), line: statement.line)
+            return try await execute(isTrue ? thenBody : elseBody)
 
         case .repeatLoop(let kind, let body):
-            return try executeRepeat(kind, body, line: statement.line)
+            return try await executeRepeat(kind, body, line: statement.line)
 
         case .exitRepeat:
             return .exitRepeat
@@ -348,13 +348,17 @@ final class Runtime {
             return .normal
 
         case .returnStatement(let expression):
-            pendingReturn = try expression.map { try evaluate($0, line: statement.line) } ?? ""
+            if let expression {
+                pendingReturn = try await evaluate(expression, line: statement.line)
+            } else {
+                pendingReturn = ""
+            }
             return .exitHandler
 
         case .beep(let countExpression):
             var count = 1
             if let countExpression {
-                count = Int(try Value.number(from: try evaluate(countExpression, line: statement.line), line: statement.line))
+                count = Int(try Value.number(from: try await evaluate(countExpression, line: statement.line), line: statement.line))
             }
             for _ in 0..<max(0, min(count, 50)) {
                 host.beep()
@@ -363,12 +367,12 @@ final class Runtime {
 
         case .get(let expression):
             // `get` evaluates into the special variable `it`.
-            setVariable("it", to: try evaluate(expression, line: statement.line))
+            setVariable("it", to: try await evaluate(expression, line: statement.line))
             return .normal
 
         case .set(let property, let objectExpression, let valueExpression):
-            let object = try resolveObject(objectExpression, line: statement.line)
-            let value = try evaluate(valueExpression, line: statement.line)
+            let object = try await resolveObject(objectExpression, line: statement.line)
+            let value = try await evaluate(valueExpression, line: statement.line)
             try hostCall(line: statement.line) { try host.setProperty(property, of: object, to: value) }
             return .normal
 
@@ -376,21 +380,21 @@ final class Runtime {
             let source: String
             switch target {
             case .container(let container):
-                source = try containerValue(container, line: statement.line)
+                source = try await containerValue(container, line: statement.line)
             case .expression(let expression):
-                source = try evaluate(expression, line: statement.line)
+                source = try await evaluate(expression, line: statement.line)
             }
             let converted = try hostCall(line: statement.line) { try host.convert(source, from: from, to: to) }
             switch target {
             case .container(let container):
-                try setContainer(container, to: converted, line: statement.line)
+                try await setContainer(container, to: converted, line: statement.line)
             case .expression:
                 setVariable("it", to: converted)
             }
             return .normal
 
         case .doCommand(let expression):
-            let source = try evaluate(expression, line: statement.line)
+            let source = try await evaluate(expression, line: statement.line)
             let statements: [Stmt]
             do {
                 statements = try Parser.parseLooseStatements(source)
@@ -398,10 +402,34 @@ final class Runtime {
                 throw ScriptError(line: statement.line, message: "Can't do \"\(source)\": \(error.message)")
             }
             // Runs in the current frame, so `do` sees and sets local variables.
-            return try execute(statements)
+            return try await execute(statements)
+
+        case .answer(let promptExpression, let buttonExpressions):
+            let prompt = try await evaluate(promptExpression, line: statement.line)
+            var buttons: [String] = []
+            for expression in buttonExpressions {
+                buttons.append(try await evaluate(expression, line: statement.line))
+            }
+            if buttons.isEmpty { buttons = ["OK"] }
+            setVariable("it", to: await host.answer(prompt, buttons: buttons))
+            return .normal
+
+        case .ask(let promptExpression, let initialExpression):
+            let prompt = try await evaluate(promptExpression, line: statement.line)
+            let initial: String
+            if let initialExpression {
+                initial = try await evaluate(initialExpression, line: statement.line)
+            } else {
+                initial = ""
+            }
+            let answer = await host.ask(prompt, initialAnswer: initial)
+            // Cancel yields empty and sets the result to "Cancel", as in HyperCard.
+            setVariable("it", to: answer ?? "")
+            lastResult = answer == nil ? "Cancel" : ""
+            return .normal
 
         case .setGlobalProperty(let property, let valueExpression):
-            let value = try evaluate(valueExpression, line: statement.line)
+            let value = try await evaluate(valueExpression, line: statement.line)
             switch property {
             case "itemdelimiter":
                 // HyperCard uses only the first character of the delimiter.
@@ -412,8 +440,11 @@ final class Runtime {
             return .normal
 
         case .send(let name, let argumentExpressions):
-            let arguments = try argumentExpressions.map { try evaluate($0, line: statement.line) }
-            let handled = try send(name, arguments: arguments, fromLayer: currentLayerIndex, line: statement.line)
+            var arguments: [String] = []
+            for expression in argumentExpressions {
+                arguments.append(try await evaluate(expression, line: statement.line))
+            }
+            let handled = try await send(name, arguments: arguments, fromLayer: currentLayerIndex, line: statement.line)
             guard handled else {
                 throw ScriptError(line: statement.line, message: "Can't understand '\(name)'.")
             }
@@ -421,8 +452,8 @@ final class Runtime {
         }
     }
 
-    private func executePut(_ expression: Expr, _ mode: PutMode, _ container: Container?, line: Int) throws {
-        let value = try evaluate(expression, line: line)
+    private func executePut(_ expression: Expr, _ mode: PutMode, _ container: Container?, line: Int) async throws {
+        let value = try await evaluate(expression, line: line)
         guard let container else {
             host.showMessage(value)
             return
@@ -432,53 +463,53 @@ final class Runtime {
         case .into:
             combined = value
         case .after:
-            combined = try containerValue(container, line: line) + value
+            combined = try await containerValue(container, line: line) + value
         case .before:
-            combined = value + (try containerValue(container, line: line))
+            combined = value + (try await containerValue(container, line: line))
         }
-        try setContainer(container, to: combined, line: line)
+        try await setContainer(container, to: combined, line: line)
     }
 
     /// Reads a container's text — a variable, a field, or a chunk of one.
-    private func containerValue(_ container: Container, line: Int) throws -> String {
+    private func containerValue(_ container: Container, line: Int) async throws -> String {
         switch container {
         case .variable(let name):
             return variableValue(name) ?? ""
         case .field(let fieldRef):
-            let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
+            let (reference, domain) = try await resolveFieldRef(fieldRef, line: line)
             return try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
         case .chunk(let kind, let selector, let base):
-            let source = try containerValue(base, line: line)
-            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
-                Int(try Value.number(from: try evaluate($0, line: line), line: line))
+            let source = try await containerValue(base, line: line)
+            return try await ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
+                Int(try Value.number(from: try await evaluate($0, line: line), line: line))
             }
         }
     }
 
     /// Writes a container's text — replacing a chunk in place when needed.
-    private func setContainer(_ container: Container, to value: String, line: Int) throws {
+    private func setContainer(_ container: Container, to value: String, line: Int) async throws {
         switch container {
         case .variable(let name):
             setVariable(name, to: value)
         case .field(let fieldRef):
-            let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
+            let (reference, domain) = try await resolveFieldRef(fieldRef, line: line)
             try hostCall(line: line) { try host.setFieldText(reference, domain: domain, to: value) }
         case .chunk(let kind, let selector, let base):
-            let source = try containerValue(base, line: line)
-            let updated = try ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value, itemDelimiter: itemDelimiter) {
-                Int(try Value.number(from: try evaluate($0, line: line), line: line))
+            let source = try await containerValue(base, line: line)
+            let updated = try await ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value, itemDelimiter: itemDelimiter) {
+                Int(try Value.number(from: try await evaluate($0, line: line), line: line))
             }
-            try setContainer(base, to: updated, line: line)
+            try await setContainer(base, to: updated, line: line)
         }
     }
 
-    private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain) {
-        let value = try evaluate(fieldRef.expr, line: line)
+    private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain) {
+        let value = try await evaluate(fieldRef.expr, line: line)
         let reference: HyperTalkObject.Reference = fieldRef.isID ? .id(value) : self.reference(from: value)
         return (reference, fieldRef.domain)
     }
 
-    private func executeGo(_ target: GoTarget, line: Int) throws {
+    private func executeGo(_ target: GoTarget, line: Int) async throws {
         let destination: GoDestination
         switch target {
         case .next: destination = .next
@@ -486,22 +517,22 @@ final class Runtime {
         case .first: destination = .first
         case .last: destination = .last
         case .expression(let expression):
-            let value = try evaluate(expression, line: line)
+            let value = try await evaluate(expression, line: line)
             if let number = Int(value.trimmingCharacters(in: .whitespaces)) {
                 destination = .number(number)
             } else {
                 destination = .named(value)
             }
         case .idExpression(let expression):
-            destination = .id(try evaluate(expression, line: line))
+            destination = .id(try await evaluate(expression, line: line))
         }
         try hostCall(line: line) { try host.goToCard(destination) }
     }
 
-    private func executeRepeat(_ kind: RepeatKind, _ body: [Stmt], line: Int) throws -> Flow {
-        func runBody() throws -> Flow? {
+    private func executeRepeat(_ kind: RepeatKind, _ body: [Stmt], line: Int) async throws -> Flow {
+        func runBody() async throws -> Flow? {
             try spendStep(line: line)
-            let flow = try execute(body)
+            let flow = try await execute(body)
             switch flow {
             case .exitRepeat: return .normal
             case .exitHandler: return .exitHandler
@@ -512,32 +543,32 @@ final class Runtime {
         switch kind {
         case .forever:
             while true {
-                if let flow = try runBody() { return flow }
+                if let flow = try await runBody() { return flow }
             }
 
         case .times(let countExpression):
-            let count = Int(try Value.number(from: try evaluate(countExpression, line: line), line: line))
+            let count = Int(try Value.number(from: try await evaluate(countExpression, line: line), line: line))
             for _ in 0..<max(0, count) {
-                if let flow = try runBody() { return flow }
+                if let flow = try await runBody() { return flow }
             }
 
         case .whileTrue(let condition):
-            while try Value.bool(from: try evaluate(condition, line: line), line: line) {
-                if let flow = try runBody() { return flow }
+            while try Value.bool(from: try await evaluate(condition, line: line), line: line) {
+                if let flow = try await runBody() { return flow }
             }
 
         case .untilTrue(let condition):
-            while try !Value.bool(from: try evaluate(condition, line: line), line: line) {
-                if let flow = try runBody() { return flow }
+            while try !Value.bool(from: try await evaluate(condition, line: line), line: line) {
+                if let flow = try await runBody() { return flow }
             }
 
         case .counting(let variable, let fromExpression, let toExpression, let descending):
-            let start = try Value.number(from: try evaluate(fromExpression, line: line), line: line)
-            let end = try Value.number(from: try evaluate(toExpression, line: line), line: line)
+            let start = try Value.number(from: try await evaluate(fromExpression, line: line), line: line)
+            let end = try Value.number(from: try await evaluate(toExpression, line: line), line: line)
             var counter = start
             while descending ? counter >= end : counter <= end {
                 setVariable(variable, to: Value.string(from: counter))
-                if let flow = try runBody() { return flow }
+                if let flow = try await runBody() { return flow }
                 counter += descending ? -1 : 1
             }
         }
@@ -546,7 +577,7 @@ final class Runtime {
 
     // MARK: Expressions
 
-    private func evaluate(_ expression: Expr, line: Int) throws -> String {
+    private func evaluate(_ expression: Expr, line: Int) async throws -> String {
         switch expression {
         case .stringLiteral(let text):
             return text
@@ -560,29 +591,32 @@ final class Runtime {
             return variableValue(name) ?? name
 
         case .field(let fieldRef):
-            let (reference, domain) = try resolveFieldRef(fieldRef, line: line)
+            let (reference, domain) = try await resolveFieldRef(fieldRef, line: line)
             return try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
 
         case .property(let property, let objectExpression):
-            let object = try resolveObject(objectExpression, line: line)
+            let object = try await resolveObject(objectExpression, line: line)
             return try hostCall(line: line) { try host.propertyValue(property, of: object) }
 
         case .chunk(let kind, let selector, let sourceExpression):
-            let source = try evaluate(sourceExpression, line: line)
-            return try ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) { expression in
-                Int(try Value.number(from: try evaluate(expression, line: line), line: line))
+            let source = try await evaluate(sourceExpression, line: line)
+            return try await ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) { expression in
+                Int(try Value.number(from: try await evaluate(expression, line: line), line: line))
             }
 
         case .chunkCount(let kind, let sourceExpression):
-            let source = try evaluate(sourceExpression, line: line)
+            let source = try await evaluate(sourceExpression, line: line)
             return String(ChunkResolver.count(kind: kind, in: source, itemDelimiter: itemDelimiter))
 
         case .call(let name, let argumentExpressions):
-            let arguments = try argumentExpressions.map { try evaluate($0, line: line) }
-            if let builtin = try evaluateBuiltin(name, arguments, line: line) {
+            var arguments: [String] = []
+            for expression in argumentExpressions {
+                arguments.append(try await evaluate(expression, line: line))
+            }
+            if let builtin = try await evaluateBuiltin(name, arguments, line: line) {
                 return builtin
             }
-            return try callFunction(name, arguments: arguments, line: line)
+            return try await callFunction(name, arguments: arguments, line: line)
 
         case .result:
             return lastResult
@@ -599,11 +633,11 @@ final class Runtime {
             return host.clock(field)
 
         case .isType(let expression, let type, let negated):
-            let matches = Self.matchesType(try evaluate(expression, line: line), type)
+            let matches = Self.matchesType(try await evaluate(expression, line: line), type)
             return (negated ? !matches : matches) ? "true" : "false"
 
         case .unary(let op, let operand):
-            let value = try evaluate(operand, line: line)
+            let value = try await evaluate(operand, line: line)
             switch op {
             case .minus:
                 return Value.string(from: -(try Value.number(from: value, line: line)))
@@ -612,8 +646,8 @@ final class Runtime {
             }
 
         case .binary(let op, let leftExpression, let rightExpression):
-            let left = try evaluate(leftExpression, line: line)
-            let right = try evaluate(rightExpression, line: line)
+            let left = try await evaluate(leftExpression, line: line)
+            let right = try await evaluate(rightExpression, line: line)
             return try evaluateBinary(op, left, right, line: line)
         }
     }
@@ -677,7 +711,7 @@ final class Runtime {
 
     /// Built-in functions callable with parens. Returns nil if `name` isn't
     /// a built-in (so a user function is tried instead).
-    private func evaluateBuiltin(_ name: String, _ arguments: [String], line: Int) throws -> String? {
+    private func evaluateBuiltin(_ name: String, _ arguments: [String], line: Int) async throws -> String? {
         switch name.lowercased() {
         case "length":
             guard arguments.count == 1 else {
@@ -770,7 +804,7 @@ final class Runtime {
                 // A string that isn't an expression evaluates to itself.
                 return arguments[0]
             }
-            return try evaluate(expression, line: line)
+            return try await evaluate(expression, line: line)
         default:
             return nil
         }
@@ -803,23 +837,23 @@ final class Runtime {
         return try arguments.map { try Value.number(from: $0, line: line) }
     }
 
-    private func resolveObject(_ object: ObjectExpr, line: Int) throws -> HyperTalkObject {
+    private func resolveObject(_ object: ObjectExpr, line: Int) async throws -> HyperTalkObject {
         switch object {
         case .part(let kind, let domain, let nameExpression):
-            .part(kind: kind, domain: domain, reference: reference(from: try evaluate(nameExpression, line: line)))
+            return .part(kind: kind, domain: domain, reference: reference(from: try await evaluate(nameExpression, line: line)))
         case .partByID(let kind, let domain, let idExpression):
-            .part(kind: kind, domain: domain, reference: .id(try evaluate(idExpression, line: line)))
+            return .part(kind: kind, domain: domain, reference: .id(try await evaluate(idExpression, line: line)))
         case .card(let expression):
-            .card(reference(from: try evaluate(expression, line: line)))
+            return .card(reference(from: try await evaluate(expression, line: line)))
         case .cardByID(let idExpression):
-            .card(.id(try evaluate(idExpression, line: line)))
-        case .thisCard: .thisCard
-        case .thisBackground: .thisBackground
-        case .thisStack: .thisStack
+            return .card(.id(try await evaluate(idExpression, line: line)))
+        case .thisCard: return .thisCard
+        case .thisBackground: return .thisBackground
+        case .thisStack: return .thisStack
         case .me:
-            try layerObject(at: currentLayerIndex, keyword: "me", line: line)
+            return try layerObject(at: currentLayerIndex, keyword: "me", line: line)
         case .target:
-            try layerObject(at: 0, keyword: "the target", line: line)
+            return try layerObject(at: 0, keyword: "the target", line: line)
         }
     }
 

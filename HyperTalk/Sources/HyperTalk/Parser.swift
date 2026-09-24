@@ -263,6 +263,25 @@ struct Parser {
             let expression = try parseExpression()
             try expectNewline()
             return Stmt(kind: .doCommand(expression), line: line)
+        case "answer":
+            advance()
+            let prompt = try parseExpression()
+            var buttons: [Expr] = []
+            if consumeWord("with") {
+                // Buttons are separated by `or`; parse below it so `or` isn't
+                // swallowed as the boolean operator.
+                buttons.append(try parseConcatenation())
+                while consumeWord("or") { buttons.append(try parseConcatenation()) }
+            }
+            try expectNewline()
+            return Stmt(kind: .answer(prompt, buttons: buttons), line: line)
+        case "ask":
+            advance()
+            let prompt = try parseExpression()
+            var initialAnswer: Expr?
+            if consumeWord("with") { initialAnswer = try parseExpression() }
+            try expectNewline()
+            return Stmt(kind: .ask(prompt, initialAnswer: initialAnswer), line: line)
         case "convert":
             advance()
             let target = try parseConvertTarget(line: line)

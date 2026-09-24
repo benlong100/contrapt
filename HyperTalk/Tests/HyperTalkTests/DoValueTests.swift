@@ -9,8 +9,8 @@ import Testing
 
 // MARK: - do
 
-@Test func doRunsAStringAsACommand() throws {
-    let host = try run("""
+@Test func doRunsAStringAsACommand() async throws {
+    let host = try await run("""
     on mouseUp
       do "put 6 * 7 into field " & quote & "out" & quote
     end mouseUp
@@ -18,8 +18,8 @@ import Testing
     #expect(host.fields["out"] == "42")
 }
 
-@Test func doSeesAndSetsLocalVariables() throws {
-    let host = try run("""
+@Test func doSeesAndSetsLocalVariables() async throws {
+    let host = try await run("""
     on mouseUp
       put 10 into n
       do "put n + 5 into n"
@@ -29,8 +29,8 @@ import Testing
     #expect(host.fields["out"] == "15")
 }
 
-@Test func doCanRunSeveralStatements() throws {
-    let host = try run("""
+@Test func doCanRunSeveralStatements() async throws {
+    let host = try await run("""
     on mouseUp
       put "put 1 into a" & return & "put 2 into b" into program
       do program
@@ -40,9 +40,9 @@ import Testing
     #expect(host.fields["out"] == "3")
 }
 
-@Test func doReportsAParseErrorAtTheDoLine() throws {
+@Test func doReportsAParseErrorAtTheDoLine() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           do "put 1 2 3"
         end mouseUp
@@ -56,8 +56,8 @@ import Testing
 
 // MARK: - value
 
-@Test func valueEvaluatesAStringExpression() throws {
-    let host = try run("""
+@Test func valueEvaluatesAStringExpression() async throws {
+    let host = try await run("""
     on mouseUp
       put the value of "2 + 3 * 4" into field "out"
     end mouseUp
@@ -65,8 +65,8 @@ import Testing
     #expect(host.fields["out"] == "14")
 }
 
-@Test func valueFunctionCallForm() throws {
-    let host = try run("""
+@Test func valueFunctionCallForm() async throws {
+    let host = try await run("""
     on mouseUp
       put value("10 - 4") into field "out"
     end mouseUp
@@ -74,8 +74,8 @@ import Testing
     #expect(host.fields["out"] == "6")
 }
 
-@Test func valueOfANonExpressionIsItself() throws {
-    let host = try run("""
+@Test func valueOfANonExpressionIsItself() async throws {
+    let host = try await run("""
     on mouseUp
       put the value of "hello" into field "out"
     end mouseUp
@@ -83,8 +83,8 @@ import Testing
     #expect(host.fields["out"] == "hello")
 }
 
-@Test func valueUsesCurrentVariables() throws {
-    let host = try run("""
+@Test func valueUsesCurrentVariables() async throws {
+    let host = try await run("""
     on mouseUp
       put 7 into x
       put the value of "x * 2" into field "out"

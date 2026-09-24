@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import HyperTalk
 
-@Test func checkAcceptsAWellFormedScript() throws {
+@Test func checkAcceptsAWellFormedScript() async throws {
     try HyperTalk.check("""
     on mouseUp
       go to next card
@@ -15,11 +15,11 @@ import Testing
     """)
 }
 
-@Test func checkAcceptsAnEmptyScript() throws {
+@Test func checkAcceptsAnEmptyScript() async throws {
     try HyperTalk.check("")
 }
 
-@Test func checkReportsProblemsWithLineNumbers() {
+@Test func checkReportsProblemsWithLineNumbers() async {
     do {
         try HyperTalk.check("""
         on mouseUp
@@ -36,7 +36,7 @@ import Testing
     }
 }
 
-@Test func syntaxSpansClassifyASample() {
+@Test func syntaxSpansClassifyASample() async {
     let source = """
     on mouseUp -- greet the user
       put "Hello" into greeting
@@ -59,14 +59,14 @@ import Testing
     #expect(texts(of: .identifier).contains("greeting"))
 }
 
-@Test func syntaxSpansTolerateUnterminatedStrings() {
+@Test func syntaxSpansTolerateUnterminatedStrings() async {
     let source = "put \"oops\nput 1 into x"
     let spans = HyperTalk.syntaxSpans(in: source)
     let strings = spans.filter { $0.kind == .string }.map { String(source[$0.range]) }
     #expect(strings == ["\"oops"])
 }
 
-@Test func syntaxSpansKeywordsAreCaseInsensitive() {
+@Test func syntaxSpansKeywordsAreCaseInsensitive() async {
     let source = "ON MOUSEUP"
     let spans = HyperTalk.syntaxSpans(in: source)
     #expect(spans.first?.kind == .keyword)
@@ -74,10 +74,10 @@ import Testing
 
 // MARK: - Smart punctuation tolerance
 
-@Test func curlyQuotesDelimitStrings() throws {
+@Test func curlyQuotesDelimitStrings() async throws {
     let host = MockHost(fields: ["out": ""])
     // As typed on an iPad with smart quotes on.
-    try HyperTalk.run(handler: "mouseUp", in: """
+    try await HyperTalk.run(handler: "mouseUp", in: """
     on mouseUp
       put \u{201C}Hello\u{201D} into field \u{201C}out\u{201D}
     end mouseUp
@@ -85,9 +85,9 @@ import Testing
     #expect(host.fields["out"] == "Hello")
 }
 
-@Test func mismatchedCurlyAndStraightQuotesStillDelimit() throws {
+@Test func mismatchedCurlyAndStraightQuotesStillDelimit() async throws {
     let host = MockHost(fields: ["out": ""])
-    try HyperTalk.run(handler: "mouseUp", in: """
+    try await HyperTalk.run(handler: "mouseUp", in: """
     on mouseUp
       put \u{201C}mixed" into field "out\u{201D}
     end mouseUp
@@ -95,10 +95,10 @@ import Testing
     #expect(host.fields["out"] == "mixed")
 }
 
-@Test func smartDashesStartComments() throws {
+@Test func smartDashesStartComments() async throws {
     let host = MockHost(fields: ["out": ""])
     // iOS smart dashes turn a typed `--` into an en dash.
-    try HyperTalk.run(handler: "mouseUp", in: """
+    try await HyperTalk.run(handler: "mouseUp", in: """
     on mouseUp \u{2013} an en-dash comment
       put "ok" into field "out" \u{2014} an em-dash comment
     end mouseUp
@@ -106,7 +106,7 @@ import Testing
     #expect(host.fields["out"] == "ok")
 }
 
-@Test func syntaxSpansColorCurlyQuotedStringsAndDashComments() {
+@Test func syntaxSpansColorCurlyQuotedStringsAndDashComments() async {
     let source = "put \u{201C}Hello\u{201D} into x \u{2013} note"
     let spans = HyperTalk.syntaxSpans(in: source)
     let strings = spans.filter { $0.kind == .string }.map { String(source[$0.range]) }

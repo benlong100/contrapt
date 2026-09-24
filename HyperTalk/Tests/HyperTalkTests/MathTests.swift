@@ -7,8 +7,8 @@ import Foundation
 import Testing
 @testable import HyperTalk
 
-@Test func sqrtAndPowers() throws {
-    let host = try run("""
+@Test func sqrtAndPowers() async throws {
+    let host = try await run("""
     on mouseUp
       put sqrt(16) into field "a"
       put exp2(10) into field "b"
@@ -21,8 +21,8 @@ import Testing
     #expect(host.fields["c"] == "1.21")
 }
 
-@Test func trigAndLogs() throws {
-    let host = try run("""
+@Test func trigAndLogs() async throws {
+    let host = try await run("""
     on mouseUp
       put sin(0) into field "a"
       put cos(0) into field "b"
@@ -36,8 +36,8 @@ import Testing
     #expect(host.fields["d"] == "3")
 }
 
-@Test func theMathFunctionOfForm() throws {
-    let host = try run("""
+@Test func theMathFunctionOfForm() async throws {
+    let host = try await run("""
     on mouseUp
       put the sqrt of 81 into field "out"
     end mouseUp
@@ -45,8 +45,8 @@ import Testing
     #expect(host.fields["out"] == "9")
 }
 
-@Test func annuityFactor() throws {
-    let host = try run("""
+@Test func annuityFactor() async throws {
+    let host = try await run("""
     on mouseUp
       put annuity(0, 5) into field "out"
     end mouseUp
@@ -55,8 +55,8 @@ import Testing
     #expect(host.fields["out"] == "5")
 }
 
-@Test func sumAndAverageOfArguments() throws {
-    let host = try run("""
+@Test func sumAndAverageOfArguments() async throws {
+    let host = try await run("""
     on mouseUp
       put sum(1, 2, 3, 4) into field "a"
       put average(2, 4, 6) into field "b"
@@ -66,8 +66,8 @@ import Testing
     #expect(host.fields["b"] == "4")
 }
 
-@Test func sumOfACommaListInOneValue() throws {
-    let host = try run("""
+@Test func sumOfACommaListInOneValue() async throws {
+    let host = try await run("""
     on mouseUp
       put "10,20,30" into nums
       put sum(nums) into field "out"
@@ -76,8 +76,8 @@ import Testing
     #expect(host.fields["out"] == "60")
 }
 
-@Test func theAverageOfAFieldOfLines() throws {
-    let host = try run("""
+@Test func theAverageOfAFieldOfLines() async throws {
+    let host = try await run("""
     on mouseUp
       put the average of field "scores" into field "out"
     end mouseUp

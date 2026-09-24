@@ -11,7 +11,7 @@ import Testing
 // identities, so these tests build the path directly rather than using
 // the single-layer `run` helper.
 
-@Test func theTargetNamesTheOriginallyTargetedPart() throws {
+@Test func theTargetNamesTheOriginallyTargetedPart() async throws {
     let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Greet"))
     let host = MockHost(fields: ["out": ""])
     host.properties["card button Greet.name"] = "card button \"Greet\""
@@ -27,11 +27,11 @@ import Testing
         end doGreet
         """, object: .thisCard),
     ]
-    _ = try HyperTalk.send("mouseUp", along: layers, host: host)
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
     #expect(host.fields["out"] == "card button \"Greet\"")
 }
 
-@Test func meNamesTheObjectRunningTheScript() throws {
+@Test func meNamesTheObjectRunningTheScript() async throws {
     let field = HyperTalkObject.part(kind: "field", domain: .card, reference: .named("Note"))
     let host = MockHost(fields: ["out": ""])
     host.properties["card field Note.name"] = "card field \"Note\""
@@ -42,11 +42,11 @@ import Testing
         end mouseUp
         """, object: field),
     ]
-    _ = try HyperTalk.send("mouseUp", along: layers, host: host)
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
     #expect(host.fields["out"] == "card field \"Note\"")
 }
 
-@Test func meFollowsTheHandlingLayerWhileTargetStaysAtOrigin() throws {
+@Test func meFollowsTheHandlingLayerWhileTargetStaysAtOrigin() async throws {
     let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Btn"))
     let host = MockHost(fields: ["out": ""])
     host.properties["card button Btn.name"] = "Btn"
@@ -63,13 +63,13 @@ import Testing
         end relay
         """, object: .thisCard),
     ]
-    _ = try HyperTalk.send("mouseUp", along: layers, host: host)
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
     // me is the card (the layer handling `relay`); the target is still the
     // button that first received mouseUp.
     #expect(host.fields["out"] == "Home/Btn")
 }
 
-@Test func setAPropertyOfMe() throws {
+@Test func setAPropertyOfMe() async throws {
     let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("B"))
     let host = MockHost()
     let layers = [
@@ -79,11 +79,11 @@ import Testing
         end mouseUp
         """, object: button),
     ]
-    _ = try HyperTalk.send("mouseUp", along: layers, host: host)
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
     #expect(host.properties["card button B.visible"] == "false")
 }
 
-@Test func bareMeReadsAsTheObjectsName() throws {
+@Test func bareMeReadsAsTheObjectsName() async throws {
     let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Go"))
     let host = MockHost(fields: ["out": ""])
     host.properties["card button Go.name"] = "Go"
@@ -94,13 +94,13 @@ import Testing
         end mouseUp
         """, object: button),
     ]
-    _ = try HyperTalk.send("mouseUp", along: layers, host: host)
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
     #expect(host.fields["out"] == "Go")
 }
 
-@Test func meWithoutAnObjectIsAFriendlyError() throws {
+@Test func meWithoutAnObjectIsAFriendlyError() async throws {
     do {
-        _ = try HyperTalk.send("mouseUp", along: [
+        _ = try await HyperTalk.send("mouseUp", along: [
             ScriptLayer(name: "script", source: """
             on mouseUp
               put the name of me into x

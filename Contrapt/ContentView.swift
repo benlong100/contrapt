@@ -49,6 +49,9 @@ struct ContentView: View {
     /// The button being linked, while the Link To panel floats over the card.
     @State private var linkingPartID: UUID?
     @State private var isGuidePresented = false
+    /// A pending `answer` / `ask` dialog and its text field's contents.
+    @State private var scriptDialog: ScriptDialog?
+    @State private var askFieldText = ""
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
 
@@ -174,6 +177,32 @@ struct ContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(scriptErrorText ?? "")
+        }
+        .alert(
+            scriptDialog?.prompt ?? "",
+            isPresented: Binding(get: { scriptDialog != nil }, set: { _ in }),
+            presenting: scriptDialog
+        ) { dialog in
+            switch dialog.kind {
+            case .answer(let buttons):
+                ForEach(buttons, id: \.self) { button in
+                    Button(button) {
+                        scriptDialog = nil
+                        dialog.complete(button)
+                    }
+                }
+            case .ask:
+                TextField("", text: $askFieldText)
+                Button("OK") {
+                    let text = askFieldText
+                    scriptDialog = nil
+                    dialog.complete(text)
+                }
+                Button("Cancel", role: .cancel) {
+                    scriptDialog = nil
+                    dialog.complete(nil)
+                }
+            }
         }
         .inspector(isPresented: $isInspectorPresented) {
             Group {
@@ -441,6 +470,23 @@ struct ContentView: View {
                 // HyperCard.
                 messageBoxText = text
                 isMessageBoxVisible = true
+            },
+            // `answer` / `ask` present a modal and suspend the script until
+            // the user responds, resuming the interpreter's continuation.
+            onAnswer: { prompt, buttons in
+                await withCheckedContinuation { continuation in
+                    scriptDialog = ScriptDialog(prompt: prompt, kind: .answer(buttons: buttons)) { result in
+                        continuation.resume(returning: result ?? buttons.first ?? "OK")
+                    }
+                }
+            },
+            onAsk: { prompt, initial in
+                await withCheckedContinuation { continuation in
+                    askFieldText = initial
+                    scriptDialog = ScriptDialog(prompt: prompt, kind: .ask) { result in
+                        continuation.resume(returning: result)
+                    }
+                }
             }
         )
     }
@@ -448,12 +494,16 @@ struct ContentView: View {
     /// Runs a line typed into the message box in the current card's
     /// context; bare expressions display their value as output.
     private func runMessageBoxCommand(_ line: String) {
-        do {
-            if let value = try HyperTalk.execute(messageLine: line, along: scriptPath(cardAt: cardIndex, part: nil), host: makeHost()) {
-                messageBoxText = value
+        let host = makeHost()
+        let path = scriptPath(cardAt: cardIndex, part: nil)
+        Task { @MainActor in
+            do {
+                if let value = try await HyperTalk.execute(messageLine: line, along: path, host: host) {
+                    messageBoxText = value
+                }
+            } catch {
+                scriptErrorText = error.localizedDescription
             }
-        } catch {
-            scriptErrorText = error.localizedDescription
         }
     }
 
@@ -484,10 +534,14 @@ struct ContentView: View {
     /// part, or on the card itself when `part` is nil. All pointing devices
     /// — finger, Pencil, trackpad, mouse — arrive through the same gestures.
     private func sendMouseMessage(_ message: String, to part: Part?) {
-        do {
-            try HyperTalk.send(message, along: scriptPath(cardAt: cardIndex, part: part), host: makeHost())
-        } catch {
-            scriptErrorText = error.localizedDescription
+        let host = makeHost()
+        let path = scriptPath(cardAt: cardIndex, part: part)
+        Task { @MainActor in
+            do {
+                try await HyperTalk.send(message, along: path, host: host)
+            } catch {
+                scriptErrorText = error.localizedDescription
+            }
         }
     }
 
@@ -497,11 +551,15 @@ struct ContentView: View {
     private func sendSystemMessage(_ message: String, toCardAt index: Int) {
         guard !isEditing, !isSendingSystemMessage else { return }
         isSendingSystemMessage = true
-        defer { isSendingSystemMessage = false }
-        do {
-            try HyperTalk.send(message, along: scriptPath(cardAt: index, part: nil), host: makeHost())
-        } catch {
-            scriptErrorText = error.localizedDescription
+        let host = makeHost()
+        let path = scriptPath(cardAt: index, part: nil)
+        Task { @MainActor in
+            defer { isSendingSystemMessage = false }
+            do {
+                try await HyperTalk.send(message, along: path, host: host)
+            } catch {
+                scriptErrorText = error.localizedDescription
+            }
         }
     }
 
@@ -889,6 +947,22 @@ struct ContentView: View {
             goFirst: goFirst, goLast: goLast,
             goPrevious: goToPreviousCard, goNext: goToNextCard
         )
+    }
+}
+
+/// A pending script dialog: `answer` shows a row of buttons, `ask` shows a
+/// text field with OK/Cancel. `complete` resumes the suspended interpreter
+/// — with the button label for `answer`, or the entered text (nil if
+/// cancelled) for `ask`.
+struct ScriptDialog: Identifiable {
+    let id = UUID()
+    let prompt: String
+    let kind: Kind
+    let complete: (String?) -> Void
+
+    enum Kind {
+        case answer(buttons: [String])
+        case ask
     }
 }
 

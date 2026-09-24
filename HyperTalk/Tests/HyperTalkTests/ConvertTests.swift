@@ -7,9 +7,9 @@ import Foundation
 import Testing
 @testable import HyperTalk
 
-@Test func convertSecondsToDateItems() throws {
+@Test func convertSecondsToDateItems() async throws {
     // 2019686400 = 2034-01-01 00:00:00 UTC (a Sunday, weekday 1).
-    let host = try run("""
+    let host = try await run("""
     on mouseUp
       put 2019686400 into t
       convert t to dateItems
@@ -19,8 +19,8 @@ import Testing
     #expect(host.fields["out"] == "2034,1,1,0,0,0,1")
 }
 
-@Test func convertDateItemsToSeconds() throws {
-    let host = try run("""
+@Test func convertDateItemsToSeconds() async throws {
+    let host = try await run("""
     on mouseUp
       put "2034,1,1,0,0,0" into t
       convert t from dateItems to seconds
@@ -30,9 +30,9 @@ import Testing
     #expect(host.fields["out"] == "2019686400")
 }
 
-@Test func convertBareExpressionLandsInIt() throws {
+@Test func convertBareExpressionLandsInIt() async throws {
     // A date-only string, auto-detected, converted to seconds into `it`.
-    let host = try run("""
+    let host = try await run("""
     on mouseUp
       convert "1/1/34" to seconds
       put it into field "out"
@@ -41,8 +41,8 @@ import Testing
     #expect(host.fields["out"] == "2019686400")
 }
 
-@Test func convertRewritesAFieldInPlace() throws {
-    let host = try run("""
+@Test func convertRewritesAFieldInPlace() async throws {
+    let host = try await run("""
     on mouseUp
       convert field "when" to dateItems
     end mouseUp
@@ -50,8 +50,8 @@ import Testing
     #expect(host.fields["when"] == "2034,1,1,0,0,0,1")
 }
 
-@Test func convertToDateAndTime() throws {
-    let host = try run("""
+@Test func convertToDateAndTime() async throws {
+    let host = try await run("""
     on mouseUp
       put 2019686400 into t
       convert t to short date and short time
@@ -61,8 +61,8 @@ import Testing
     #expect(host.fields["out"] == "1/1/34 12:00 AM")
 }
 
-@Test func convertToLongDate() throws {
-    let host = try run("""
+@Test func convertToLongDate() async throws {
+    let host = try await run("""
     on mouseUp
       put 2019686400 into t
       convert t to long date

@@ -7,8 +7,8 @@ import Foundation
 import Testing
 @testable import HyperTalk
 
-@Test func numberWordConstants() throws {
-    let host = try run("""
+@Test func numberWordConstants() async throws {
+    let host = try await run("""
     on mouseUp
       put one + two + three into field "out"
     end mouseUp
@@ -16,8 +16,8 @@ import Testing
     #expect(host.fields["out"] == "6")
 }
 
-@Test func piConstant() throws {
-    let host = try run("""
+@Test func piConstant() async throws {
+    let host = try await run("""
     on mouseUp
       put trunc(pi * 100) into field "out"
     end mouseUp
@@ -25,8 +25,8 @@ import Testing
     #expect(host.fields["out"] == "314")
 }
 
-@Test func colonAndTenConstants() throws {
-    let host = try run("""
+@Test func colonAndTenConstants() async throws {
+    let host = try await run("""
     on mouseUp
       put ten & colon & zero & zero into field "out"
     end mouseUp

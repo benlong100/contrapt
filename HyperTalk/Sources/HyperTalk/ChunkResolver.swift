@@ -18,12 +18,12 @@ enum ChunkResolver {
         selector: ChunkSelector,
         in source: String,
         itemDelimiter: String = ",",
-        evaluateIndex: (Expr) throws -> Int
-    ) rethrows -> String {
+        evaluateIndex: (Expr) async throws -> Int
+    ) async throws -> String {
         // Characters operate on the raw string; other kinds split into units.
         if kind == .character {
             let characters = Array(source)
-            let (start, end) = try bounds(selector, count: characters.count, evaluateIndex: evaluateIndex)
+            let (start, end) = try await bounds(selector, count: characters.count, evaluateIndex: evaluateIndex)
             guard start <= end, start >= 1, start <= characters.count else { return "" }
             let lo = max(1, start) - 1
             let hi = min(characters.count, end)
@@ -31,7 +31,7 @@ enum ChunkResolver {
         }
 
         let units = split(source, kind: kind, itemDelimiter: itemDelimiter)
-        let (start, end) = try bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
+        let (start, end) = try await bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
         guard start <= end, start >= 1, start <= units.count else { return "" }
         let lo = max(1, start) - 1
         let hi = min(units.count, end)
@@ -47,11 +47,11 @@ enum ChunkResolver {
         in source: String,
         with replacement: String,
         itemDelimiter: String = ",",
-        evaluateIndex: (Expr) throws -> Int
-    ) rethrows -> String {
+        evaluateIndex: (Expr) async throws -> Int
+    ) async throws -> String {
         if kind == .character {
             var characters = Array(source)
-            let (start, end) = try bounds(selector, count: characters.count, evaluateIndex: evaluateIndex)
+            let (start, end) = try await bounds(selector, count: characters.count, evaluateIndex: evaluateIndex)
             guard start >= 1 else { return source }
             let lo = min(start - 1, characters.count)
             let hi = min(max(end, start - 1), characters.count)
@@ -60,7 +60,7 @@ enum ChunkResolver {
         }
 
         var units = split(source, kind: kind, itemDelimiter: itemDelimiter)
-        let (start, end) = try bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
+        let (start, end) = try await bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
         guard start >= 1 else { return source }
         while units.count < start { units.append("") }
         let lo = start - 1
@@ -108,15 +108,15 @@ enum ChunkResolver {
     private static func bounds(
         _ selector: ChunkSelector,
         count: Int,
-        evaluateIndex: (Expr) throws -> Int
-    ) rethrows -> (start: Int, end: Int) {
+        evaluateIndex: (Expr) async throws -> Int
+    ) async throws -> (start: Int, end: Int) {
         switch selector {
         case .index(let expression):
-            let i = try evaluateIndex(expression)
+            let i = try await evaluateIndex(expression)
             return (i, i)
         case .range(let startExpression, let endExpression):
-            let a = try evaluateIndex(startExpression)
-            let b = try evaluateIndex(endExpression)
+            let a = try await evaluateIndex(startExpression)
+            let b = try await evaluateIndex(endExpression)
             return (min(a, b), max(a, b))
         case .last:
             return (count, count)

@@ -7,8 +7,8 @@ import Foundation
 import Testing
 @testable import HyperTalk
 
-@Test func setWritesAProperty() throws {
-    let host = try run("""
+@Test func setWritesAProperty() async throws {
+    let host = try await run("""
     on mouseUp
       set the width of button "OK" to 300
     end mouseUp
@@ -16,10 +16,10 @@ import Testing
     #expect(host.properties["button OK.width"] == "300")
 }
 
-@Test func theOfReadsAProperty() throws {
+@Test func theOfReadsAProperty() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["button OK.width"] = "120"
-    try run("""
+    try await run("""
     on mouseUp
       put the width of button "OK" into field "out"
     end mouseUp
@@ -27,10 +27,10 @@ import Testing
     #expect(host.fields["out"] == "120")
 }
 
-@Test func getPutsIntoIt() throws {
+@Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"
-    try run("""
+    try await run("""
     on mouseUp
       get the name of this card
       put it into field "out"
@@ -41,10 +41,10 @@ import Testing
     #expect(host.fields["out"] == "Home5")
 }
 
-@Test func propertiesWorkInConditions() throws {
+@Test func propertiesWorkInConditions() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["button Big.width"] = "400"
-    try run("""
+    try await run("""
     on mouseUp
       if the width of button "Big" > 300 then
         put "wide" into field "out"
@@ -54,8 +54,8 @@ import Testing
     #expect(host.fields["out"] == "wide")
 }
 
-@Test func objectNamesCanBeExpressions() throws {
-    let host = try run("""
+@Test func objectNamesCanBeExpressions() async throws {
+    let host = try await run("""
     on mouseUp
       put "OK" into which
       set the visible of button which to false
@@ -64,9 +64,9 @@ import Testing
     #expect(host.properties["button OK.visible"] == "false")
 }
 
-@Test func setWithoutOfIsAFriendlyError() {
-    #expect(throws: ScriptError.self) {
-        try run("""
+@Test func setWithoutOfIsAFriendlyError() async {
+    await #expect(throws: ScriptError.self) {
+        try await run("""
         on mouseUp
           set the width to 300
         end mouseUp
@@ -74,9 +74,9 @@ import Testing
     }
 }
 
-@Test func unknownObjectIsAFriendlyError() throws {
+@Test func unknownObjectIsAFriendlyError() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           set the width of the moon to 300
         end mouseUp
@@ -87,8 +87,8 @@ import Testing
     }
 }
 
-@Test func theWithoutOfIsStillANoiseWord() throws {
-    let host = try run("""
+@Test func theWithoutOfIsStillANoiseWord() async throws {
+    let host = try await run("""
     on mouseUp
       put the mango into field "out"
     end mouseUp
@@ -97,8 +97,8 @@ import Testing
     #expect(host.fields["out"] == "mango")
 }
 
-@Test func setPropertyOnCards() throws {
-    let host = try run("""
+@Test func setPropertyOnCards() async throws {
+    let host = try await run("""
     on mouseUp
       set the name of this card to "Home"
       set the name of card 2 to "Second"
@@ -110,8 +110,8 @@ import Testing
 
 // MARK: - IDs
 
-@Test func partsCanBeAddressedByID() throws {
-    let host = try run("""
+@Test func partsCanBeAddressedByID() async throws {
+    let host = try await run("""
     on mouseUp
       set the title of button id 6 to "Renamed"
     end mouseUp
@@ -119,10 +119,10 @@ import Testing
     #expect(host.properties["button id 6.title"] == "Renamed")
 }
 
-@Test func cardsCanBeAddressedByID() throws {
+@Test func cardsCanBeAddressedByID() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["card id 12.name"] = "Home"
-    try run("""
+    try await run("""
     on mouseUp
       put the name of card id 12 into field "out"
     end mouseUp
@@ -130,10 +130,10 @@ import Testing
     #expect(host.fields["out"] == "Home")
 }
 
-@Test func theIDOfReadsAnID() throws {
+@Test func theIDOfReadsAnID() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["button OK.id"] = "6"
-    try run("""
+    try await run("""
     on mouseUp
       get the id of button "OK"
       set the visible of button id it to false
@@ -142,8 +142,8 @@ import Testing
     #expect(host.properties["button id 6.visible"] == "false")
 }
 
-@Test func idExpressionsCanBeComputed() throws {
-    let host = try run("""
+@Test func idExpressionsCanBeComputed() async throws {
+    let host = try await run("""
     on mouseUp
       put 4 into n
       set the width of button id (n + 2) to 100
@@ -152,8 +152,8 @@ import Testing
     #expect(host.properties["button id 6.width"] == "100")
 }
 
-@Test func goToCardByID() throws {
-    let host = try run("""
+@Test func goToCardByID() async throws {
+    let host = try await run("""
     on mouseUp
       go to card id 12
     end mouseUp
@@ -163,8 +163,8 @@ import Testing
 
 // MARK: - Ordinals and domains
 
-@Test func partsCanBeAddressedByOrdinal() throws {
-    let host = try run("""
+@Test func partsCanBeAddressedByOrdinal() async throws {
+    let host = try await run("""
     on mouseUp
       set the name of field 1 to "First Field"
       set the width of button 2 to 90
@@ -174,8 +174,8 @@ import Testing
     #expect(host.properties["button 2.width"] == "90")
 }
 
-@Test func domainQualifiersReachTheRightLayer() throws {
-    let host = try run("""
+@Test func domainQualifiersReachTheRightLayer() async throws {
+    let host = try await run("""
     on mouseUp
       set the name of card field 1 to "blah"
       set the text of background field 1 to "shared"
@@ -187,8 +187,8 @@ import Testing
     #expect(host.properties["background button Next.title"] == "Onward")
 }
 
-@Test func ordinalsCanBeComputed() throws {
-    let host = try run("""
+@Test func ordinalsCanBeComputed() async throws {
+    let host = try await run("""
     on mouseUp
       put 1 into n
       set the visible of field (n + 1) to false
@@ -199,9 +199,9 @@ import Testing
 
 // MARK: - Field contents with domains, ordinals, and ids
 
-@Test func fieldContentsRespectDomainQualifiers() throws {
+@Test func fieldContentsRespectDomainQualifiers() async throws {
     let host = MockHost(fields: ["card 1": "on the card", "background 1": "on the bg"])
-    try run("""
+    try await run("""
     on mouseUp
       put " (card)" after card field 1
       put " (bg)" after background field 1
@@ -211,9 +211,9 @@ import Testing
     #expect(host.fields["background 1"] == "on the bg (bg)")
 }
 
-@Test func fieldContentsByOrdinalAndID() throws {
+@Test func fieldContentsByOrdinalAndID() async throws {
     let host = MockHost(fields: ["2": "second", "id 9": "by id"])
-    try run("""
+    try await run("""
     on mouseUp
       put field 2 into a
       put field id 9 into b
@@ -223,8 +223,8 @@ import Testing
     #expect(host.fields["2"] == "second by id")
 }
 
-@Test func fieldContentsByNameStillWork() throws {
-    let host = try run("""
+@Test func fieldContentsByNameStillWork() async throws {
+    let host = try await run("""
     on mouseUp
       put "hello" into field "out"
     end mouseUp

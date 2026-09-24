@@ -16,9 +16,9 @@ private func layers(button: String = "", card: String = "", background: String =
     ]
 }
 
-@Test func unhandledMessagesBubbleUpThePath() throws {
+@Test func unhandledMessagesBubbleUpThePath() async throws {
     let host = MockHost(fields: ["out": ""])
-    let handled = try HyperTalk.send("mouseUp", along: layers(
+    let handled = try await HyperTalk.send("mouseUp", along: layers(
         card: """
         on mouseUp
           put "card handled it" into field "out"
@@ -29,9 +29,9 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "card handled it")
 }
 
-@Test func theTargetObjectWinsOverThePath() throws {
+@Test func theTargetObjectWinsOverThePath() async throws {
     let host = MockHost(fields: ["out": ""])
-    try HyperTalk.send("mouseUp", along: layers(
+    try await HyperTalk.send("mouseUp", along: layers(
         button: """
         on mouseUp
           put "button" into field "out"
@@ -46,9 +46,9 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "button")
 }
 
-@Test func messagesReachTheStackLayer() throws {
+@Test func messagesReachTheStackLayer() async throws {
     let host = MockHost(fields: ["out": ""])
-    let handled = try HyperTalk.send("openCard", along: layers(
+    let handled = try await HyperTalk.send("openCard", along: layers(
         stack: """
         on openCard
           put "stack saw it" into field "out"
@@ -59,14 +59,14 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "stack saw it")
 }
 
-@Test func unhandledTopLevelMessageReturnsFalse() throws {
-    let handled = try HyperTalk.send("openCard", along: layers(), host: MockHost())
+@Test func unhandledTopLevelMessageReturnsFalse() async throws {
+    let handled = try await HyperTalk.send("openCard", along: layers(), host: MockHost())
     #expect(handled == false)
 }
 
-@Test func customMessagesTravelThePathWithArguments() throws {
+@Test func customMessagesTravelThePathWithArguments() async throws {
     let host = MockHost(fields: ["out": ""])
-    try HyperTalk.send("mouseUp", along: layers(
+    try await HyperTalk.send("mouseUp", along: layers(
         button: """
         on mouseUp
           greet "Bill", "!"
@@ -81,9 +81,9 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "Hi, Bill!")
 }
 
-@Test func handlersCanCallHandlersInTheirOwnScript() throws {
+@Test func handlersCanCallHandlersInTheirOwnScript() async throws {
     let host = MockHost(fields: ["out": ""])
-    try HyperTalk.send("mouseUp", along: layers(
+    try await HyperTalk.send("mouseUp", along: layers(
         button: """
         on mouseUp
           double 21
@@ -97,9 +97,9 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "42")
 }
 
-@Test func missingArgumentsBindAsEmpty() throws {
+@Test func missingArgumentsBindAsEmpty() async throws {
     let host = MockHost(fields: ["out": ""])
-    try HyperTalk.send("mouseUp", along: layers(
+    try await HyperTalk.send("mouseUp", along: layers(
         button: """
         on mouseUp
           greet "Bill"
@@ -116,9 +116,9 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "no punctuation")
 }
 
-@Test func variablesAreLocalToEachHandler() throws {
+@Test func variablesAreLocalToEachHandler() async throws {
     let host = MockHost(fields: ["out": ""])
-    try HyperTalk.send("mouseUp", along: layers(
+    try await HyperTalk.send("mouseUp", along: layers(
         button: """
         on mouseUp
           put "mine" into x
@@ -134,9 +134,9 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "mine")
 }
 
-@Test func unhandledCustomMessageIsAFriendlyError() throws {
+@Test func unhandledCustomMessageIsAFriendlyError() async throws {
     do {
-        try HyperTalk.send("mouseUp", along: layers(
+        try await HyperTalk.send("mouseUp", along: layers(
             button: """
             on mouseUp
               frobnicate
@@ -150,9 +150,9 @@ private func layers(button: String = "", card: String = "", background: String =
     }
 }
 
-@Test func runawayMessageRecursionIsStopped() {
-    #expect(throws: ScriptError.self) {
-        try HyperTalk.send("mouseUp", along: layers(
+@Test func runawayMessageRecursionIsStopped() async {
+    await #expect(throws: ScriptError.self) {
+        try await HyperTalk.send("mouseUp", along: layers(
             button: """
             on mouseUp
               mouseUp
@@ -162,9 +162,9 @@ private func layers(button: String = "", card: String = "", background: String =
     }
 }
 
-@Test func errorsNameTheLayerTheyCameFrom() throws {
+@Test func errorsNameTheLayerTheyCameFrom() async throws {
     do {
-        try HyperTalk.send("mouseUp", along: layers(
+        try await HyperTalk.send("mouseUp", along: layers(
             button: """
             on mouseUp
               greet
@@ -183,11 +183,11 @@ private func layers(button: String = "", card: String = "", background: String =
     }
 }
 
-@Test func aBrokenUpperLayerCannotBreakAHandlingButton() throws {
+@Test func aBrokenUpperLayerCannotBreakAHandlingButton() async throws {
     let host = MockHost(fields: ["out": ""])
     // The stack script has a syntax error, but the button handles mouseUp
     // itself — lazy parsing means the broken layer is never consulted.
-    try HyperTalk.send("mouseUp", along: layers(
+    try await HyperTalk.send("mouseUp", along: layers(
         button: """
         on mouseUp
           put "fine" into field "out"
@@ -202,9 +202,9 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.fields["out"] == "fine")
 }
 
-@Test func standaloneRunStillWorksWithoutContext() throws {
+@Test func standaloneRunStillWorksWithoutContext() async throws {
     do {
-        try HyperTalk.run(handler: "mouseUp", in: """
+        try await HyperTalk.run(handler: "mouseUp", in: """
         on mouseUp
           put 1 / 0 into x
         end mouseUp

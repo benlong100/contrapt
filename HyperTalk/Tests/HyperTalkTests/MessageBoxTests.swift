@@ -14,35 +14,35 @@ private func cardPath(card: String = "", stack: String = "") -> [ScriptLayer] {
     ]
 }
 
-@Test func commandsRunFromTheMessageBox() throws {
+@Test func commandsRunFromTheMessageBox() async throws {
     let host = MockHost()
-    let result = try HyperTalk.execute(messageLine: "go to next card", along: cardPath(), host: host)
+    let result = try await HyperTalk.execute(messageLine: "go to next card", along: cardPath(), host: host)
     #expect(result == nil)
     #expect(host.destinations == [.next])
 }
 
-@Test func putLandsInTheMessageBox() throws {
+@Test func putLandsInTheMessageBox() async throws {
     let host = MockHost()
-    let result = try HyperTalk.execute(messageLine: "put 6 * 7", along: cardPath(), host: host)
+    let result = try await HyperTalk.execute(messageLine: "put 6 * 7", along: cardPath(), host: host)
     #expect(result == nil)
     #expect(host.messages == ["42"])
 }
 
-@Test func bareExpressionsEvaluateAndReturnTheirValue() throws {
+@Test func bareExpressionsEvaluateAndReturnTheirValue() async throws {
     let host = MockHost()
-    let result = try HyperTalk.execute(messageLine: "2 + 3 * 4", along: cardPath(), host: host)
+    let result = try await HyperTalk.execute(messageLine: "2 + 3 * 4", along: cardPath(), host: host)
     #expect(result == "14")
 }
 
-@Test func fieldExpressionsShowTheFieldContents() throws {
+@Test func fieldExpressionsShowTheFieldContents() async throws {
     let host = MockHost(fields: ["name": "Bill"])
-    let result = try HyperTalk.execute(messageLine: "field \"Name\"", along: cardPath(), host: host)
+    let result = try await HyperTalk.execute(messageLine: "field \"Name\"", along: cardPath(), host: host)
     #expect(result == "Bill")
 }
 
-@Test func customMessagesDispatchAlongThePath() throws {
+@Test func customMessagesDispatchAlongThePath() async throws {
     let host = MockHost(fields: ["out": ""])
-    let result = try HyperTalk.execute(
+    let result = try await HyperTalk.execute(
         messageLine: "greet \"Bill\"",
         along: cardPath(card: """
         on greet who
@@ -55,27 +55,27 @@ private func cardPath(card: String = "", stack: String = "") -> [ScriptLayer] {
     #expect(host.fields["out"] == "Hi, Bill")
 }
 
-@Test func fieldErrorsAreSpecificNotCantUnderstand() throws {
+@Test func fieldErrorsAreSpecificNotCantUnderstand() async throws {
     do {
-        _ = try HyperTalk.execute(messageLine: "field \"Nope\"", along: cardPath(), host: MockHost())
+        _ = try await HyperTalk.execute(messageLine: "field \"Nope\"", along: cardPath(), host: MockHost())
         Issue.record("Expected a ScriptError")
     } catch let error as ScriptError {
         #expect(error.message.contains("Nope"))
     }
 }
 
-@Test func nonsenseIsAFriendlyError() throws {
+@Test func nonsenseIsAFriendlyError() async throws {
     do {
-        _ = try HyperTalk.execute(messageLine: "frobnicate 1, 2", along: cardPath(), host: MockHost())
+        _ = try await HyperTalk.execute(messageLine: "frobnicate 1, 2", along: cardPath(), host: MockHost())
         Issue.record("Expected a ScriptError")
     } catch let error as ScriptError {
         #expect(error.message.contains("frobnicate"))
     }
 }
 
-@Test func multipleStatementsSeparatedByNewlinesRun() throws {
+@Test func multipleStatementsSeparatedByNewlinesRun() async throws {
     let host = MockHost(fields: ["out": ""])
-    _ = try HyperTalk.execute(
+    _ = try await HyperTalk.execute(
         messageLine: "put \"a\" into field \"out\"\nput \"b\" after field \"out\"",
         along: cardPath(),
         host: host

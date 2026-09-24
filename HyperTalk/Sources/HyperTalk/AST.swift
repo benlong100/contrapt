@@ -50,6 +50,12 @@ indirect enum StmtKind {
     /// `do <expr>` — evaluate a string and run it as HyperTalk statements in
     /// the current handler's context.
     case doCommand(Expr)
+    /// `answer <prompt> [with <b1> [or <b2> [or <b3>]]]` — a modal choice;
+    /// the clicked button's label lands in `it`.
+    case answer(Expr, buttons: [Expr])
+    /// `ask <prompt> [with <default>]` — a modal text prompt; the entered
+    /// text (empty if cancelled) lands in `it`.
+    case ask(Expr, initialAnswer: Expr?)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])

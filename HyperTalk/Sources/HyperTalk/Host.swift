@@ -96,6 +96,13 @@ public protocol HyperTalkHost: AnyObject {
     /// when `from` is empty) and re-render it in the `to` format. The host
     /// owns the calendar and locale; it throws if the value can't be read.
     func convert(_ value: String, from: [ConvertFormat], to: [ConvertFormat]) throws -> String
+    /// `answer <prompt> with <buttons>` — a modal choice. Returns the label
+    /// of the button the user clicked. Suspends the script until then, which
+    /// is why the interpreter is async.
+    func answer(_ prompt: String, buttons: [String]) async -> String
+    /// `ask <prompt> with <default>` — a modal text prompt. Returns the text
+    /// entered, or nil if the user cancels.
+    func ask(_ prompt: String, initialAnswer: String) async -> String?
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

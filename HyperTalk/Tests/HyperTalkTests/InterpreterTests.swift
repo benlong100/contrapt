@@ -129,6 +129,24 @@ final class MockHost: HyperTalkHost {
         return try convertFormat(date, to: to)
     }
 
+    /// Scripted dialog responses for tests. `answerChoice` is the button
+    /// `answer` returns (defaults to the first); `askResponse` is what `ask`
+    /// returns (nil = the user cancelled). Both record their prompts.
+    var answerChoice: String?
+    var askResponse: String? = ""
+    var answerPrompts: [String] = []
+    var askPrompts: [String] = []
+
+    func answer(_ prompt: String, buttons: [String]) async -> String {
+        answerPrompts.append(prompt)
+        return answerChoice ?? buttons.first ?? "OK"
+    }
+
+    func ask(_ prompt: String, initialAnswer: String) async -> String? {
+        askPrompts.append(prompt)
+        return askResponse
+    }
+
     private func patterns(_ format: ConvertFormat) -> String? {
         switch format {
         case .shortDate: "M/d/yy"
@@ -207,15 +225,15 @@ final class MockHost: HyperTalkHost {
 }
 
 @discardableResult
-func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHost(), maxSteps: Int = 100_000) throws -> MockHost {
-    _ = try HyperTalk.run(handler: handler, in: script, host: host, maxSteps: maxSteps)
+func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHost(), maxSteps: Int = 100_000) async throws -> MockHost {
+    _ = try await HyperTalk.run(handler: handler, in: script, host: host, maxSteps: maxSteps)
     return host
 }
 
 // MARK: - Commands
 
-@Test func goToNextCard() throws {
-    let host = try run("""
+@Test func goToNextCard() async throws {
+    let host = try await run("""
     on mouseUp
       go to next card
     end mouseUp
@@ -223,8 +241,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.destinations == [.next])
 }
 
-@Test func goVariants() throws {
-    let host = try run("""
+@Test func goVariants() async throws {
+    let host = try await run("""
     on mouseUp
       go to previous card
       go first card
@@ -237,8 +255,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.destinations == [.previous, .first, .last, .number(3), .named("Home"), .number(2)])
 }
 
-@Test func putIntoField() throws {
-    let host = try run("""
+@Test func putIntoField() async throws {
+    let host = try await run("""
     on mouseUp
       put "Hello" into field "Greeting"
     end mouseUp
@@ -246,8 +264,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["greeting"] == "Hello")
 }
 
-@Test func putAfterAndBefore() throws {
-    let host = try run("""
+@Test func putAfterAndBefore() async throws {
+    let host = try await run("""
     on mouseUp
       put "world" into field "f"
       put "hello " before field "f"
@@ -257,8 +275,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["f"] == "hello world!")
 }
 
-@Test func putWithoutContainerGoesToMessageBox() throws {
-    let host = try run("""
+@Test func putWithoutContainerGoesToMessageBox() async throws {
+    let host = try await run("""
     on mouseUp
       put "Hi there"
     end mouseUp
@@ -266,8 +284,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.messages == ["Hi there"])
 }
 
-@Test func variablesFlowThroughPut() throws {
-    let host = try run("""
+@Test func variablesFlowThroughPut() async throws {
+    let host = try await run("""
     on mouseUp
       put 6 * 7 into answer
       put answer into field "out"
@@ -278,8 +296,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
 
 // MARK: - Expressions
 
-@Test func arithmeticPrecedence() throws {
-    let host = try run("""
+@Test func arithmeticPrecedence() async throws {
+    let host = try await run("""
     on mouseUp
       put 2 + 3 * 4 into field "out"
     end mouseUp
@@ -287,8 +305,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "14")
 }
 
-@Test func parenthesesAndUnaryMinus() throws {
-    let host = try run("""
+@Test func parenthesesAndUnaryMinus() async throws {
+    let host = try await run("""
     on mouseUp
       put -(2 + 3) * 4 into field "out"
     end mouseUp
@@ -296,8 +314,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "-20")
 }
 
-@Test func divisionFormatsNumbersCleanly() throws {
-    let host = try run("""
+@Test func divisionFormatsNumbersCleanly() async throws {
+    let host = try await run("""
     on mouseUp
       put 10 / 4 into field "a"
       put 8 / 4 into field "b"
@@ -311,8 +329,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["d"] == "1")
 }
 
-@Test func concatenationOperators() throws {
-    let host = try run("""
+@Test func concatenationOperators() async throws {
+    let host = try await run("""
     on mouseUp
       put "Hello" && "World" into field "a"
       put "Hyper" & "Talk" into field "b"
@@ -322,8 +340,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["b"] == "HyperTalk")
 }
 
-@Test func comparisonsAreNumericWhenBothSidesAreNumbers() throws {
-    let host = try run("""
+@Test func comparisonsAreNumericWhenBothSidesAreNumbers() async throws {
+    let host = try await run("""
     on mouseUp
       if "10" > "9" then put "numeric" into field "out"
     end mouseUp
@@ -331,8 +349,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "numeric")
 }
 
-@Test func stringComparisonIsCaseInsensitive() throws {
-    let host = try run("""
+@Test func stringComparisonIsCaseInsensitive() async throws {
+    let host = try await run("""
     on mouseUp
       if "Apple" = "APPLE" then put "same" into field "out"
     end mouseUp
@@ -340,8 +358,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "same")
 }
 
-@Test func isAndIsNotAndContains() throws {
-    let host = try run("""
+@Test func isAndIsNotAndContains() async throws {
+    let host = try await run("""
     on mouseUp
       if "abc" is "abc" then put "1" after field "out"
       if "abc" is not "xyz" then put "2" after field "out"
@@ -351,8 +369,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "123")
 }
 
-@Test func booleanOperators() throws {
-    let host = try run("""
+@Test func booleanOperators() async throws {
+    let host = try await run("""
     on mouseUp
       if 1 < 2 and not (3 < 2) then put "yes" into field "out"
       if 1 > 2 or 2 > 1 then put "!" after field "out"
@@ -361,8 +379,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "yes!")
 }
 
-@Test func unassignedVariableEvaluatesToItsOwnName() throws {
-    let host = try run("""
+@Test func unassignedVariableEvaluatesToItsOwnName() async throws {
+    let host = try await run("""
     on mouseUp
       put greetings into field "out"
     end mouseUp
@@ -370,8 +388,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "greetings")
 }
 
-@Test func builtInConstants() throws {
-    let host = try run("""
+@Test func builtInConstants() async throws {
+    let host = try await run("""
     on mouseUp
       put empty into field "out"
       put "a" & space & "b" & quote after field "out"
@@ -380,8 +398,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "a b\"")
 }
 
-@Test func fieldNamesCanBeComputed() throws {
-    let host = try run("""
+@Test func fieldNamesCanBeComputed() async throws {
+    let host = try await run("""
     on mouseUp
       put 2 into n
       put "hi" into field ("out" & n)
@@ -392,8 +410,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
 
 // MARK: - Control flow
 
-@Test func ifElseBlocks() throws {
-    let host = try run("""
+@Test func ifElseBlocks() async throws {
+    let host = try await run("""
     on mouseUp
       if 1 > 2 then
         put "then" into field "out"
@@ -405,8 +423,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "else")
 }
 
-@Test func elseIfChain() throws {
-    let host = try run("""
+@Test func elseIfChain() async throws {
+    let host = try await run("""
     on mouseUp
       put 2 into x
       if x = 1 then
@@ -421,8 +439,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "two")
 }
 
-@Test func singleLineIfWithElseLine() throws {
-    let host = try run("""
+@Test func singleLineIfWithElseLine() async throws {
+    let host = try await run("""
     on mouseUp
       if 5 > 3 then put "big" into field "out"
       else put "small" into field "out"
@@ -431,8 +449,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "big")
 }
 
-@Test func repeatWithCounter() throws {
-    let host = try run("""
+@Test func repeatWithCounter() async throws {
+    let host = try await run("""
     on mouseUp
       repeat with i = 1 to 5
         put i after field "out"
@@ -442,8 +460,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "12345")
 }
 
-@Test func repeatDownTo() throws {
-    let host = try run("""
+@Test func repeatDownTo() async throws {
+    let host = try await run("""
     on mouseUp
       repeat with i = 3 down to 1
         put i after field "out"
@@ -453,8 +471,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "321")
 }
 
-@Test func repeatTimes() throws {
-    let host = try run("""
+@Test func repeatTimes() async throws {
+    let host = try await run("""
     on mouseUp
       repeat 4 times
         put "x" after field "out"
@@ -464,8 +482,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "xxxx")
 }
 
-@Test func repeatWhileAndUntil() throws {
-    let host = try run("""
+@Test func repeatWhileAndUntil() async throws {
+    let host = try await run("""
     on mouseUp
       put 0 into n
       repeat while n < 3
@@ -482,8 +500,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["b"] == "6")
 }
 
-@Test func exitRepeatAndNextRepeat() throws {
-    let host = try run("""
+@Test func exitRepeatAndNextRepeat() async throws {
+    let host = try await run("""
     on mouseUp
       repeat with i = 1 to 10
         if i = 3 then next repeat
@@ -495,8 +513,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "1245")
 }
 
-@Test func exitHandlerStopsExecution() throws {
-    let host = try run("""
+@Test func exitHandlerStopsExecution() async throws {
+    let host = try await run("""
     on mouseUp
       put "before" into field "out"
       exit mouseUp
@@ -506,8 +524,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "before")
 }
 
-@Test func nestedRepeatsRespectExit() throws {
-    let host = try run("""
+@Test func nestedRepeatsRespectExit() async throws {
+    let host = try await run("""
     on mouseUp
       repeat with i = 1 to 3
         repeat forever
@@ -522,8 +540,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
 
 // MARK: - Handlers and dispatch
 
-@Test func onlyTheNamedHandlerRuns() throws {
-    let host = try run("""
+@Test func onlyTheNamedHandlerRuns() async throws {
+    let host = try await run("""
     on openCard
       put "opened" into field "out"
     end openCard
@@ -535,8 +553,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "clicked")
 }
 
-@Test func missingHandlerReturnsFalse() throws {
-    let handled = try HyperTalk.run(handler: "mouseUp", in: """
+@Test func missingHandlerReturnsFalse() async throws {
+    let handled = try await HyperTalk.run(handler: "mouseUp", in: """
     on openCard
       go to next card
     end openCard
@@ -544,8 +562,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(handled == false)
 }
 
-@Test func caseInsensitivity() throws {
-    let host = try run("""
+@Test func caseInsensitivity() async throws {
+    let host = try await run("""
     ON MOUSEUP
       PUT "Loud" INTO FIELD "out"
       GO TO NEXT CARD
@@ -555,8 +573,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.destinations == [.next])
 }
 
-@Test func commentsAreIgnored() throws {
-    let host = try run("""
+@Test func commentsAreIgnored() async throws {
+    let host = try await run("""
     on mouseUp -- runs on tap
       -- a full-line comment
       put "ok" into field "out" -- trailing comment
@@ -567,9 +585,9 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
 
 // MARK: - Errors
 
-@Test func runawayLoopIsStopped() throws {
-    #expect(throws: ScriptError.self) {
-        try run("""
+@Test func runawayLoopIsStopped() async throws {
+    await #expect(throws: ScriptError.self) {
+        try await run("""
         on mouseUp
           repeat forever
             put 1 into x
@@ -579,9 +597,9 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     }
 }
 
-@Test func unknownCommandReportsLine() throws {
+@Test func unknownCommandReportsLine() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           put 1 into x
           launch the missiles
@@ -594,9 +612,9 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     }
 }
 
-@Test func missingEndRepeatReportsBlockLine() throws {
+@Test func missingEndRepeatReportsBlockLine() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           repeat 3 times
             put 1 into x
@@ -609,9 +627,9 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     }
 }
 
-@Test func unknownFieldSurfacesHostErrorWithLine() throws {
+@Test func unknownFieldSurfacesHostErrorWithLine() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           put "x" into field "nope"
         end mouseUp
@@ -623,9 +641,9 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     }
 }
 
-@Test func arithmeticOnTextIsAFriendlyError() throws {
+@Test func arithmeticOnTextIsAFriendlyError() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           put "pie" + 1 into x
         end mouseUp
@@ -637,9 +655,9 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     }
 }
 
-@Test func divideByZeroIsAFriendlyError() throws {
-    #expect(throws: ScriptError.self) {
-        try run("""
+@Test func divideByZeroIsAFriendlyError() async throws {
+    await #expect(throws: ScriptError.self) {
+        try await run("""
         on mouseUp
           put 1 / 0 into x
         end mouseUp
@@ -647,9 +665,9 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     }
 }
 
-@Test func unterminatedStringReportsLine() throws {
+@Test func unterminatedStringReportsLine() async throws {
     do {
-        try run("""
+        try await run("""
         on mouseUp
           put "oops into x
         end mouseUp
@@ -660,8 +678,8 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     }
 }
 
-@Test func beepBeepsOnceOrCounted() throws {
-    let host = try run("""
+@Test func beepBeepsOnceOrCounted() async throws {
+    let host = try await run("""
     on mouseUp
       beep
       beep 3

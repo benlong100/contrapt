@@ -22,15 +22,21 @@ final class DocumentScriptHost: HyperTalkHost {
     private let stackBinding: Binding<Stack>
     private let currentCardIndex: Binding<Int>
     private let onMessage: (String) -> Void
+    private let onAnswer: (String, [String]) async -> String
+    private let onAsk: (String, String) async -> String?
 
     init(
         stack: Binding<Stack>,
         currentCardIndex: Binding<Int>,
-        onMessage: @escaping (String) -> Void
+        onMessage: @escaping (String) -> Void,
+        onAnswer: @escaping (String, [String]) async -> String,
+        onAsk: @escaping (String, String) async -> String?
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
         self.onMessage = onMessage
+        self.onAnswer = onAnswer
+        self.onAsk = onAsk
     }
 
     private var stack: Stack { stackBinding.wrappedValue }
@@ -138,6 +144,16 @@ final class DocumentScriptHost: HyperTalkHost {
     func convert(_ value: String, from: [ConvertFormat], to: [ConvertFormat]) throws -> String {
         let date = try convertParse(value, from: from)
         return try convertRender(date, to: to)
+    }
+
+    // MARK: - Dialogs
+
+    func answer(_ prompt: String, buttons: [String]) async -> String {
+        await onAnswer(prompt, buttons)
+    }
+
+    func ask(_ prompt: String, initialAnswer: String) async -> String? {
+        await onAsk(prompt, initialAnswer)
     }
 
     private func convertFormatter(_ formats: [ConvertFormat]) -> DateFormatter? {
