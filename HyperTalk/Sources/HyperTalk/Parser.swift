@@ -714,6 +714,18 @@ struct Parser {
                     // `A is [not] in B` == B [does not] contains A.
                     let contains = Expr.binary(.contains, try parseConcatenation(), left)
                     left = negated ? .unary(.not, contains) : contains
+                } else if peekIdentifier() == "greater" || peekIdentifier() == "less" {
+                    // `is greater than [or equal to]` / `is less than …`.
+                    let isGreater = peekIdentifier() == "greater"
+                    advance()
+                    _ = consumeWord("than")
+                    let orEqual = consumeWord("or")
+                    if orEqual { _ = consumeWord("equal"); _ = consumeWord("to") }
+                    let op: BinaryOp = isGreater
+                        ? (orEqual ? .greaterOrEqual : .greater)
+                        : (orEqual ? .lessOrEqual : .less)
+                    let comparison = Expr.binary(op, left, try parseConcatenation())
+                    left = negated ? .unary(.not, comparison) : comparison
                 } else if negated {
                     left = .binary(.notEqual, left, try parseConcatenation())
                 } else {

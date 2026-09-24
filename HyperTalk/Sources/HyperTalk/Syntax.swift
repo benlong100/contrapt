@@ -49,6 +49,7 @@ enum SyntaxScanner {
         "barn", "door", "venetian", "blinds", "checkerboard", "plain",
         "slow", "slowly", "fast", "very",
         "and", "or", "not", "is", "in", "contains", "div", "mod",
+        "greater", "less", "than", "equal",
         "integer", "logical", "boolean", "point", "rect", "rectangle",
         "the", "card", "field", "number", "length",
         "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
