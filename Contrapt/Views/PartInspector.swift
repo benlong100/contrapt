@@ -37,7 +37,7 @@ struct PartInspector: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $isEditorExpanded) {
+        .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: "Script of \(part.name)", script: $part.script)
         }
     }
@@ -80,7 +80,7 @@ struct PartInspector: View {
         LabeledContent(title) {
             TextField(title, value: value, format: .number)
                 .multilineTextAlignment(.trailing)
-                .keyboardType(.numbersAndPunctuation)
+                .numericPunctuationKeyboard()
         }
     }
 

@@ -9,6 +9,11 @@ import SwiftUI
 /// Full-screen paint mode for the current card: a PencilKit canvas at the
 /// card's logical size with the system tool picker. Strokes live in
 /// logical card coordinates, so the drawing scales with the card.
+///
+/// The interactive canvas (PKCanvasView) is a UIKit view with no AppKit
+/// equivalent, so drawing is an iOS capability; macOS shows the current
+/// painting and a note to edit it on iPad. Painted stacks still *display*
+/// everywhere, since that renders from the stored PNG.
 struct PaintEditor: View {
     let title: String
     let cardSize: CardSize
@@ -32,9 +37,9 @@ struct PaintEditor: View {
                 let scale = min(proxy.size.width / cardSize.width, proxy.size.height / cardSize.height)
                 ZStack(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(.systemBackground))
+                        .fill(Color.cardSurface)
                         .shadow(radius: 8)
-                    PaintCanvas(drawing: $drawing)
+                    canvas
                 }
                 .frame(width: cardSize.width, height: cardSize.height)
                 .scaleEffect(scale)
@@ -42,18 +47,20 @@ struct PaintEditor: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding()
-            .background(Color(.secondarySystemBackground))
+            .background(Color.cardBackdrop)
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                #if os(iOS)
+                ToolbarItem(placement: .primaryAction) {
                     Button("Clear", systemImage: "trash") {
                         drawing = PKDrawing()
                     }
                 }
+                #endif
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         onDone(drawing)
@@ -63,8 +70,31 @@ struct PaintEditor: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var canvas: some View {
+        #if os(iOS)
+        PaintCanvas(drawing: $drawing)
+        #else
+        // Native macOS has no interactive PencilKit canvas: show what's
+        // there and point editing at a touch device.
+        ZStack {
+            Image(nsImage: drawing.image(from: CGRect(origin: .zero, size: CGSize(width: cardSize.width, height: cardSize.height)), scale: 2))
+                .resizable()
+                .frame(width: cardSize.width, height: cardSize.height)
+            VStack(spacing: 8) {
+                Image(systemName: "applepencil.and.scribble")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("Painting is available on iPad.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        #endif
+    }
 }
 
+#if os(iOS)
 /// PKCanvasView wrapper: transparent, accepts finger and Pencil, shows
 /// the system tool picker while first responder.
 private struct PaintCanvas: UIViewRepresentable {
@@ -112,3 +142,4 @@ private struct PaintCanvas: UIViewRepresentable {
         }
     }
 }
+#endif

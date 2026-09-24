@@ -27,11 +27,14 @@ final class Beeper {
     func beep() {
         guard let buffer else { return }
         do {
+            #if os(iOS)
             // Media playback so the beep is audible regardless of the
             // silent switch; mixes rather than interrupting other audio.
+            // macOS has no audio session — the engine plays directly.
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, options: [.mixWithOthers])
             try session.setActive(true)
+            #endif
             if !engine.isRunning {
                 try engine.start()
             }

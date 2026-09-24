@@ -101,7 +101,7 @@ struct HyperTalkGuideView: View {
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("HyperTalk Guide")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -122,7 +122,7 @@ struct HyperTalkGuideView: View {
                     .font(.system(.callout, design: .monospaced))
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.cardBackdrop, in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }

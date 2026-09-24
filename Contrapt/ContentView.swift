@@ -73,12 +73,12 @@ struct ContentView: View {
         }
         .environment(\.stackAssets, document.assets)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.cardBackdrop)
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhoto, matching: .images)
         .sheet(isPresented: $isGuidePresented) {
             HyperTalkGuideView()
         }
-        .fullScreenCover(isPresented: $isPaintingPresented) {
+        .platformFullScreenCover(isPresented: $isPaintingPresented) {
             PaintEditor(
                 title: paintTarget == .card ? "Paint on Card" : "Paint on Background",
                 cardSize: document.stack.cardSize,
@@ -92,7 +92,7 @@ struct ContentView: View {
             selectedPhoto = nil
             Task {
                 guard let data = try? await item.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data) else { return }
+                      let image = PlatformImage(data: data) else { return }
                 addImagePart(data: data, imageSize: image.size)
             }
         }
@@ -134,7 +134,7 @@ struct ContentView: View {
             sendSystemMessage("openCard", toCardAt: cardIndex)
         }
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .primaryAction) {
                 if isEditing {
                     Menu("Add", systemImage: "plus") {
                         Button("Button", systemImage: "hand.tap") {
@@ -193,7 +193,7 @@ struct ContentView: View {
                     isEditing.toggle()
                 }
             }
-            ToolbarItemGroup(placement: .bottomBar) {
+            ToolbarItemGroup(placement: cardNavigationPlacement) {
                 Button("Previous Card", systemImage: "chevron.left") {
                     goToPreviousCard()
                 }
@@ -377,7 +377,7 @@ struct ContentView: View {
         if !drawing.strokes.isEmpty {
             let cardSize = document.stack.cardSize
             let bounds = CGRect(x: 0, y: 0, width: cardSize.width, height: cardSize.height)
-            guard let png = drawing.image(from: bounds, scale: 2).pngData() else { return }
+            guard let png = drawing.image(from: bounds, scale: 2).pngDataCrossPlatform else { return }
             drawingName = document.storeAsset(drawing.dataRepresentation(), preferredExtension: "drawing")
             imageName = document.storeAsset(png)
         }
@@ -469,6 +469,16 @@ struct ContentView: View {
     }
 
     // MARK: - Navigation
+
+    /// The card prev/next controls sit in the bottom bar on iOS; macOS has
+    /// no bottom bar, so they join the main toolbar.
+    private var cardNavigationPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .bottomBar
+        #else
+        .automatic
+        #endif
+    }
 
     /// Clamped so a shorter reopened stack can't strand the index.
     private var cardIndex: Int {

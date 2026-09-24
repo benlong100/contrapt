@@ -30,7 +30,7 @@ struct MessageBoxView: View {
                     .font(.system(.callout, design: .monospaced))
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                    .codeEntryTraits()
                     .onSubmit {
                         let line = command.trimmingCharacters(in: .whitespaces)
                         guard !line.isEmpty else { return }

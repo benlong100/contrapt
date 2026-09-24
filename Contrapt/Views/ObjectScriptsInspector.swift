@@ -37,7 +37,7 @@ struct ObjectScriptsInspector: View {
             ScriptFormSection(title: scriptTitle, script: scriptBinding, onExpand: { isEditorExpanded = true })
                 .id(scope)
         }
-        .fullScreenCover(isPresented: $isEditorExpanded) {
+        .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: scriptTitle, script: scriptBinding)
         }
     }

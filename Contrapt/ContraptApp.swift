@@ -13,11 +13,16 @@ struct ContraptApp: App {
         DocumentGroup(newDocument: { StackDocument() }) { file in
             ContentView(document: file.document, fileURL: file.fileURL)
         }
+        // The launch scene's New/Learn buttons are an iOS-only feature;
+        // macOS gets New and Open from the standard File menu. (A Help-menu
+        // entry point for the tutorial is a natural macOS follow-up.)
+        #if os(iOS)
         DocumentGroupLaunchScene {
             NewDocumentButton("New Stack")
             NewDocumentButton("Learn HyperTalk", for: StackDocument.self) {
                 StackDocument(stack: .tutorial())
             }
         }
+        #endif
     }
 }

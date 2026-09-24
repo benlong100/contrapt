@@ -62,8 +62,8 @@ struct CardView: View {
     private func paintLayer(assetName: String?) -> some View {
         if let assetName,
            let data = stackAssets[assetName],
-           let image = UIImage(data: data) {
-            Image(uiImage: image)
+           let image = Image(assetData: data) {
+            image
                 .resizable()
                 .frame(width: stack.cardSize.width, height: stack.cardSize.height)
                 .allowsHitTesting(false)
@@ -73,7 +73,7 @@ struct CardView: View {
     @ViewBuilder
     private var cardSurface: some View {
         let surface = RoundedRectangle(cornerRadius: 8)
-            .fill(Color(.systemBackground))
+            .fill(Color.cardSurface)
             .shadow(radius: 8)
         if isEditing {
             surface.onTapGesture { selectedPartID = nil }
@@ -391,11 +391,11 @@ struct PartView: View {
                 TextEditor(text: fieldText)
                     .scrollContentBackground(.hidden)
                     .padding(6)
-                    .background(Color(.systemBackground))
+                    .background(Color.cardSurface)
                     .overlay(alignment: .topLeading) {
                         if properties.text.isEmpty {
                             Text(properties.placeholder)
-                                .foregroundStyle(Color(.placeholderText))
+                                .foregroundStyle(Color.placeholderTextColor)
                                 .padding(.horizontal, 11)
                                 .padding(.vertical, 14)
                                 .allowsHitTesting(false)
@@ -403,7 +403,7 @@ struct PartView: View {
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(.systemGray4), lineWidth: 1)
+                            .stroke(Color.fieldStroke, lineWidth: 1)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
@@ -420,8 +420,8 @@ struct PartView: View {
                 .gesture(labelPressGesture)
         case .image(let properties):
             Group {
-                if let data = stackAssets[properties.assetName], let image = UIImage(data: data) {
-                    Image(uiImage: image)
+                if let data = stackAssets[properties.assetName], let image = Image(assetData: data) {
+                    image
                         .resizable()
                         .scaledToFit()
                 } else {

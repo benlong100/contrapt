@@ -19,7 +19,7 @@ struct ScriptEditor: View {
         TextEditor(text: $text, selection: $selection)
             .font(.system(.callout, design: .monospaced))
             .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
+            .codeEntryTraits()
             .frame(minHeight: 220)
             .onAppear {
                 text = highlighted(AttributedString(script))
@@ -235,9 +235,9 @@ struct LargeScriptEditor: View {
                 }
             }
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationTitle()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Check Script", systemImage: "checkmark.seal") {
                         checkResult = .checking(script)
                     }
