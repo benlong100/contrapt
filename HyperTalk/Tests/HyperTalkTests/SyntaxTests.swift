@@ -114,3 +114,23 @@ import Testing
     #expect(strings == ["\u{201C}Hello\u{201D}"])
     #expect(comments == ["\u{2013} note"])
 }
+
+@Test func thenOnNextLineParses() async throws {
+    // HyperCard style: `if <cond>` newline `then <statement>`.
+    let host = try await run("""
+    on mouseUp
+      repeat with i = 1 to 5
+        if i > 2
+        then exit repeat
+      end repeat
+      put i into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "3")
+}
+
+@Test func notSignContinuesLine() async throws {
+    let host = try await run("on mouseUp\nput \"a\" & ¬\n\"b\" into field \"out\"\nend mouseUp",
+                             host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "ab")
+}

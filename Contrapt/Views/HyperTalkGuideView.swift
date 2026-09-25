@@ -58,6 +58,22 @@ struct HyperTalkGuideView: View {
                     go to first card
                     go to card 3
                     go to card "Home"
+                    go home
+                    """)
+
+                    section("add, subtract, multiply, divide", body: "Arithmetic commands that change a container in place — the classic HyperCard way to do math without `put … into`.", example: """
+                    add 1 to counter
+                    subtract 5 from field "Total"
+                    multiply price by 1.08
+                    divide total by count
+                    """)
+
+                    section("show, hide, push, pop", body: "`show` and `hide` flip a part's visibility (the same as `set the visible of …`). `push card` remembers the current card; `pop card` returns to it, and `pop card into <container>` reads the remembered card without going. A visual effect before a `pop` plays, just like `go`.", example: """
+                    hide field "Answer"
+                    show button "Next"
+                    push card
+                    go to card "Help"
+                    pop card
                     """)
 
                     section("visual effect", body: "Queue a transition for the next `go`: dissolve, wipe or scroll (left/right/up/down), zoom or iris (open/close), plus barn door, checkerboard, and venetian blinds. Add a speed — slow, fast, very slow, very fast. Several queue up and play in order.", example: """

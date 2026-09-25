@@ -64,6 +64,16 @@ indirect enum StmtKind {
     /// `find [chars|word|whole|string] <text> [in <field>]` — full-text
     /// search across the stack, boxing and navigating to the first match.
     case find(FindMode, text: Expr, inField: FieldRef?)
+    /// `push [this] card` — remember the current card for a later `pop`.
+    case pushCard
+    /// `pop card [into <container>]` — return to (or read) the pushed card.
+    case popCard(Container?)
+    /// A recognized-but-ignored statement (e.g. `show menuBar`) — parsed so
+    /// old stacks don't error on things Contrapt has no concept of.
+    case noOp
+    /// `add`/`subtract`/`multiply`/`divide` — arithmetic commands that update a
+    /// container in place (`add 1 to x`, `subtract 5 from field "n"`).
+    case arithmetic(BinaryOp, amount: Expr, container: Container)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
@@ -115,6 +125,8 @@ enum GoTarget {
     case last
     case expression(Expr)
     case idExpression(Expr)
+    /// `go home` — open the Home stack.
+    case home
 }
 
 indirect enum RepeatKind {

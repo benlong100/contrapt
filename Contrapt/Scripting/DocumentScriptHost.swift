@@ -13,6 +13,13 @@ import HyperTalk
     var values: [String: String] = [:]
 }
 
+/// The `push card` / `pop card` back-stack, session-wide (the host is rebuilt
+/// per script run, so the stack lives here).
+@MainActor final class CardBackStack {
+    static let shared = CardBackStack()
+    var ids: [String] = []
+}
+
 /// Where `find` last matched, so the view can box it on the card.
 struct FindHighlight: Equatable {
     var partID: UUID
@@ -53,6 +60,7 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onAsk: (String, String) async -> String?
     private let onNavigate: (Int, [ScreenEffect]) -> Void
     private let onFind: (FindHighlight?) -> Void
+    private let onGoHome: () -> Void
 
     init(
         stack: Binding<Stack>,
@@ -61,7 +69,8 @@ final class DocumentScriptHost: HyperTalkHost {
         onAnswer: @escaping (String, [String]) async -> String,
         onAsk: @escaping (String, String) async -> String?,
         onNavigate: @escaping (Int, [ScreenEffect]) -> Void,
-        onFind: @escaping (FindHighlight?) -> Void = { _ in }
+        onFind: @escaping (FindHighlight?) -> Void = { _ in },
+        onGoHome: @escaping () -> Void = {}
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
@@ -70,6 +79,7 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onAsk = onAsk
         self.onNavigate = onNavigate
         self.onFind = onFind
+        self.onGoHome = onGoHome
     }
 
     private var stack: Stack { stackBinding.wrappedValue }
@@ -81,6 +91,7 @@ final class DocumentScriptHost: HyperTalkHost {
     // MARK: - HyperTalkHost
 
     func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws {
+        if case .home = destination { onGoHome(); return }
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
         let target: Int
@@ -109,6 +120,8 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("There is no card with id \(id).")
             }
             target = index
+        case .home:
+            return // handled above
         }
         // The view owns the animated transition (see ContentView.navigate).
         onNavigate(target, effects)
@@ -296,6 +309,17 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func foundValue(_ field: FoundField) -> String {
         FindSession.shared.found[field] ?? ""
+    }
+
+    // MARK: - Push / pop card
+
+    func pushCard() {
+        guard cardIndex < stack.cards.count else { return }
+        CardBackStack.shared.ids.append(String(stack.cards[cardIndex].scriptID))
+    }
+
+    func popCard() -> String? {
+        CardBackStack.shared.ids.isEmpty ? nil : CardBackStack.shared.ids.removeLast()
     }
 
     /// Every searchable field across the stack, in card order (card fields

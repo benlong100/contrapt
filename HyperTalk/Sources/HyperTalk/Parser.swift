@@ -322,6 +322,60 @@ struct Parser {
             let to = try parseConvertFormat(line: line)
             try expectNewline()
             return Stmt(kind: .convert(target, from: from, to: to), line: line)
+        case "add":
+            advance()
+            let amount = try parseExpression()
+            guard consumeWord("to") else {
+                throw ScriptError(line: line, message: "Expected 'to <container>' in 'add', like: add 1 to counter.")
+            }
+            let container = try parseContainer(line: line)
+            try expectNewline()
+            return Stmt(kind: .arithmetic(.add, amount: amount, container: container), line: line)
+        case "subtract":
+            advance()
+            let amount = try parseExpression()
+            guard consumeWord("from") else {
+                throw ScriptError(line: line, message: "Expected 'from <container>' in 'subtract', like: subtract 1 from counter.")
+            }
+            let container = try parseContainer(line: line)
+            try expectNewline()
+            return Stmt(kind: .arithmetic(.subtract, amount: amount, container: container), line: line)
+        case "multiply":
+            advance()
+            let container = try parseContainer(line: line)
+            guard consumeWord("by") else {
+                throw ScriptError(line: line, message: "Expected 'by <value>' in 'multiply', like: multiply total by 2.")
+            }
+            let amount = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .arithmetic(.multiply, amount: amount, container: container), line: line)
+        case "divide":
+            advance()
+            let container = try parseContainer(line: line)
+            guard consumeWord("by") else {
+                throw ScriptError(line: line, message: "Expected 'by <value>' in 'divide', like: divide total by 2.")
+            }
+            let amount = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .arithmetic(.divide, amount: amount, container: container), line: line)
+        case "show", "hide":
+            advance()
+            return try parseShowHide(visible: word == "show", line: line)
+        case "push":
+            advance()
+            // `push [this|recent] card` — the object is optional/ignored; the
+            // current card is what's remembered.
+            _ = consumeWord("this"); _ = consumeWord("recent")
+            _ = consumeWord("card") || consumeWord("cd")
+            try expectNewline()
+            return Stmt(kind: .pushCard, line: line)
+        case "pop":
+            advance()
+            _ = consumeWord("card") || consumeWord("cd")
+            var container: Container?
+            if consumeWord("into") { container = try parseContainer(line: line) }
+            try expectNewline()
+            return Stmt(kind: .popCard(container), line: line)
         case "set":
             advance()
             _ = consumeWord("the")
@@ -356,9 +410,12 @@ struct Parser {
                     arguments.append(try parseExpression())
                 } while consumeSymbol(",")
             }
-            guard current.kind == .newline || current.kind == .endOfScript else {
-                throw ScriptError(line: line, message: "Can't understand '\(word)'.")
-            }
+            // Unknown commands with bespoke syntax (`choose select tool`,
+            // `drag from a to b`, `doMenu "…"`) may leave tokens we can't parse
+            // as arguments. Rather than fail the whole script, skip the rest of
+            // the line — the command still dispatches as a message, surfacing
+            // at run time only if nothing handles it (HyperCard semantics).
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .send(word, arguments), line: line)
         }
@@ -560,6 +617,45 @@ struct Parser {
         return Stmt(kind: .find(mode, text: text, inField: field), line: line)
     }
 
+    /// `show`/`hide <object>` toggles a part's visibility. Targets Contrapt
+    /// has no concept of (menu bar, message box, tool/pattern windows, card
+    /// pictures, all-cards animation) parse to a no-op so old stacks don't
+    /// break. `show <object> at <loc>` accepts and ignores the location.
+    private mutating func parseShowHide(visible: Bool, line: Int) throws -> Stmt {
+        _ = consumeWord("the")
+        // Ignorable targets.
+        let ignorable = ["menubar", "menu", "titlebar", "message", "msg", "tool",
+                         "pattern", "patterns", "picture", "pict", "background",
+                         "card", "bkgnd", "bg", "all", "cards", "window", "windows",
+                         "groups", "scroll"]
+        if let first = peekIdentifier(), ignorable.contains(first),
+           !isPartReference() {
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        }
+        let object = try parseObjectExpr()
+        // `at h,v` — HyperCard also moves the part; we just show/hide it.
+        if consumeWord("at") {
+            _ = try parseExpression()
+            while consumeSymbol(",") { _ = try parseExpression() }
+        }
+        try expectNewline()
+        return Stmt(kind: .set(property: "visible", object: object,
+                               value: .stringLiteral(visible ? "true" : "false")), line: line)
+    }
+
+    /// Whether what's ahead is a part reference like `card button "X"` /
+    /// `field 1` (so `show card button…` isn't mistaken for the ignorable
+    /// `card picture`).
+    private func isPartReference() -> Bool {
+        let partKinds = ["button", "field", "label", "image"]
+        if let w = peekIdentifier(), partKinds.contains(w) { return true }
+        if let w = peekIdentifier(), ["card", "background", "bg", "bkgnd"].contains(w),
+           let next = peekIdentifier(1), partKinds.contains(next) { return true }
+        return false
+    }
+
     private mutating func parseGo(line: Int) throws -> Stmt {
         _ = consumeWord("to")
         _ = consumeWord("the")
@@ -576,6 +672,8 @@ struct Parser {
         } else if consumeWord("last") {
             _ = consumeWord("card")
             target = .last
+        } else if consumeWord("home") {
+            target = .home
         } else if consumeWord("card") {
             if consumeWord("id") {
                 target = .idExpression(try parseExpression())
@@ -591,6 +689,15 @@ struct Parser {
 
     private mutating func parseIf(handlerName: String, line: Int) throws -> Stmt {
         let condition = try parseExpression()
+        // HyperCard lets `then` begin on the next line(s):
+        //   if <cond>
+        //   then <statement>
+        // Skip a newline before `then`, but only if `then` actually follows.
+        if current.kind == .newline {
+            let saved = index
+            skipNewlines()
+            if peekIdentifier() != "then" { index = saved }
+        }
         guard consumeWord("then") else {
             throw ScriptError(line: line, message: "Expected 'then' after the condition of 'if'.")
         }

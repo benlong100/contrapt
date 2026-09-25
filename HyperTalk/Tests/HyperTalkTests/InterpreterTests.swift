@@ -191,6 +191,12 @@ final class MockHost: HyperTalkHost {
 
     func foundValue(_ field: FoundField) -> String { foundValues[field] ?? "" }
 
+    /// A simple card back-stack for push/pop tests.
+    var cardStack: [String] = []
+    var currentCardID = "1"
+    func pushCard() { cardStack.append(currentCardID) }
+    func popCard() -> String? { cardStack.isEmpty ? nil : cardStack.removeLast() }
+
     /// A field exists if it's in `fields`; any other part/card exists if a
     /// property was preset for it. `this …` objects always exist.
     func exists(_ object: HyperTalkObject) -> Bool {

@@ -436,6 +436,41 @@ final class Runtime {
             lastResult = found ? "" : "not found"
             return .normal
 
+        case .pushCard:
+            host.pushCard()
+            return .normal
+
+        case .popCard(let container):
+            let popped = host.popCard()
+            if let container {
+                // `pop card into x` reads the card reference without going.
+                try await setContainer(container, to: popped.map { "card id \($0)" } ?? "", line: statement.line)
+            } else if let popped {
+                let effects = pendingVisualEffects
+                pendingVisualEffects = []
+                try hostCall(line: statement.line) { try host.goToCard(.id(popped), effects: effects) }
+            }
+            return .normal
+
+        case .noOp:
+            return .normal
+
+        case .arithmetic(let op, let amountExpr, let container):
+            let current = try Value.number(from: try await containerValue(container, line: statement.line), line: statement.line)
+            let amount = try Value.number(from: try await evaluate(amountExpr, line: statement.line), line: statement.line)
+            let result: Double
+            switch op {
+            case .add: result = current + amount
+            case .subtract: result = current - amount
+            case .multiply: result = current * amount
+            case .divide:
+                guard amount != 0 else { throw ScriptError(line: statement.line, message: "Can't divide by zero.") }
+                result = current / amount
+            default: result = current
+            }
+            try await setContainer(container, to: Value.string(from: result), line: statement.line)
+            return .normal
+
         case .doCommand(let expression):
             let source = try await evaluate(expression, line: statement.line)
             let statements: [Stmt]
@@ -568,6 +603,8 @@ final class Runtime {
             }
         case .idExpression(let expression):
             destination = .id(try await evaluate(expression, line: line))
+        case .home:
+            destination = .home
         }
         // The go consumes any queued visual effects, whether or not it succeeds.
         let effects = pendingVisualEffects

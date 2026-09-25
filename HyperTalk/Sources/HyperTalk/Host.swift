@@ -84,6 +84,8 @@ public enum GoDestination: Equatable, Sendable {
     case named(String)
     /// `go to card id 12` — by permanent ID.
     case id(String)
+    /// `go home` — open the Home stack (cross-stack navigation).
+    case home
 }
 
 /// An object a script can address with `get`/`set` and `the … of …`.
@@ -169,6 +171,12 @@ public protocol HyperTalkHost: AnyObject {
     /// `the foundText` / `foundChunk` / `foundLine` / `foundField` — details
     /// of the last successful `find` (empty before any match).
     func foundValue(_ field: FoundField) -> String
+    /// `push [this] card` — remember the current card on a session stack.
+    func pushCard()
+    /// `pop card` — remove and return the most recently pushed card's id (nil
+    /// if the stack is empty). The interpreter navigates there, or writes the
+    /// reference into a container for `pop card into …`.
+    func popCard() -> String?
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

@@ -601,7 +601,9 @@ struct ContentView: View {
             // `find` boxes the matched field (or clears the box on a miss).
             onFind: { highlight in
                 findHighlight = highlight
-            }
+            },
+            // `go home` opens the Home stack (macOS; iOS front door is Home).
+            onGoHome: { openHome() }
         )
     }
 
