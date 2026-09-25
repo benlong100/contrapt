@@ -77,6 +77,17 @@ import Testing
     #expect(host.fields["out"] == "Weekly50")
 }
 
+@Test func setAcceptsACommaListValue() async throws {
+    // `set rect of btn "X" to 10,20,110,60` — a point/rect value.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      set rect of btn "Extend" to 351,238,431,255
+    end mouseUp
+    """, host: host)
+    #expect(host.properties["button Extend.rect"] == "351,238,431,255")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"

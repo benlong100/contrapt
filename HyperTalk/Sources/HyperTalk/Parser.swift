@@ -409,7 +409,7 @@ struct Parser {
                 guard consumeWord("to") else {
                     throw ScriptError(line: line, message: "Expected 'to' and a value at the end of 'set'.")
                 }
-                let value = try parseExpression()
+                let value = try parseSetValue()
                 try expectNewline()
                 return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
             }
@@ -417,7 +417,7 @@ struct Parser {
             guard consumeWord("to") else {
                 throw ScriptError(line: line, message: "Expected 'of <object> to …' or 'to …' after 'set the \(property)'.")
             }
-            let value = try parseExpression()
+            let value = try parseSetValue()
             try expectNewline()
             return Stmt(kind: .setGlobalProperty(property.lowercased(), value), line: line)
         default:
@@ -440,6 +440,17 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .send(word, arguments), line: line)
         }
+    }
+
+    /// A `set … to <value>` value, allowing a comma list for points and
+    /// rects (`set rect of btn "X" to 10,20,110,60`), joined with commas.
+    private mutating func parseSetValue() throws -> Expr {
+        var value = try parseExpression()
+        while consumeSymbol(",") {
+            let next = try parseExpression()
+            value = .binary(.concat, .binary(.concat, value, .stringLiteral(",")), next)
+        }
+        return value
     }
 
     private mutating func parsePut(line: Int) throws -> Stmt {
