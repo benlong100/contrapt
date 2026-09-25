@@ -83,6 +83,11 @@ enum LegacyStackImporter {
                           cardSize: CardSize(width: Double(cardWidth), height: Double(cardHeight)),
                           script: "", backgrounds: [], cards: [])
         stack.presentAtActualSize = presentAtActualSize
+        // The stack script (handlers like `on goAddress`) lives in the STAK
+        // block. Without it, buttons that call stack-level commands fail.
+        if let stakBlock = blocks.first(where: { $0.type == "STAK" }) {
+            stack.script = reader.stackScript(stakBlock)
+        }
 
         var bgInfoByID: [Int: ParsedObject] = [:]
         var bgUUIDByID: [Int: UUID] = [:]
@@ -329,6 +334,16 @@ private extension LegacyStackImporter {
                 }
             }
             return order
+        }
+
+        /// The stack's own script: a handler-looking run in the STAK block,
+        /// after its fixed header. Scanned like CARD/BKGD scripts.
+        func stackScript(_ block: BlockInfo) -> String {
+            for run in textRuns(from: block.offset + 0x30, end: block.offset + block.size)
+                where looksLikeScript(run) {
+                return run
+            }
+            return ""
         }
 
         /// Parse a CARD or BKGD block into parts, contents, and script.
