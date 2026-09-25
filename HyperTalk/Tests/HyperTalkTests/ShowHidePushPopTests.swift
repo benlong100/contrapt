@@ -53,6 +53,16 @@ import Testing
     #expect(host.destinations.last == .home)
 }
 
+@Test func goBackIsADestination() async throws {
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      go back
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .back)
+}
+
 @Test func pushThenPopNavigates() async throws {
     let host = MockHost()
     host.currentCardID = "42"

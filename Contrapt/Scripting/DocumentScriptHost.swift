@@ -20,6 +20,13 @@ import HyperTalk
     var ids: [String] = []
 }
 
+/// Browser history for `go back` — the trail of cards a script navigated
+/// away from. Session-wide, since the host is rebuilt per script run.
+@MainActor final class VisitHistory {
+    static let shared = VisitHistory()
+    var ids: [String] = []
+}
+
 /// Where `find` last matched, so the view can box it on the card.
 struct FindHighlight: Equatable {
     var partID: UUID
@@ -94,6 +101,15 @@ final class DocumentScriptHost: HyperTalkHost {
         if case .home = destination { onGoHome(); return }
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
+        // `go back` returns to the last card the script navigated away from.
+        if case .back = destination {
+            guard let id = VisitHistory.shared.ids.popLast(),
+                  let index = stack.cards.firstIndex(where: { String($0.scriptID) == id }) else {
+                return // nothing to go back to — harmless, as in HyperCard
+            }
+            onNavigate(index, effects)
+            return
+        }
         let target: Int
         switch destination {
         case .next:
@@ -120,9 +136,11 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("There is no card with id \(id).")
             }
             target = index
-        case .home:
+        case .home, .back:
             return // handled above
         }
+        // Remember where we came from so a later `go back` can return here.
+        VisitHistory.shared.ids.append(String(stack.cards[cardIndex].scriptID))
         // The view owns the animated transition (see ContentView.navigate).
         onNavigate(target, effects)
     }

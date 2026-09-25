@@ -130,6 +130,8 @@ enum GoTarget {
     case idExpression(Expr)
     /// `go home` — open the Home stack.
     case home
+    /// `go back` — return to the previously viewed card (browser history).
+    case back
 }
 
 indirect enum RepeatKind {

@@ -688,6 +688,8 @@ struct Parser {
             target = .last
         } else if consumeWord("home") {
             target = .home
+        } else if consumeWord("back") {
+            target = .back
         } else if consumeWord("card") {
             if consumeWord("id") {
                 target = .idExpression(try parseExpression())

@@ -86,6 +86,8 @@ public enum GoDestination: Equatable, Sendable {
     case id(String)
     /// `go home` — open the Home stack (cross-stack navigation).
     case home
+    /// `go back` — return to the previously viewed card (browser history).
+    case back
 }
 
 /// An object a script can address with `get`/`set` and `the … of …`.

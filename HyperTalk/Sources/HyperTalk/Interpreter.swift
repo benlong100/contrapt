@@ -614,6 +614,8 @@ final class Runtime {
             destination = .id(try await evaluate(expression, line: line))
         case .home:
             destination = .home
+        case .back:
+            destination = .back
         }
         // The go consumes any queued visual effects, whether or not it succeeds.
         let effects = pendingVisualEffects
