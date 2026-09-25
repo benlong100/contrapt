@@ -68,6 +68,13 @@ struct HyperTalkGuideView: View {
                     divide total by count
                     """)
 
+                    section("pass", body: "Inside a handler, `pass <message>` stops it and lets the same message keep travelling down the path to the next object's handler — so a part can do its bit and still let the card, background, or stack respond too. Common at the end of `openCard`/`closeCard` handlers.", example: """
+                    on mouseUp
+                      set the hilite of me to true
+                      pass mouseUp
+                    end mouseUp
+                    """)
+
                     section("show, hide, push, pop", body: "`show` and `hide` flip a part's visibility (the same as `set the visible of …`). `push card` remembers the current card; `pop card` returns to it, and `pop card into <container>` reads the remembered card without going. A visual effect before a `pop` plays, just like `go`.", example: """
                     hide field "Answer"
                     show button "Next"

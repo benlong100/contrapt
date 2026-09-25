@@ -358,6 +358,13 @@ struct Parser {
             let amount = try parseExpression()
             try expectNewline()
             return Stmt(kind: .arithmetic(.divide, amount: amount, container: container), line: line)
+        case "pass":
+            advance()
+            // `pass <messageName>` — the name (usually the handler's own) is
+            // accepted; the current message is what continues down the path.
+            if peekIdentifier() != nil { advance() }
+            try expectNewline()
+            return Stmt(kind: .passMessage, line: line)
         case "show", "hide":
             advance()
             return try parseShowHide(visible: word == "show", line: line)
@@ -1208,6 +1215,14 @@ struct Parser {
             // reserves both words for dispatch identity).
             if word == "me" { return .property("name", .me) }
             if word == "target" { return .property("name", .target) }
+            // Bare `<property> of <object>` — HyperTalk lets you drop the
+            // leading `the`, e.g. `loc of field "x"`, `rect of card field 2`.
+            // A plain variable is never legitimately followed by `of`, so
+            // treating `<ident> of …` as a property access is safe.
+            if peekIdentifier() == "of" {
+                advance() // of
+                return .property(word.lowercased(), try parseObjectExpr())
+            }
             // `name(args)` — a function call. Otherwise a plain variable.
             if case .symbol("(") = current.kind {
                 advance()

@@ -214,3 +214,50 @@ private func layers(button: String = "", card: String = "", background: String =
         #expect(error.context == nil)
     }
 }
+
+@Test func passContinuesToTheNextObject() async throws {
+    let host = MockHost(fields: ["a": "", "b": ""])
+    let handled = try await HyperTalk.send("mouseUp", along: layers(
+        button: """
+        on mouseUp
+          put "button" into field "a"
+          pass mouseUp
+        end mouseUp
+        """,
+        card: """
+        on mouseUp
+          put "card" into field "b"
+        end mouseUp
+        """
+    ), host: host)
+    #expect(handled)
+    #expect(host.fields["a"] == "button") // button ran first
+    #expect(host.fields["b"] == "card")    // then passed to the card
+}
+
+@Test func passWithNoFurtherHandlerIsHarmless() async throws {
+    let host = MockHost(fields: ["a": ""])
+    // The button passes and nothing below handles it — no error, message ends.
+    _ = try await HyperTalk.send("mouseUp", along: layers(
+        button: """
+        on mouseUp
+          put "button" into field "a"
+          pass mouseUp
+        end mouseUp
+        """
+    ), host: host)
+    #expect(host.fields["a"] == "button")
+}
+
+@Test func statementsAfterPassDoNotRun() async throws {
+    let host = MockHost(fields: ["a": ""])
+    _ = try await HyperTalk.send("mouseUp", along: layers(
+        button: """
+        on mouseUp
+          pass mouseUp
+          put "should not run" into field "a"
+        end mouseUp
+        """
+    ), host: host)
+    #expect(host.fields["a"] == "")
+}

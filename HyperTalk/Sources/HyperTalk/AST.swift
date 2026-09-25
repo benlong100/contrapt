@@ -71,6 +71,9 @@ indirect enum StmtKind {
     /// A recognized-but-ignored statement (e.g. `show menuBar`) — parsed so
     /// old stacks don't error on things Contrapt has no concept of.
     case noOp
+    /// `pass <message>` — stop this handler and let the message continue down
+    /// the object path to the next handler.
+    case passMessage
     /// `add`/`subtract`/`multiply`/`divide` — arithmetic commands that update a
     /// container in place (`add 1 to x`, `subtract 5 from field "n"`).
     case arithmetic(BinaryOp, amount: Expr, container: Container)

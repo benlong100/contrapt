@@ -176,6 +176,9 @@ final class Runtime {
         case exitRepeat
         case nextRepeat
         case exitHandler
+        /// `pass <message>` — stop this handler and let the same message
+        /// continue to the next object down the path.
+        case passMessage
     }
 
     init(host: HyperTalkHost, path: [ScriptLayer], stepsRemaining: Int) {
@@ -207,16 +210,19 @@ final class Runtime {
                 variables[parameter] = offset < arguments.count ? arguments[offset] : ""
             }
             frames.append(Frame(variables: variables, layerIndex: index))
-            defer { frames.removeLast() }
+            defer { frames.removeLast() } // per-iteration: popped before any continue
             let savedReturn = pendingReturn
             pendingReturn = nil
+            let flow: Flow
             do {
-                _ = try await execute(handler.body)
+                flow = try await execute(handler.body)
             } catch let error as ScriptError {
                 throw annotated(error, layerIndex: index)
             }
             lastResult = pendingReturn ?? ""
             pendingReturn = savedReturn
+            // `pass` hands the same message to the next object down the path.
+            if case .passMessage = flow { continue }
             return true
         }
         return false
@@ -455,6 +461,9 @@ final class Runtime {
         case .noOp:
             return .normal
 
+        case .passMessage:
+            return .passMessage
+
         case .arithmetic(let op, let amountExpr, let container):
             let current = try Value.number(from: try await containerValue(container, line: statement.line), line: statement.line)
             let amount = try Value.number(from: try await evaluate(amountExpr, line: statement.line), line: statement.line)
@@ -619,6 +628,7 @@ final class Runtime {
             switch flow {
             case .exitRepeat: return .normal
             case .exitHandler: return .exitHandler
+            case .passMessage: return .passMessage // propagate out of the loop
             case .normal, .nextRepeat: return nil // keep looping
             }
         }

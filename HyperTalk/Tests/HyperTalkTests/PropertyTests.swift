@@ -27,6 +27,18 @@ import Testing
     #expect(host.fields["out"] == "120")
 }
 
+@Test func bareOfReadsAProperty() async throws {
+    // HyperTalk lets you drop the leading `the`: `loc of field "x"`.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["field Month1.loc"] = "40,60"
+    try await run("""
+    on mouseUp
+      put loc of field "Month1" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "40,60")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"
