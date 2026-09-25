@@ -453,6 +453,33 @@ extension EnvironmentValues {
     }
 }
 
+extension View {
+    /// A field's border/background per its FieldStyle — shared by plain and
+    /// rich fields. Transparent draws nothing (content floats over the card);
+    /// opaque fills; rectangle adds a border; shadow adds a drop shadow.
+    @ViewBuilder
+    func fieldChrome(style: FieldStyle, showLines: Bool = false, lineHeight: CGFloat = 0, inset: CGFloat = 0) -> some View {
+        self
+            .background {
+                ZStack {
+                    if style != .transparent { Color.cardSurface }
+                    if showLines { FieldBaselineLines(lineHeight: lineHeight, inset: inset) }
+                }
+            }
+            .overlay {
+                if style == .rectangle || style == .shadow {
+                    RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: style == .transparent ? 0 : 6))
+            .shadow(
+                color: style == .shadow ? .black.opacity(0.28) : .clear,
+                radius: style == .shadow ? 4 : 0,
+                x: 0, y: style == .shadow ? 2 : 0
+            )
+    }
+}
+
 /// HyperCard's Show Lines: evenly-spaced baseline rules across a field.
 private struct FieldBaselineLines: View {
     let lineHeight: CGFloat
@@ -506,6 +533,7 @@ struct PartView: View {
                     markdown: properties.text,
                     fontDesign: properties.format.fontDesign,
                     size: properties.format.size,
+                    style: properties.style,
                     onFollowLink: onFollowLink
                 )
             } else {
@@ -580,18 +608,12 @@ struct PartView: View {
         }
         .padding(.horizontal, margin)
         .padding(.vertical, 8)
-        .background {
-            ZStack {
-                Color.cardSurface
-                if properties.showLines {
-                    FieldBaselineLines(lineHeight: properties.format.size * 1.4, inset: margin)
-                }
-            }
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .fieldChrome(
+            style: properties.style,
+            showLines: properties.showLines,
+            lineHeight: properties.format.size * 1.4,
+            inset: margin
+        )
     }
 
     private func lockedAlignment(_ align: TextAlign) -> Alignment {

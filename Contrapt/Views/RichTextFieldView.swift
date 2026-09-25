@@ -24,15 +24,14 @@ struct RichFieldView: View {
     let markdown: String
     var fontDesign: FontDesign = .standard
     var size: Double = 17
+    var style: FieldStyle = .rectangle
     var onFollowLink: (FieldLink) -> Void
 
     var body: some View {
+        // The web view is transparent; the chrome supplies the fill/border so
+        // a transparent field lets the card show through the rendered text.
         RichTextWebView(markdown: markdown, fontDesign: fontDesign, size: size, onFollowLink: onFollowLink)
-            .background(Color.cardSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .fieldChrome(style: style)
     }
 }
 
@@ -93,10 +92,14 @@ private struct RichTextWebView {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = coordinator
+        // Transparent, so the field's chrome (or the card, when the style is
+        // transparent) shows behind the rendered text.
         #if os(iOS)
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
+        #elseif os(macOS)
+        webView.setValue(false, forKey: "drawsBackground")
         #endif
         load(into: webView, coordinator: coordinator)
         return webView

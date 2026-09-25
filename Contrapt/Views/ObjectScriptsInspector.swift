@@ -61,8 +61,10 @@ struct ObjectScriptsInspector: View {
                     } label: {
                         LabeledContent("Card Size", value: cardSizeLabel)
                     }
-                    geometryRow("Width", value: $stack.cardSize.width)
-                    geometryRow("Height", value: $stack.cardSize.height)
+                    HStack(spacing: 16) {
+                        geometryCell("Width", value: $stack.cardSize.width)
+                        geometryCell("Height", value: $stack.cardSize.height)
+                    }
                 } header: {
                     Text("Stack")
                 } footer: {
@@ -109,10 +111,16 @@ struct ObjectScriptsInspector: View {
         return "\(Int(size.width)) × \(Int(size.height))"
     }
 
-    private func geometryRow(_ title: String, value: Binding<Double>) -> some View {
-        LabeledContent(title) {
+    /// A labelled numeric field, fixed to a modest width so Width and Height
+    /// pack onto one row (matching the part inspector).
+    private func geometryCell(_ title: String, value: Binding<Double>) -> some View {
+        HStack(spacing: 6) {
+            Text(title).foregroundStyle(.secondary)
             TextField(title, value: value, format: .number)
+                .labelsHidden()
                 .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 72)
                 .numericPunctuationKeyboard()
         }
     }

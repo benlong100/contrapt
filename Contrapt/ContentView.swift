@@ -258,6 +258,10 @@ struct ContentView: View {
                             #endif
                         }
                     }
+                    // On macOS these live in the Edit menu (see CardCommands)
+                    // to keep the toolbar uncluttered; iOS has no menu bar, so
+                    // the toolbar menu stays.
+                    #if !os(macOS)
                     Menu("Cards", systemImage: "rectangle.stack") {
                         Button("New Card", systemImage: "rectangle.badge.plus") {
                             addCard()
@@ -283,6 +287,7 @@ struct ContentView: View {
                         }
                         .disabled(!canDeleteCurrentCard)
                     }
+                    #endif
                     Menu("Arrange", systemImage: "square.3.layers.3d") {
                         Button("Bring to Front", systemImage: "arrow.up.to.line") { arrangeSelectedPart(.front) }
                         Button("Bring Closer", systemImage: "chevron.up") { arrangeSelectedPart(.closer) }
@@ -311,9 +316,13 @@ struct ContentView: View {
                     openHome()
                 }
                 #endif
+                // On macOS the guide opens from the Help menu (see
+                // GuideCommand); iOS has no menu bar, so it stays in the toolbar.
+                #if !os(macOS)
                 Button("HyperTalk Guide", systemImage: "book") {
                     isGuidePresented = true
                 }
+                #endif
                 if let fileURL {
                     ShareLink(item: fileURL) {
                         Label("Share Stack", systemImage: "square.and.arrow.up")
@@ -358,7 +367,9 @@ struct ContentView: View {
             }
         }
         .focusedValue(\.cardNavigation, cardNavigation)
+        .focusedSceneValue(\.cardActions, cardActions)
         .focusedSceneValue(\.stackFullScreen, fullScreenBinding)
+        .focusedSceneValue(\.guidePresented, $isGuidePresented)
         // Full-screen (presentation) mode: hide the app chrome and let the
         // padding color own the space around the card.
         .toolbar(isPresentingFullScreen ? .hidden : .automatic)
@@ -997,6 +1008,21 @@ struct ContentView: View {
             goPrevious: goToPreviousCard, goNext: goToNextCard
         )
     }
+
+    /// Card-management actions published to the Edit menu on macOS (where the
+    /// toolbar's Cards menu is omitted to keep the toolbar clean).
+    private var cardActions: CardActions {
+        CardActions(
+            newCard: addCard,
+            newBackground: addBackground,
+            cutCard: cutCard,
+            copyCard: copyCard,
+            pasteCard: pasteCard,
+            deleteCard: deleteCurrentCard,
+            canDeleteCard: canDeleteCurrentCard,
+            canPasteCard: cardClipboard.payload != nil
+        )
+    }
 }
 
 /// A pending script dialog: `answer` shows a row of buttons, `ask` shows a
@@ -1040,13 +1066,36 @@ final class CardClipboard: ObservableObject {
     @Published var payload: Payload?
 }
 
+/// Bridges the focused document's card-management actions to the Edit menu
+/// (macOS). Nil when no document is focused, which disables the commands.
+struct CardActions {
+    var newCard: () -> Void
+    var newBackground: () -> Void
+    var cutCard: () -> Void
+    var copyCard: () -> Void
+    var pasteCard: () -> Void
+    var deleteCard: () -> Void
+    var canDeleteCard: Bool
+    var canPasteCard: Bool
+}
+
 struct CardNavigationKey: FocusedValueKey {
     typealias Value = CardNavigation
+}
+
+struct CardActionsKey: FocusedValueKey {
+    typealias Value = CardActions
 }
 
 /// Carries a binding to the focused stack's full-screen flag, so the View
 /// menu's toggle can read and flip it through @FocusedBinding.
 struct StackFullScreenKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
+/// Carries a binding to the focused stack's HyperTalk Guide sheet flag, so the
+/// Help menu can open it (macOS, where it's not in the toolbar).
+struct GuidePresentedKey: FocusedValueKey {
     typealias Value = Binding<Bool>
 }
 
@@ -1056,9 +1105,19 @@ extension FocusedValues {
         set { self[CardNavigationKey.self] = newValue }
     }
 
+    var cardActions: CardActions? {
+        get { self[CardActionsKey.self] }
+        set { self[CardActionsKey.self] = newValue }
+    }
+
     var stackFullScreen: Binding<Bool>? {
         get { self[StackFullScreenKey.self] }
         set { self[StackFullScreenKey.self] = newValue }
+    }
+
+    var guidePresented: Binding<Bool>? {
+        get { self[GuidePresentedKey.self] }
+        set { self[GuidePresentedKey.self] = newValue }
     }
 }
 

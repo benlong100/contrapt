@@ -347,6 +347,18 @@ nonisolated enum FieldKind: String, Codable {
     case rich
 }
 
+/// A field's border/background, HyperCard's field style. `transparent` has
+/// neither (text floats over the card); `opaque` fills but has no border;
+/// `rectangle` fills with a border; `shadow` adds a drop shadow.
+nonisolated enum FieldStyle: String, Codable, CaseIterable, Hashable {
+    case transparent
+    case opaque
+    case rectangle
+    case shadow
+
+    var label: String { rawValue.capitalized }
+}
+
 nonisolated struct FieldPart: Hashable {
     /// For plain fields this is the entered text; for rich fields it's the
     /// Markdown source, rendered for display.
@@ -363,8 +375,10 @@ nonisolated struct FieldPart: Hashable {
     var lockText: Bool
     var showLines: Bool
     var wideMargins: Bool
+    /// The field's border/background style.
+    var style: FieldStyle
 
-    init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain, lockText: Bool = false, showLines: Bool = false, wideMargins: Bool = false) {
+    init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain, lockText: Bool = false, showLines: Bool = false, wideMargins: Bool = false, style: FieldStyle = .rectangle) {
         self.text = text
         self.placeholder = placeholder
         self.isMultiline = isMultiline
@@ -373,13 +387,14 @@ nonisolated struct FieldPart: Hashable {
         self.lockText = lockText
         self.showLines = showLines
         self.wideMargins = wideMargins
+        self.style = style
     }
 }
 
 /// Manual Codable so older manifests without the newer fields still decode.
 extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
-        case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins
+        case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins, style
     }
 
     init(from decoder: Decoder) throws {
@@ -392,6 +407,7 @@ extension FieldPart: Codable {
         lockText = try container.decodeIfPresent(Bool.self, forKey: .lockText) ?? false
         showLines = try container.decodeIfPresent(Bool.self, forKey: .showLines) ?? false
         wideMargins = try container.decodeIfPresent(Bool.self, forKey: .wideMargins) ?? false
+        style = try container.decodeIfPresent(FieldStyle.self, forKey: .style) ?? .rectangle
     }
 }
 

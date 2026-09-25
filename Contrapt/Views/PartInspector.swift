@@ -118,6 +118,11 @@ struct PartInspector: View {
             }
         case .field(let properties):
             // The Plain/Rich picker lives up in the Part section now.
+            Section {
+                Picker("Style", selection: fieldStyle) {
+                    ForEach(FieldStyle.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+            }
             if properties.kind == .rich {
                 Section {
                     TextEditor(text: fieldContents)
@@ -362,6 +367,20 @@ struct PartInspector: View {
             set: {
                 guard case .field(var properties) = part.kind else { return }
                 properties[keyPath: keyPath] = $0
+                part.kind = .field(properties)
+            }
+        )
+    }
+
+    private var fieldStyle: Binding<FieldStyle> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return .rectangle }
+                return properties.style
+            },
+            set: {
+                guard case .field(var properties) = part.kind else { return }
+                properties.style = $0
                 part.kind = .field(properties)
             }
         )

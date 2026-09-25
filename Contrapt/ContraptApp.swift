@@ -122,6 +122,43 @@ private struct GoCommands: View {
     #endif
 }
 
+/// The card-management items (New Card, New Background, Cut/Copy/Paste Card,
+/// Delete Card), added to the Edit menu on macOS. On iOS these live in the
+/// toolbar's Cards menu instead, since there's no menu bar. Enabled only when
+/// a stack window is focused.
+private struct CardCommands: View {
+    @FocusedValue(\.cardActions) private var actions
+
+    var body: some View {
+        Group {
+            Button("New Card") { actions?.newCard() }
+                .keyboardShortcut("n", modifiers: .command)
+            Button("New Background") { actions?.newBackground() }
+            Divider()
+            Button("Cut Card") { actions?.cutCard() }
+                .disabled(!(actions?.canDeleteCard ?? false))
+            Button("Copy Card") { actions?.copyCard() }
+            Button("Paste Card") { actions?.pasteCard() }
+                .disabled(!(actions?.canPasteCard ?? false))
+            Divider()
+            Button("Delete Card") { actions?.deleteCard() }
+                .disabled(!(actions?.canDeleteCard ?? false))
+        }
+        .disabled(actions == nil)
+    }
+}
+
+/// The Help menu's HyperTalk Guide item (macOS, where it's not in the
+/// toolbar). Enabled only when a stack window is focused.
+private struct GuideCommand: View {
+    @FocusedBinding(\.guidePresented) private var isPresented: Bool?
+
+    var body: some View {
+        Button("HyperTalk Guide") { isPresented = true }
+            .disabled(isPresented == nil)
+    }
+}
+
 /// The View menu's Full Screen toggle, enabled when a stack is focused.
 private struct FullScreenCommand: View {
     @FocusedBinding(\.stackFullScreen) private var isFullScreen: Bool?
@@ -318,6 +355,26 @@ struct ContraptApp: App {
         CommandGroup(after: .toolbar) {
             FullScreenCommand()
         }
+        #if os(macOS)
+        // Replace the DocumentGroup's default File > New: keep a "New Stack"
+        // item but free up ⌘N so it can drive New Card in the Edit menu
+        // (HyperCard's binding).
+        CommandGroup(replacing: .newItem) {
+            Button("New Stack") {
+                NSDocumentController.shared.newDocument(nil)
+            }
+        }
+        // The Card menu's items, folded into the Edit menu after the standard
+        // Cut/Copy/Paste group.
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            CardCommands()
+        }
+        // The HyperTalk Guide, in the Help menu.
+        CommandGroup(replacing: .help) {
+            GuideCommand()
+        }
+        #endif
         CommandMenu("Go") {
             GoCommands()
         }

@@ -349,8 +349,11 @@ final class DocumentScriptHost: HyperTalkHost {
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.autoHilite ? "true" : "false"
         case "style":
-            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            return properties.style.rawValue
+            switch part.kind {
+            case .button(let properties): return properties.style.rawValue
+            case .field(let properties): return properties.style.rawValue
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
         case "hilite", "highlight":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.hilite ? "true" : "false"
@@ -414,12 +417,22 @@ final class DocumentScriptHost: HyperTalkHost {
             properties.autoHilite = try boolean(value, for: property)
             part.kind = .button(properties)
         case "style":
-            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            guard let style = ButtonStyleKind.parse(value) else {
-                throw HostError("Unknown button style \"\(value)\". Try roundRect, rectangle, shadow, opaque, transparent, checkbox, or radio.")
+            switch part.kind {
+            case .button(var properties):
+                guard let style = ButtonStyleKind.parse(value) else {
+                    throw HostError("Unknown button style \"\(value)\". Try roundRect, rectangle, shadow, opaque, transparent, checkbox, or radio.")
+                }
+                properties.style = style
+                part.kind = .button(properties)
+            case .field(var properties):
+                guard let style = FieldStyle(rawValue: value.lowercased().trimmingCharacters(in: .whitespaces)) else {
+                    throw HostError("Unknown field style \"\(value)\". Try transparent, opaque, rectangle, or shadow.")
+                }
+                properties.style = style
+                part.kind = .field(properties)
+            default:
+                throw Self.noSuchProperty(property, of: kind)
             }
-            properties.style = style
-            part.kind = .button(properties)
         case "hilite", "highlight":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.hilite = try boolean(value, for: property)
