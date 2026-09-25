@@ -9,11 +9,29 @@ import Testing
 
 private func layers(button: String = "", card: String = "", background: String = "", stack: String = "") -> [ScriptLayer] {
     [
-        ScriptLayer(name: "button \"Test\" script", source: button),
-        ScriptLayer(name: "card \"Card 1\" script", source: card),
-        ScriptLayer(name: "background script", source: background),
-        ScriptLayer(name: "stack script", source: stack),
+        ScriptLayer(name: "button \"Test\" script", source: button,
+                    object: .part(kind: "button", domain: .card, reference: .named("Test"))),
+        ScriptLayer(name: "card \"Card 1\" script", source: card, object: .thisCard),
+        ScriptLayer(name: "background script", source: background, object: .thisBackground),
+        ScriptLayer(name: "stack script", source: stack, object: .thisStack),
     ]
+}
+
+@Test func sendMessageToBackgroundDispatchesThere() async throws {
+    // `send extendWeekly to bkgnd` runs the background's handler.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await HyperTalk.send("mouseUp", along: layers(
+        card: """
+        on mouseUp
+          send "greet Bill" to bkgnd
+        end mouseUp
+        """,
+        background: """
+        on greet who
+          put "hi " & who into field "out"
+        end greet
+        """), host: host)
+    #expect(host.fields["out"] == "hi Bill")
 }
 
 @Test func exitToHyperCardAbortsEveryHandler() async throws {

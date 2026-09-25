@@ -379,6 +379,16 @@ struct Parser {
             if peekIdentifier() != nil { advance() }
             try expectNewline()
             return Stmt(kind: .passMessage, line: line)
+        case "send":
+            advance()
+            // `send <message> to <object>` — dispatch to a specific object.
+            let message = try parseExpression()
+            guard consumeWord("to") else {
+                throw ScriptError(line: line, message: "Expected 'to <object>' after 'send <message>'.")
+            }
+            let object = try parseObjectExpr()
+            try expectNewline()
+            return Stmt(kind: .sendMessage(message, to: object), line: line)
         case "show", "hide":
             advance()
             return try parseShowHide(visible: word == "show", line: line)

@@ -76,6 +76,9 @@ indirect enum StmtKind {
     /// `pass <message>` — stop this handler and let the message continue down
     /// the object path to the next handler.
     case passMessage
+    /// `send <message> to <object>` — dispatch a message starting at a
+    /// specific object's layer (then down the path from there).
+    case sendMessage(Expr, to: ObjectExpr)
     /// `add`/`subtract`/`multiply`/`divide` — arithmetic commands that update a
     /// container in place (`add 1 to x`, `subtract 5 from field "n"`).
     case arithmetic(BinaryOp, amount: Expr, container: Container)

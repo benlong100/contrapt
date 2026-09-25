@@ -486,6 +486,20 @@ final class Runtime {
         case .passMessage:
             return .passMessage
 
+        case .sendMessage(let messageExpression, let objectExpression):
+            let text = try await evaluate(messageExpression, line: statement.line)
+                .trimmingCharacters(in: .whitespaces)
+            let target = try await resolveObject(objectExpression, line: statement.line)
+            // Start dispatch at the target object's layer, then fall through
+            // the path below it (so `send X to this card` can reach a
+            // background handler, as in HyperCard).
+            let fromLayer = path.firstIndex { $0.object == target } ?? currentLayerIndex
+            let (command, arguments) = Self.splitMessage(text)
+            if !command.isEmpty {
+                _ = try await send(command, arguments: arguments, fromLayer: fromLayer, line: statement.line)
+            }
+            return .normal
+
         case .arithmetic(let op, let amountExpr, let container):
             let current = try Value.number(from: try await containerValue(container, line: statement.line), line: statement.line)
             let amount = try Value.number(from: try await evaluate(amountExpr, line: statement.line), line: statement.line)
@@ -671,6 +685,20 @@ final class Runtime {
         }
     }
 
+    /// Splits a `send` message string into a command name and its
+    /// comma-separated arguments — `"bracketWeek 12345"` → ("bracketWeek",
+    /// ["12345"]); `"extendWeekly"` → ("extendWeekly", []).
+    static func splitMessage(_ text: String) -> (command: String, arguments: [String]) {
+        guard let space = text.firstIndex(where: { $0 == " " || $0 == "\t" }) else {
+            return (text, [])
+        }
+        let command = String(text[..<space])
+        let rest = text[text.index(after: space)...].trimmingCharacters(in: .whitespaces)
+        if rest.isEmpty { return (command, []) }
+        return (command, rest.split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+
     private func executeGo(_ target: GoTarget, line: Int) async throws {
         let destination = try await destination(for: target, line: line)
         // The go consumes any queued visual effects, whether or not it succeeds.
@@ -686,7 +714,7 @@ final class Runtime {
             switch flow {
             case .exitRepeat: return .normal
             case .exitHandler: return .exitHandler
-            case .passMessage: return .passMessage // propagate out of the loop
+            case .passMessage: return .passMessage
             case .normal, .nextRepeat: return nil // keep looping
             }
         }
