@@ -595,15 +595,23 @@ struct PartView: View {
     /// rules) and Wide Margins (extra inset).
     @ViewBuilder
     private func plainField(_ properties: FieldPart) -> some View {
-        let margin: CGFloat = properties.wideMargins ? 18 : 8
+        // Locked (display-only, e.g. imported) fields use tight HyperCard-like
+        // margins so text fills the field as it did originally; editable
+        // fields keep roomier insets for entry.
+        let margin: CGFloat = properties.wideMargins ? 18 : (properties.lockText ? 3 : 8)
+        let verticalPadding: CGFloat = properties.lockText ? 2 : 8
         Group {
             if properties.lockText {
                 // Locked text is display-only and dispatches presses like a
-                // label, so a field can drive a script.
+                // label, so a field can drive a script. It renders ALL its
+                // text (no tail-truncation "…"); overflow is clipped by the
+                // field's clipShape, as a HyperCard field clips silently.
                 Text(properties.text)
                     .font(properties.format.font)
                     .underline(properties.format.isUnderline)
                     .multilineTextAlignment(properties.format.align.swiftUI)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
                     .contentShape(Rectangle())
                     .gesture(labelPressGesture)
@@ -632,7 +640,7 @@ struct PartView: View {
             }
         }
         .padding(.horizontal, margin)
-        .padding(.vertical, 8)
+        .padding(.vertical, verticalPadding)
         .fieldChrome(
             style: properties.style,
             showLines: properties.showLines,
