@@ -349,10 +349,6 @@ struct ContentView: View {
                 }
                 Spacer()
                 Menu {
-                    #if os(macOS)
-                    Button("Home", systemImage: "house") { openHome() }
-                    Divider()
-                    #endif
                     Button("First Card", systemImage: "backward.end") { goFirst() }
                     Button("Last Card", systemImage: "forward.end") { goLast() }
                 } label: {

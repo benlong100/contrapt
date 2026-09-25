@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Contrapt's full-screen is its own presentation mode. Set before the
         // menu is built. (collectionBehavior alone doesn't remove this item.)
         UserDefaults.standard.set(false, forKey: "NSFullScreenMenuItemEverywhere")
+        // Contrapt doesn't use tabbed windows, so drop the View menu's Show
+        // Tab Bar / Show All Tabs items.
+        NSWindow.allowsAutomaticWindowTabbing = false
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -47,22 +50,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.collectionBehavior.remove(.fullScreenPrimary)
             window.collectionBehavior.remove(.fullScreenAuxiliary)
         }
-        // …and delete the native "Enter Full Screen" item each time a menu is
-        // about to open, since SwiftUI re-adds it after a one-time removal.
+        // …and prune the native Full Screen item, plus the redundant Save and
+        // Revert To items, each time a menu is about to open (SwiftUI re-adds
+        // them after a one-time removal). The app autosaves, so Save/Revert To
+        // aren't needed; Duplicate/Rename/Move To stay.
         NotificationCenter.default.addObserver(
             forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
         ) { _ in
-            Self.removeNativeFullScreenMenuItem()
+            Self.pruneUnwantedMenuItems()
         }
     }
 
-    /// Removes AppKit's automatic Full Screen item (action `toggleFullScreen:`)
-    /// wherever it landed in the menu, leaving Contrapt's own command.
-    private static func removeNativeFullScreenMenuItem() {
-        let toggle = NSSelectorFromString("toggleFullScreen:")
+    /// Removes menu items Contrapt doesn't want, wherever they land: AppKit's
+    /// automatic Full Screen item (leaving Contrapt's own command), and the
+    /// autosave-redundant Save and Revert To items.
+    private static func pruneUnwantedMenuItems() {
+        let unwanted = ["toggleFullScreen:", "saveDocument:", "revertDocumentToSaved:"]
+            .map(NSSelectorFromString)
         for submenu in NSApp.mainMenu?.items.compactMap(\.submenu) ?? [] {
-            for item in submenu.items where item.action == toggle {
-                submenu.removeItem(item)
+            for item in submenu.items {
+                if let action = item.action, unwanted.contains(action) {
+                    submenu.removeItem(item)
+                } else if item.submenu != nil, item.title.hasPrefix("Revert") {
+                    // "Revert To" is a versions submenu with no action of its own.
+                    submenu.removeItem(item)
+                }
             }
         }
     }
