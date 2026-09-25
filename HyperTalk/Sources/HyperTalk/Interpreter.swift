@@ -511,6 +511,16 @@ final class Runtime {
             try hostCall(line: statement.line) { try host.reorderCards(keyed.map(\.index)) }
             return .normal
 
+        case .doMenu(let itemExpression):
+            let item = try await evaluate(itemExpression, line: statement.line)
+            // Send a `doMenu` message so a handler can trap the command; if
+            // none does (or it passes), perform the built-in menu action.
+            let trapped = try await send("doMenu", arguments: [item], fromLayer: currentLayerIndex, line: statement.line)
+            if !trapped {
+                try hostCall(line: statement.line) { try host.performMenu(item) }
+            }
+            return .normal
+
         case .sendMessage(let messageExpression, let objectExpression):
             let text = try await evaluate(messageExpression, line: statement.line)
                 .trimmingCharacters(in: .whitespaces)

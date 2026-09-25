@@ -242,6 +242,10 @@ final class MockHost: HyperTalkHost {
     func setSortContext(_ cardIndex: Int?) { sortContext = cardIndex }
     func reorderCards(_ order: [Int]) throws { reorderedTo = order }
 
+    /// `doMenu` built-in actions performed (untrapped items).
+    var performedMenu: [String] = []
+    func performMenu(_ item: String) throws { performedMenu.append(item) }
+
     /// A field exists if it's in `fields`; any other part/card exists if a
     /// property was preset for it. `this …` objects always exist.
     func exists(_ object: HyperTalkObject) -> Bool {

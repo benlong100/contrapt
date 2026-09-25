@@ -85,6 +85,9 @@ indirect enum StmtKind {
     /// `sort [cards] [ascending|descending] [text|numeric] by <expr>` — reorder
     /// the stack's cards by a key evaluated on each card.
     case sortCards(ascending: Bool, numeric: Bool, key: Expr)
+    /// `doMenu <item>` — send a `doMenu` message (so handlers can trap it),
+    /// then perform the built-in menu action if nothing traps it.
+    case doMenu(Expr)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])

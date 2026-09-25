@@ -17,6 +17,34 @@ private func layers(button: String = "", card: String = "", background: String =
     ]
 }
 
+@Test func doMenuPerformsBuiltInWhenNotTrapped() async throws {
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      doMenu "New Card"
+    end mouseUp
+    """, host: host)
+    #expect(host.performedMenu == ["New Card"])
+}
+
+@Test func doMenuHandlerCanTrapTheCommand() async throws {
+    // An `on doMenu` that doesn't pass traps the command — no built-in.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await HyperTalk.send("mouseUp", along: layers(
+        card: """
+        on mouseUp
+          doMenu "New Card"
+        end mouseUp
+        """,
+        background: """
+        on doMenu which
+          put which into field "out"
+        end doMenu
+        """), host: host)
+    #expect(host.fields["out"] == "New Card")
+    #expect(host.performedMenu.isEmpty) // trapped → built-in didn't run
+}
+
 @Test func sendMessageToBackgroundDispatchesThere() async throws {
     // `send extendWeekly to bkgnd` runs the background's handler.
     let host = MockHost(fields: ["out": ""])

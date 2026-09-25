@@ -389,6 +389,11 @@ struct Parser {
             let object = try parseObjectExpr()
             try expectNewline()
             return Stmt(kind: .sendMessage(message, to: object), line: line)
+        case "domenu":
+            advance()
+            let item = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .doMenu(item), line: line)
         case "sort":
             advance()
             return try parseSort(line: line)

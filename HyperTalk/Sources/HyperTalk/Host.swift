@@ -196,6 +196,9 @@ public protocol HyperTalkHost: AnyObject {
     /// `sort` — reorder the stack's cards to the given permutation of current
     /// indices (e.g. `[2,0,1]` puts card 3 first).
     func reorderCards(_ order: [Int]) throws
+    /// `doMenu <item>` that no handler trapped — perform the built-in menu
+    /// action (e.g. New Card, Delete Card). Unknown items are ignored.
+    func performMenu(_ item: String) throws
     /// `push [this] card` — remember the current card on a session stack.
     func pushCard()
     /// `pop card` — remove and return the most recently pushed card's id (nil

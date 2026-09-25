@@ -104,6 +104,40 @@ final class DocumentScriptHost: HyperTalkHost {
         sortContextIndex = cardIndex
     }
 
+    func performMenu(_ item: String) throws {
+        switch item.lowercased() {
+        case "new card":
+            // A new card shares the current card's background and field
+            // layout (cleared), inserted just after it — as in HyperCard.
+            let source = stack.cards[cardIndex]
+            var card = Card(id: UUID(), name: "", backgroundID: source.backgroundID, script: "", parts: [])
+            card.scriptID = stackBinding.wrappedValue.claimScriptID()
+            card.parts = source.parts.map { part in
+                var copy = part
+                copy.id = UUID()
+                copy.scriptID = stackBinding.wrappedValue.claimScriptID()
+                if case .field(var field) = copy.kind {
+                    field.text = ""
+                    copy.kind = .field(field)
+                }
+                return copy
+            }
+            let at = cardIndex + 1
+            stackBinding.wrappedValue.cards.insert(card, at: at)
+            onNavigate(at, [])
+        case "delete card":
+            guard stack.cards.count > 1 else { return } // keep at least one card
+            guard !stack.cards[cardIndex].cantDelete else {
+                throw HostError("This card can't be deleted.")
+            }
+            let idx = cardIndex
+            stackBinding.wrappedValue.cards.remove(at: idx)
+            onNavigate(min(idx, stackBinding.wrappedValue.cards.count - 1), [])
+        default:
+            return // menu items Contrapt doesn't model — ignore, as a no-op
+        }
+    }
+
     func reorderCards(_ order: [Int]) throws {
         let cards = stack.cards
         guard order.count == cards.count, Set(order) == Set(0..<cards.count) else {
