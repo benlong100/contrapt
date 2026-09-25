@@ -64,6 +64,7 @@ final class MockHost: HyperTalkHost {
         case .number(let n): return "card \(n)."
         case .named(let s): return "card \(s).".lowercased()
         case .id(let i): return "id \(i)."
+        case .inBackground(let inner, let bg): return cardPrefix(inner) + bg.lowercased() + "."
         default: return "other."
         }
     }

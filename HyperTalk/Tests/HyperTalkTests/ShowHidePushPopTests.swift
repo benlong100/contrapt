@@ -53,15 +53,15 @@ import Testing
     #expect(host.destinations.last == .home)
 }
 
-@Test func goCardOfBackgroundIgnoresTheQualifier() async throws {
-    // `go card 1 of bkgnd "X"` parses; the background qualifier is ignored.
+@Test func goCardScopedToBackground() async throws {
+    // `go card 1 of bkgnd "X"` scopes the card to that background.
     let host = MockHost()
     _ = try await run("""
     on mouseUp
       go card 1 of bkgnd "Weekly"
     end mouseUp
     """, host: host)
-    #expect(host.destinations.last == .number(1))
+    #expect(host.destinations.last == .inBackground(.number(1), background: "Weekly"))
 }
 
 @Test func goToBareNameIsACardDestination() async throws {

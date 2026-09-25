@@ -136,6 +136,8 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("There is no card with id \(id).")
             }
             target = index
+        case .inBackground:
+            target = try resolveCardIndex(destination)
         case .home, .back:
             return // handled above
         }
@@ -244,9 +246,32 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("There is no card with id \(id).")
             }
             return index
+        case .inBackground(let inner, let background):
+            let indices = stack.cards.indices.filter {
+                backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
+            }
+            guard !indices.isEmpty else {
+                throw HostError("There is no background named \"\(background)\".")
+            }
+            switch inner {
+            case .first: return indices.first!
+            case .last: return indices.last!
+            case .number(let number):
+                guard (1...indices.count).contains(number) else {
+                    throw HostError("There is no card \(number) in background \"\(background)\".")
+                }
+                return indices[number - 1]
+            default:
+                throw HostError("That card reference isn't supported within a background.")
+            }
         case .home, .back:
             throw HostError("Can't address a field of that card.")
         }
+    }
+
+    private func backgroundName(ofCardAt index: Int) -> String? {
+        let backgroundID = stack.cards[index].backgroundID
+        return stack.backgrounds.first(where: { $0.id == backgroundID })?.name
     }
 
     func showMessage(_ text: String) {

@@ -698,7 +698,7 @@ struct Parser {
     private mutating func parseGo(line: Int) throws -> Stmt {
         _ = consumeWord("to")
         _ = consumeWord("the")
-        let target: GoTarget
+        var target: GoTarget
         if consumeWord("next") {
             _ = consumeWord("card")
             target = .next
@@ -729,9 +729,11 @@ struct Parser {
         } else {
             throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
         }
-        // Contrapt has no `card N of background "X"` addressing; accept and
-        // ignore a trailing `of <background>` qualifier so old stacks parse.
-        if peekIdentifier() == "of" {
+        // `go <first|last|N> card of background "X"` — scope to a background.
+        if let background = try parseOfBackground() {
+            target = .inBackground(target, background: background)
+        } else if peekIdentifier() == "of" {
+            // Some other trailing `of …` qualifier we don't model — ignore it.
             while current.kind != .newline, current.kind != .endOfScript { advance() }
         }
         try expectNewline()
@@ -1046,21 +1048,25 @@ struct Parser {
             index = saved // not a card owner (e.g. `field "x" of the target`)
             return nil
         }
-        // `last card of bkgnd "X"` — Contrapt can't scope a card to a
-        // background, so consume and ignore a trailing `of <background>`.
-        try skipOfBackgroundQualifier()
+        // `last card of bkgnd "X"` — scope the card to that background.
+        if let background = try parseOfBackground() {
+            return .inBackground(ref, background: background)
+        }
         return ref
     }
 
-    /// Consumes an `of <background> [name]` qualifier if present, ignoring it.
-    private mutating func skipOfBackgroundQualifier() throws {
+    /// Consumes an `of <background> <name>` qualifier, returning the name
+    /// expression. Returns nil (consuming nothing) when it isn't present, or
+    /// when it's a bare `of <background>` with no name (dropped).
+    private mutating func parseOfBackground() throws -> Expr? {
         guard peekIdentifier() == "of", let word = peekIdentifier(1),
-              Self.backgroundWords.contains(word) else { return }
+              Self.backgroundWords.contains(word) else { return nil }
         advance() // of
         advance() // background word
-        if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "into" {
-            _ = try parsePrimary() // the background name/number
+        guard current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "into" else {
+            return nil // bare `of bkgnd` — no name to scope by
         }
+        return try parsePrimary() // the background name/number
     }
 
     private mutating func consumeCardWord() -> Bool {

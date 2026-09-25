@@ -88,6 +88,9 @@ public enum GoDestination: Equatable, Sendable {
     case home
     /// `go back` — return to the previously viewed card (browser history).
     case back
+    /// A card scoped to a background: `first/last/Nth card of background X`.
+    /// `which` is `.first`, `.last`, or `.number(n)` within that background.
+    indirect case inBackground(GoDestination, background: String)
 }
 
 /// What `the number of …` counts.

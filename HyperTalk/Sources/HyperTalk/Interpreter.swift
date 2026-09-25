@@ -641,30 +641,38 @@ final class Runtime {
             return .named(value)
         case .idExpression(let expression):
             return .id(try await evaluate(expression, line: line))
+        case .inBackground(let base, let backgroundExpression):
+            guard let inner = try await resolveCardRef(base, line: line) else { return nil }
+            return .inBackground(inner, background: try await evaluate(backgroundExpression, line: line))
+        }
+    }
+
+    /// Maps a parsed `go` target to a host destination, evaluating any
+    /// name/number/background expressions.
+    private func destination(for target: GoTarget, line: Int) async throws -> GoDestination {
+        switch target {
+        case .next: return .next
+        case .previous: return .previous
+        case .first: return .first
+        case .last: return .last
+        case .expression(let expression):
+            let value = try await evaluate(expression, line: line)
+            if let number = Int(value.trimmingCharacters(in: .whitespaces)) {
+                return .number(number)
+            }
+            return .named(value)
+        case .idExpression(let expression):
+            return .id(try await evaluate(expression, line: line))
+        case .home: return .home
+        case .back: return .back
+        case .inBackground(let base, let backgroundExpression):
+            return .inBackground(try await destination(for: base, line: line),
+                                 background: try await evaluate(backgroundExpression, line: line))
         }
     }
 
     private func executeGo(_ target: GoTarget, line: Int) async throws {
-        let destination: GoDestination
-        switch target {
-        case .next: destination = .next
-        case .previous: destination = .previous
-        case .first: destination = .first
-        case .last: destination = .last
-        case .expression(let expression):
-            let value = try await evaluate(expression, line: line)
-            if let number = Int(value.trimmingCharacters(in: .whitespaces)) {
-                destination = .number(number)
-            } else {
-                destination = .named(value)
-            }
-        case .idExpression(let expression):
-            destination = .id(try await evaluate(expression, line: line))
-        case .home:
-            destination = .home
-        case .back:
-            destination = .back
-        }
+        let destination = try await destination(for: target, line: line)
         // The go consumes any queued visual effects, whether or not it succeeds.
         let effects = pendingVisualEffects
         pendingVisualEffects = []

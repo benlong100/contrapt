@@ -112,6 +112,8 @@ indirect enum CardRef {
     case expression(Expr)
     /// `card id <expr>`.
     case idExpression(Expr)
+    /// `<first|last|N> card of background <name>` — scoped to a background.
+    case inBackground(CardRef, background: Expr)
 }
 
 indirect enum Container {
@@ -139,7 +141,7 @@ enum WaitUnit {
     case seconds, ticks // a tick is 1/60 second
 }
 
-enum GoTarget {
+indirect enum GoTarget {
     case next
     case previous
     case first
@@ -150,6 +152,8 @@ enum GoTarget {
     case home
     /// `go back` — return to the previously viewed card (browser history).
     case back
+    /// `go <first|last|N> card of background <name>`.
+    case inBackground(GoTarget, background: Expr)
 }
 
 indirect enum RepeatKind {
