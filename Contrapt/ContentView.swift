@@ -126,6 +126,12 @@ struct ContentView: View {
                 // Actual-size stacks hug the card (small margin for the card
                 // shadow); otherwise the usual breathing room.
                 .padding(document.stack.presentAtActualSize ? 6 : 16)
+                #if os(macOS)
+                // Classic HyperCard browse cursor: the pointing finger over
+                // the card. Edit mode keeps the arrow; text fields being
+                // edited override with their own I-beam.
+                .pointerStyle(isEditing ? nil : .link)
+                #endif
             }
         }
         .environment(\.stackAssets, document.assets)

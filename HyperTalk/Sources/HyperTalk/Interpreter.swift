@@ -163,6 +163,14 @@ final class Runtime {
     private var pendingVisualEffects: [ScreenEffect] = []
 
     private static let maxMessageDepth = 64
+    /// Global environment properties Contrapt accepts but doesn't model —
+    /// `set the <these> to …` is a no-op rather than an error, so old stacks
+    /// that tweak the environment during handlers keep running.
+    private static let ignorableGlobalProperties: Set<String> = [
+        "cursor", "lockscreen", "lockmessages", "lockrecent", "lockerrordialogs",
+        "userlevel", "dragspeed", "numberformat", "powerkeys", "blindtyping",
+        "textarrows", "editbkgnd", "filter", "cantabort", "cantpeek",
+    ]
     private static let constants: [String: String] = [
         "empty": "",
         "quote": "\"",
@@ -535,6 +543,11 @@ final class Runtime {
             case "itemdelimiter":
                 // HyperCard uses only the first character of the delimiter.
                 itemDelimiter = value.isEmpty ? "" : String(value.first!)
+            case _ where Self.ignorableGlobalProperties.contains(property):
+                // Global environment properties Contrapt has no state for
+                // (cursor, lockScreen, userLevel…). Accept silently so old
+                // stacks that set them during long operations don't error.
+                break
             default:
                 throw ScriptError(line: statement.line, message: "Can't set the '\(property)'.")
             }

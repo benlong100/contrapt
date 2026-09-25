@@ -75,6 +75,20 @@ import Testing
     #expect(host.destinations.last == .named("Phone"))
 }
 
+@Test func settingEnvironmentGlobalsIsAcceptedAsNoOp() async throws {
+    // `set cursor to 4`, `set lockScreen to true`, etc. must not error.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      set cursor to 4
+      set lockScreen to true
+      set userLevel to 5
+      put "ok" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ok")
+}
+
 @Test func goBackIsADestination() async throws {
     let host = MockHost()
     _ = try await run("""
