@@ -33,7 +33,9 @@ enum LegacyStackImporter {
     }
 
     /// Reads `data` (a classic stack's data fork) into a Contrapt stack.
-    static func stack(from data: Data, name: String) throws -> Imported {
+    /// `iconFork`, when given (a HyperCard app's resource fork), supplies the
+    /// button ICON bitmaps the stack references — embedded per-use as assets.
+    static func stack(from data: Data, name: String, iconFork: Data? = nil) throws -> Imported {
         let reader = Reader(data)
         guard reader.tag(at: 0) == "STAK" else {
             throw ImportError(message: "This doesn't look like a HyperCard stack (no STAK header). If it came as a .hqx or .sit, unpack it first.")
@@ -42,6 +44,8 @@ enum LegacyStackImporter {
         let cardWidth = 512, cardHeight = 342 // HC 1.x screen
         var assets: [String: Data] = [:]
         let bmapByID = Dictionary(blocks.filter { $0.type == "BMAP" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let iconLibrary = iconFork.map { ResourceFork.icons(from: $0) } ?? [:]
+        var iconAssetByID: [Int: String] = [:] // dedupe: one asset per icon id used
 
         // Render a BMAP block to a stored paint asset, returning its name.
         func paintAsset(bitmapID: Int) -> String? {
@@ -49,6 +53,17 @@ enum LegacyStackImporter {
                   let png = reader.bmapPaintPNG(bmap, cardWidth: cardWidth, cardHeight: cardHeight) else { return nil }
             let assetName = UUID().uuidString.lowercased() + ".png"
             assets[assetName] = png
+            return assetName
+        }
+
+        // Render (once) a button's ICON to a stored asset, returning its name.
+        func iconAsset(iconID: Int) -> String? {
+            guard iconID != 0 else { return nil }
+            if let existing = iconAssetByID[iconID] { return existing }
+            guard let icon = iconLibrary[iconID], let png = ResourceFork.iconPNG(icon) else { return nil }
+            let assetName = UUID().uuidString.lowercased() + ".png"
+            assets[assetName] = png
+            iconAssetByID[iconID] = assetName
             return assetName
         }
 
@@ -76,7 +91,7 @@ enum LegacyStackImporter {
             var background = Background(id: UUID(), name: parsed.name.isEmpty ? "Background \(stack.backgrounds.count + 1)" : parsed.name,
                                         script: parsed.script, parts: [])
             background.scriptID = stack.claimScriptID()
-            background.parts = parsed.parts.filter { $0.type == .button }.map { part(from: $0, in: &stack) }
+            background.parts = parsed.parts.filter { $0.type == .button }.map { part(from: $0, in: &stack, iconAsset: iconAsset(iconID: $0.iconID)) }
             background.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
             bgUUIDByID[block.id] = background.id
             stack.backgrounds.append(background)
@@ -113,7 +128,7 @@ enum LegacyStackImporter {
             // Any card-layer parts (rare in these samples) come across too,
             // with their own content.
             for raw in parsed.parts {
-                var cardPart = part(from: raw, in: &stack)
+                var cardPart = part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID))
                 if case .field(var props) = cardPart.kind, let text = parsed.contents[raw.id] {
                     props.text = text
                     cardPart.kind = .field(props)
@@ -132,13 +147,21 @@ enum LegacyStackImporter {
     }
 
     /// Imports the classic stack at `source` and writes it as a `.contrapt`
-    /// file in the temporary directory, returning that URL to open.
-    static func importedContraptFile(from source: URL) throws -> URL {
+    /// file in the temporary directory, returning that URL to open. `iconApp`,
+    /// if given, is a HyperCard application whose ICON resources resolve the
+    /// stack's button icons (embedded per-use; nothing Apple ships in Contrapt).
+    static func importedContraptFile(from source: URL, iconApp: URL? = nil) throws -> URL {
         let didAccess = source.startAccessingSecurityScopedResource()
         defer { if didAccess { source.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: source)
         let name = source.deletingPathExtension().lastPathComponent
-        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name)
+        var iconFork: Data?
+        if let iconApp {
+            let iconAccess = iconApp.startAccessingSecurityScopedResource()
+            defer { if iconAccess { iconApp.stopAccessingSecurityScopedResource() } }
+            iconFork = ResourceFork.forkData(of: iconApp)
+        }
+        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork)
         var entries: [String: Data] = ["stack.json": try imported.stack.fileData()]
         for (assetName, bytes) in imported.assets { entries["assets/\(assetName)"] = bytes }
         let archive = ZipArchive.archive(entries)
@@ -157,7 +180,7 @@ enum LegacyStackImporter {
 
     // MARK: - Raw → Contrapt part
 
-    private static func part(from raw: RawPart, in stack: inout Stack) -> Part {
+    private static func part(from raw: RawPart, in stack: inout Stack, iconAsset: String? = nil) -> Part {
         let frame = PartFrame(x: Double(raw.left), y: Double(raw.top),
                               width: Double(max(8, raw.right - raw.left)),
                               height: Double(max(8, raw.bottom - raw.top)))
@@ -167,10 +190,9 @@ enum LegacyStackImporter {
         case .button:
             var button = ButtonPart(title: raw.name)
             button.style = raw.buttonStyle
-            // Icon buttons (name hidden in HyperCard) would otherwise show
-            // truncated text; keep them nameless until icons arrive (Phase 2).
             button.showName = raw.showName
             button.format = format
+            button.iconAsset = iconAsset
             kind = .button(button)
         case .field:
             var field = FieldPart(text: "", placeholder: "", isMultiline: true, format: format)
@@ -221,7 +243,7 @@ private extension LegacyStackImporter {
         var script: String
         var styleByte: Int
         var showName: Bool
-        var hasIcon: Bool
+        var iconID: Int
         var visible: Bool
         var textAlign: Int
         var fontID: Int
@@ -434,7 +456,7 @@ private extension LegacyStackImporter {
                            name: roman(nameBytes), script: roman(scriptBytes),
                            styleByte: Int(d[o + 0x0F]) & 0x0F,
                            showName: (d[o + 0x0E] & 0x80) != 0,
-                           hasIcon: i16(o + 0x12) != 0,
+                           iconID: i16(o + 0x12),
                            visible: (d[o + 5] & 0x80) == 0,
                            textAlign: i16(o + 0x14), fontID: i16(o + 0x16),
                            textSize: i16(o + 0x18), textStyleBits: Int(d[o + 0x1A]))

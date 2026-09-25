@@ -652,10 +652,20 @@ struct PartView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         default:
-            Text(properties.showName ? properties.title : "")
-                .font(properties.format.font)
-                .underline(properties.format.isUnderline)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 1) {
+                if let asset = properties.iconAsset,
+                   let data = stackAssets[asset],
+                   let image = Image(assetData: data) {
+                    // 1-bit icons stay crisp with nearest-neighbor scaling.
+                    image.resizable().interpolation(.none).aspectRatio(contentMode: .fit)
+                }
+                if properties.showName {
+                    Text(properties.title)
+                        .font(properties.format.font)
+                        .underline(properties.format.isUnderline)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

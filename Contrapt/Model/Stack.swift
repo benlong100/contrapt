@@ -264,21 +264,26 @@ nonisolated struct ButtonPart: Hashable {
     var hilite: Bool
     /// The title's text formatting (font design/size/style), like a field's.
     var format: TextFormat
+    /// An icon image drawn on the button (asset name), e.g. an imported
+    /// HyperCard button icon. Nil for a plain text button.
+    var iconAsset: String?
 
     init(title: String, showName: Bool = true, autoHilite: Bool = true,
-         style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat()) {
+         style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat(),
+         iconAsset: String? = nil) {
         self.title = title
         self.showName = showName
         self.autoHilite = autoHilite
         self.style = style
         self.hilite = hilite
         self.format = format
+        self.iconAsset = iconAsset
     }
 }
 
 /// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -288,6 +293,7 @@ extension ButtonPart: Codable {
         style = try container.decodeIfPresent(ButtonStyleKind.self, forKey: .style) ?? .roundRect
         hilite = try container.decodeIfPresent(Bool.self, forKey: .hilite) ?? false
         format = try container.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
+        iconAsset = try container.decodeIfPresent(String.self, forKey: .iconAsset)
     }
 }
 
@@ -624,19 +630,22 @@ nonisolated extension Stack {
     /// are dropped at save time.
     func referencedAssetNames() -> Set<String> {
         var names: Set<String> = []
+        func collect(_ part: Part) {
+            switch part.kind {
+            case .image(let image): names.insert(image.assetName)
+            case .button(let button): if let icon = button.iconAsset { names.insert(icon) }
+            default: break
+            }
+        }
         for card in cards {
             if let paint = card.paintDrawingAsset { names.insert(paint) }
             if let paint = card.paintImageAsset { names.insert(paint) }
-            for part in card.parts {
-                if case .image(let image) = part.kind { names.insert(image.assetName) }
-            }
+            card.parts.forEach(collect)
         }
         for background in backgrounds {
             if let paint = background.paintDrawingAsset { names.insert(paint) }
             if let paint = background.paintImageAsset { names.insert(paint) }
-            for part in background.parts {
-                if case .image(let image) = part.kind { names.insert(image.assetName) }
-            }
+            background.parts.forEach(collect)
         }
         return names
     }

@@ -248,6 +248,7 @@ private struct RootView: View {
     @State private var opened: OpenedStack?
     @State private var isImporterPresented = false
     @State private var isLegacyImporterPresented = false
+    @State private var isHyperCardAppPickerPresented = false
     @State private var isExporterPresented = false
     @State private var pendingNew: StackDocument?
     @State private var pendingFilename = "Untitled"
@@ -277,6 +278,9 @@ private struct RootView: View {
                                 Button("Import HyperCard Stack…", systemImage: "tray.and.arrow.down") {
                                     isLegacyImporterPresented = true
                                 }
+                                Button("Set HyperCard App for Icons…", systemImage: "app.badge") {
+                                    isHyperCardAppPickerPresented = true
+                                }
                             }
                         }
                     }
@@ -295,8 +299,12 @@ private struct RootView: View {
         // and let the importer validate the STAK header.
         .fileImporter(isPresented: $isLegacyImporterPresented, allowedContentTypes: [.data, .item]) { result in
             guard case .success(let url) = result,
-                  let contrapt = try? LegacyStackImporter.importedContraptFile(from: url) else { return }
+                  let contrapt = try? LegacyStackImporter.importedContraptFile(from: url, iconApp: HyperCardAppReference.url()) else { return }
             openExternal(contrapt)
+        }
+        // Point Contrapt at a HyperCard app so imported button icons resolve.
+        .fileImporter(isPresented: $isHyperCardAppPickerPresented, allowedContentTypes: [.data, .item]) { result in
+            if case .success(let url) = result { HyperCardAppReference.save(url) }
         }
         // New stacks and the tutorial are created in Files, then opened.
         .fileExporter(
@@ -405,14 +413,36 @@ private struct OpenedStackView: View {
     let panel = NSOpenPanel()
     panel.canChooseFiles = true
     panel.allowsMultipleSelection = false
-    panel.message = "Choose a classic HyperCard stack to import. (Card artwork is imported in a later pass.)"
+    panel.message = "Choose a classic HyperCard stack to import."
     guard panel.runModal() == .OK, let url = panel.url else { return }
+    // Resolve the HyperCard app for button icons — remembered, or offered once.
+    var iconApp = HyperCardAppReference.url()
+    if iconApp == nil, let picked = promptForHyperCardApp() {
+        HyperCardAppReference.save(picked)
+        iconApp = picked
+    }
     do {
-        let contrapt = try LegacyStackImporter.importedContraptFile(from: url)
+        let contrapt = try LegacyStackImporter.importedContraptFile(from: url, iconApp: iconApp)
         NSDocumentController.shared.openDocument(withContentsOf: contrapt, display: true) { _, _, _ in }
     } catch {
         NSAlert(error: error).runModal()
     }
+}
+
+/// Offers an open panel to locate the user's HyperCard application (for button
+/// icons). Optional — Cancel skips icons.
+@MainActor private func promptForHyperCardApp() -> URL? {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = true
+    panel.allowsMultipleSelection = false
+    panel.message = "Optional: choose your HyperCard application to import its button icons. Cancel to skip — Contrapt ships none itself."
+    panel.prompt = "Use for Icons"
+    return panel.runModal() == .OK ? panel.url : nil
+}
+
+/// The File-menu command to (re)choose the HyperCard app for button icons.
+@MainActor private func setHyperCardApp() {
+    if let picked = promptForHyperCardApp() { HyperCardAppReference.save(picked) }
 }
 #endif
 
@@ -462,6 +492,9 @@ struct ContraptApp: App {
             }
             Button("Import HyperCard Stack…") {
                 importLegacyStack()
+            }
+            Button("Set HyperCard App for Icons…") {
+                setHyperCardApp()
             }
         }
         // Cut/Copy/Paste/Delete act on the selected part in edit mode, else
