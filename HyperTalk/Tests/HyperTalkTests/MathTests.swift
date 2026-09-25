@@ -21,6 +21,23 @@ import Testing
     #expect(host.fields["c"] == "1.21")
 }
 
+@Test func exponentOperator() async throws {
+    let host = try await run("""
+    on mouseUp
+      put 2 ^ 3 into field "a"
+      put 2 ^ 2 ^ 3 into field "b"
+      put 2 ^ -1 into field "c"
+      put 1 + 2 * 3 ^ 2 into field "d"
+    end mouseUp
+    """, host: MockHost(fields: ["a": "", "b": "", "c": "", "d": ""]))
+    #expect(host.fields["a"] == "8")
+    // Right-associative: 2 ^ (2 ^ 3) = 2 ^ 8 = 256.
+    #expect(host.fields["b"] == "256")
+    #expect(host.fields["c"] == "0.5")
+    // ^ binds tighter than * and +: 1 + 2 * 9 = 19.
+    #expect(host.fields["d"] == "19")
+}
+
 @Test func trigAndLogs() async throws {
     let host = try await run("""
     on mouseUp

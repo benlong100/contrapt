@@ -182,7 +182,7 @@ indirect enum ObjectExpr {
 }
 
 enum BinaryOp {
-    case add, subtract, multiply, divide, intDivide, modulo
+    case add, subtract, multiply, divide, intDivide, modulo, power
     case concat, concatWithSpace
     case equal, notEqual, less, greater, lessOrEqual, greaterOrEqual
     case contains

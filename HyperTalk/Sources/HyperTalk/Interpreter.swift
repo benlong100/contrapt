@@ -715,6 +715,8 @@ final class Runtime {
             let (a, b) = try numbers()
             guard b != 0 else { throw ScriptError(line: line, message: "Can't divide by zero.") }
             return Value.string(from: a.truncatingRemainder(dividingBy: b))
+        case .power:
+            let (a, b) = try numbers(); return Value.string(from: pow(a, b))
 
         case .concat:
             return left + right

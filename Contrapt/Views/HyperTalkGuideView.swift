@@ -147,7 +147,7 @@ struct HyperTalkGuideView: View {
                     repeat until field "Done" is "yes"
                     """)
 
-                    section("Values and operators", body: "Everything is text, becoming a number or true/false as needed. Comparisons ignore case; & joins, && joins with a space. Also: + - * / div mod, and, or, not, contains, is, is not. `is a[n] …` tests a type: number, integer, point, rect, logical. `there is a[n] <object>` (or `there is no …`) tests whether a part or card exists.", example: """
+                    section("Values and operators", body: "Everything is text, becoming a number or true/false as needed. Comparisons ignore case; & joins, && joins with a space. Also: + - * / ^ div mod, and, or, not, contains, is, is not. `is a[n] …` tests a type: number, integer, point, rect, logical. `there is a[n] <object>` (or `there is no …`) tests whether a part or card exists.", example: """
                     put "Hyper" & "Talk"          -- HyperTalk
                     put "Hello" && "world"        -- Hello world
                     if "10" > "9" then beep       -- numeric compare

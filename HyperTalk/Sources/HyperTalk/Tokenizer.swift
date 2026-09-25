@@ -163,7 +163,7 @@ struct Tokenizer {
             return Token(kind: .symbol(text), line: startLine)
         }
         switch character {
-        case "+", "*", "/", "(", ")", ",", "-":
+        case "+", "*", "/", "(", ")", ",", "-", "^":
             return make(String(character), consume: 1)
         case "&":
             return peekAhead == "&" ? make("&&", consume: 2) : make("&", consume: 1)

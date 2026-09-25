@@ -793,7 +793,17 @@ struct Parser {
             advance()
             return .unary(.not, try parseUnary())
         }
-        return try parsePrimary()
+        return try parsePower()
+    }
+
+    /// `base ^ exponent`, right-associative and binding tighter than * and /,
+    /// as in HyperCard. The right side parses as a unary so `2 ^ -1` works.
+    private mutating func parsePower() throws -> Expr {
+        let base = try parsePrimary()
+        if consumeSymbol("^") {
+            return .binary(.power, base, try parseUnary())
+        }
+        return base
     }
 
     /// A field-contents reference if one begins here: `field <ref>`,
