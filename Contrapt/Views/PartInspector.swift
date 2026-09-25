@@ -21,17 +21,33 @@ struct PartInspector: View {
     var body: some View {
         Form {
             Section("Part") {
-                TextField("Name", text: $part.name)
-                LabeledContent("Kind", value: kindName)
-                if case .field = part.kind {
-                    Picker("Field Kind", selection: fieldKind) {
-                        Text("Plain").tag(FieldKind.plain)
-                        Text("Rich").tag(FieldKind.rich)
-                    }
-                    .pickerStyle(.segmented)
+                HStack(spacing: 8) {
+                    Text("Name")
+                    TextField("Name", text: $part.name)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                    Spacer(minLength: 12)
+                    Text("ID \(part.scriptID)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
-                LabeledContent("ID", value: String(part.scriptID))
-                Toggle("Visible", isOn: $part.isVisible)
+                HStack(spacing: 8) {
+                    Text("Kind: \(kindName)")
+                        .foregroundStyle(.secondary)
+                    if case .field = part.kind {
+                        Picker("Field Kind", selection: fieldKind) {
+                            Text("Plain").tag(FieldKind.plain)
+                            Text("Rich").tag(FieldKind.rich)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(maxWidth: 130)
+                    }
+                    Spacer(minLength: 8)
+                    Text("Visible").foregroundStyle(.secondary)
+                    Toggle("Visible", isOn: $part.isVisible)
+                        .labelsHidden()
+                }
             }
             kindSection
             Section("Position and Size") {
@@ -114,7 +130,7 @@ struct PartInspector: View {
                 } footer: {
                     Text("Bold, italic, headings, lists, and links. Card links like [Home](card:Home) navigate; https links open in the browser.")
                 }
-                Section("Text") {
+                Section {
                     fontAndSizeRow
                 }
             } else {
@@ -123,7 +139,7 @@ struct PartInspector: View {
                     TextField("Contents", text: fieldContents, axis: .vertical)
                         .lineLimit(1...6)
                 }
-                Section("Text") {
+                Section {
                     fontAndSizeRow
                     Toggle("Bold", isOn: fieldBold)
                     Toggle("Italic", isOn: fieldItalic)
