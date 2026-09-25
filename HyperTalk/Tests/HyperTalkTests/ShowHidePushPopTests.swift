@@ -53,6 +53,17 @@ import Testing
     #expect(host.destinations.last == .home)
 }
 
+@Test func goCardOfBackgroundIgnoresTheQualifier() async throws {
+    // `go card 1 of bkgnd "X"` parses; the background qualifier is ignored.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      go card 1 of bkgnd "Weekly"
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .number(1))
+}
+
 @Test func goBackIsADestination() async throws {
     let host = MockHost()
     _ = try await run("""

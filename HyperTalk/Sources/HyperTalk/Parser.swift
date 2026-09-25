@@ -703,6 +703,11 @@ struct Parser {
         } else {
             throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
         }
+        // Contrapt has no `card N of background "X"` addressing; accept and
+        // ignore a trailing `of <background>` qualifier so old stacks parse.
+        if peekIdentifier() == "of" {
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+        }
         try expectNewline()
         return Stmt(kind: .go(target), line: line)
     }
