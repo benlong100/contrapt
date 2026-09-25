@@ -714,6 +714,10 @@ struct Parser {
                     // `A is [not] in B` == B [does not] contains A.
                     let contains = Expr.binary(.contains, try parseConcatenation(), left)
                     left = negated ? .unary(.not, contains) : contains
+                } else if consumeWord("within") {
+                    // `point is [not] within rect` — point-in-rectangle test.
+                    let test = Expr.binary(.within, left, try parseConcatenation())
+                    left = negated ? .unary(.not, test) : test
                 } else if peekIdentifier() == "greater" || peekIdentifier() == "less" {
                     // `is greater than [or equal to]` / `is less than …`.
                     let isGreater = peekIdentifier() == "greater"

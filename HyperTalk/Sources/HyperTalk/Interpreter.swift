@@ -717,6 +717,14 @@ final class Runtime {
             return Value.string(from: a.truncatingRemainder(dividingBy: b))
         case .power:
             let (a, b) = try numbers(); return Value.string(from: pow(a, b))
+        case .within:
+            guard let point = Self.numberList(left), point.count == 2,
+                  let rect = Self.numberList(right), rect.count == 4 else {
+                throw ScriptError(line: line, message: "'is within' needs a point (h,v) and a rectangle (left,top,right,bottom).")
+            }
+            // QuickDraw's PtInRect: inclusive of left/top, exclusive of right/bottom.
+            let (h, v) = (point[0], point[1])
+            return bool(h >= rect[0] && h < rect[2] && v >= rect[1] && v < rect[3])
 
         case .concat:
             return left + right
@@ -926,9 +934,15 @@ final class Runtime {
 
     /// True when `value` is exactly `count` comma-separated numbers.
     private static func isNumberList(_ value: String, count: Int) -> Bool {
+        numberList(value)?.count == count
+    }
+
+    /// The comma-separated numbers in `value`, or nil if any component isn't
+    /// a number (so "10,20" → [10, 20], "10,x" → nil).
+    private static func numberList(_ value: String) -> [Double]? {
         let parts = value.split(separator: ",", omittingEmptySubsequences: false)
-        guard parts.count == count else { return false }
-        return parts.allSatisfy { Double($0.trimmingCharacters(in: .whitespaces)) != nil }
+        let numbers = parts.compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        return numbers.count == parts.count ? numbers : nil
     }
 
     /// A numeric value is an ordinal (`field 1`); anything else is a name.

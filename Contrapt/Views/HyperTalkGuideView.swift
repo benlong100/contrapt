@@ -147,7 +147,7 @@ struct HyperTalkGuideView: View {
                     repeat until field "Done" is "yes"
                     """)
 
-                    section("Values and operators", body: "Everything is text, becoming a number or true/false as needed. Comparisons ignore case; & joins, && joins with a space. Also: + - * / ^ div mod, and, or, not, contains, is, is not. `is a[n] …` tests a type: number, integer, point, rect, logical. `there is a[n] <object>` (or `there is no …`) tests whether a part or card exists.", example: """
+                    section("Values and operators", body: "Everything is text, becoming a number or true/false as needed. Comparisons ignore case; & joins, && joins with a space. Also: + - * / ^ div mod, and, or, not, contains, is, is not. `is a[n] …` tests a type: number, integer, point, rect, logical. `there is a[n] <object>` (or `there is no …`) tests whether a part or card exists. `<point> is within <rect>` tests whether a point (h,v) falls inside a rectangle (left,top,right,bottom).", example: """
                     put "Hyper" & "Talk"          -- HyperTalk
                     put "Hello" && "world"        -- Hello world
                     if "10" > "9" then beep       -- numeric compare
@@ -157,6 +157,7 @@ struct HyperTalkGuideView: View {
                     if "per" is in "HyperCard" then beep
                     if there is a field "Notes" then beep
                     if there is no button "Secret" then beep
+                    if "10,10" is within "0,0,50,50" then beep
                     """)
 
                     section("do and value", body: "`do` runs a string as commands, and `the value of` (or value(…)) evaluates a string as an expression — both in the current handler's context, so they see your variables. Handy for building HyperTalk on the fly.", example: """
