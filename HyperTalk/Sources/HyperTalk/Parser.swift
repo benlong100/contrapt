@@ -454,10 +454,13 @@ struct Parser {
     private mutating func parseContainer(line: Int) throws -> Container {
         if let word = peekIdentifier(), let kind = Self.chunkKinds[word] {
             advance()
+            let savedSuppress = suppressBarePropertyOf
+            suppressBarePropertyOf = true
             let start = try parsePrimary()
             let selector: ChunkSelector = consumeWord("to")
                 ? .range(start, try parsePrimary())
                 : .index(start)
+            suppressBarePropertyOf = savedSuppress
             guard consumeWord("of") else {
                 throw ScriptError(line: line, message: "Expected 'of' after '\(word)' in a put destination.")
             }

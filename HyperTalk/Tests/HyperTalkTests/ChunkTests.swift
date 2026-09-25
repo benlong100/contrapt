@@ -41,6 +41,19 @@ import Testing
     #expect(host.fields["out"] == "thex")
 }
 
+@Test func chunkContainerWithVariableIndex() async throws {
+    // `put X into char myCount of field …` — the container's chunk index
+    // is a variable; its `of` belongs to the chunk, not a bare property.
+    let host = try await run("""
+    on mouseUp
+      put "abc" into field "out"
+      put 2 into myCount
+      put "Z" into char myCount of field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "aZc")
+}
+
 @Test func theFirstAndLastWord() async throws {
     let host = try await run("""
     on mouseUp
