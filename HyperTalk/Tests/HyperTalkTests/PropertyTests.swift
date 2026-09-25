@@ -39,6 +39,19 @@ import Testing
     #expect(host.fields["out"] == "40,60")
 }
 
+@Test func shortAndLongNameResolveToTheName() async throws {
+    // `short name of X` / `the long name of X` → the `name` property.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["button OK.name"] = "OK"
+    try await run("""
+    on mouseUp
+      put short name of button "OK" into field "out"
+      put char 1 of the long name of button "OK" after field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "OKO")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"

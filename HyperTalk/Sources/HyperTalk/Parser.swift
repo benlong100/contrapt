@@ -1039,6 +1039,13 @@ struct Parser {
         "ln", "ln1", "log2", "abs", "trunc", "round", "average", "sum",
     ]
 
+    /// Adjectives HyperTalk allows before `name` — `the short name of …`,
+    /// `long name of …`. Contrapt's `name` is already the bare name, so all
+    /// three collapse to the `name` property.
+    static let nameAdjectives: Set<String> = [
+        "short", "long", "abbreviated", "abbrev", "abbr",
+    ]
+
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,
         "word": .word, "words": .word,
@@ -1189,6 +1196,15 @@ struct Parser {
                 }
                 return .chunk(kind, selector, try parsePrimary())
             }
+            // `the short name of X`, `the long name of X` → the `name`
+            // property (Contrapt already returns the bare name).
+            if let adjective = peekIdentifier(), Self.nameAdjectives.contains(adjective),
+               peekIdentifier(1) == "name", peekIdentifier(2) == "of" {
+                advance() // adjective
+                advance() // name
+                advance() // of
+                return .property("name", try parseObjectExpr())
+            }
             // `the <property> of <object>`; otherwise "the" is a noise
             // word before a value ("the date" → the unquoted literal).
             if peekIdentifier() != nil, peekIdentifier(1) == "of" {
@@ -1229,6 +1245,13 @@ struct Parser {
             // leading `the`, e.g. `loc of field "x"`, `rect of card field 2`.
             // A plain variable is never legitimately followed by `of`, so
             // treating `<ident> of …` as a property access is safe.
+            // `short name of X`, `long name of X` → the `name` property.
+            if !suppressBarePropertyOf, Self.nameAdjectives.contains(word),
+               peekIdentifier() == "name", peekIdentifier(1) == "of" {
+                advance() // name
+                advance() // of
+                return .property("name", try parseObjectExpr())
+            }
             if !suppressBarePropertyOf, peekIdentifier() == "of" {
                 advance() // of
                 return .property(word.lowercased(), try parseObjectExpr())
