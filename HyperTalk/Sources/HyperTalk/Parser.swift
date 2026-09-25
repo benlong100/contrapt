@@ -105,6 +105,10 @@ struct Parser {
         case .endOfScript:
             break
         default:
+            // A single-line `if … then <stmt> else <stmt>` ends the then-clause
+            // at `else` (and a clause may butt against `end if`) with no newline
+            // between — tolerate those without consuming them.
+            if peekIdentifier() == "else" || peekIdentifier() == "end" { return }
             throw ScriptError(line: current.line, message: "Expected the end of the line here, but found \(describe(current)).")
         }
     }
@@ -754,7 +758,7 @@ struct Parser {
                 try expectNewline()
             } else {
                 advance() // "else"
-                elseBody = try parseElse(handlerName: handlerName, line: line)
+                elseBody = try parseElse(handlerName: handlerName, line: line, isBlock: true)
             }
             return Stmt(kind: .ifThen(condition: condition, then: thenBody, otherwise: elseBody), line: line)
         }
@@ -766,7 +770,7 @@ struct Parser {
         let saved = index
         skipNewlines()
         if consumeWord("else") {
-            elseBody = try parseElse(handlerName: handlerName, line: line)
+            elseBody = try parseElse(handlerName: handlerName, line: line, isBlock: false)
         } else {
             index = saved
         }
@@ -775,7 +779,7 @@ struct Parser {
 
     /// Parses what follows an already-consumed 'else': a chained 'if', a
     /// block terminated by 'end if', or a single statement.
-    private mutating func parseElse(handlerName: String, line: Int) throws -> [Stmt] {
+    private mutating func parseElse(handlerName: String, line: Int, isBlock: Bool) throws -> [Stmt] {
         if peekIdentifier() == "if" {
             let chainLine = current.line
             advance()
@@ -789,14 +793,19 @@ struct Parser {
             return body
         }
         let body = [try parseStatement(handlerName: handlerName)]
-        // A single-line else may still be followed by a stray "end if"; accept it.
-        let saved = index
-        skipNewlines()
-        if peekWords(["end", "if"]) {
-            advance(); advance()
-            try expectNewline()
-        } else {
-            index = saved
+        // When the `if` was block-form (`if C then` / newline), a single-line
+        // else closes it with an `end if`. But for a wholly single-line
+        // `if C then S1 else S2`, a following `end if` belongs to an *enclosing*
+        // block, so leave it for that block to consume.
+        if isBlock {
+            let saved = index
+            skipNewlines()
+            if peekWords(["end", "if"]) {
+                advance(); advance()
+                try expectNewline()
+            } else {
+                index = saved
+            }
         }
         return body
     }

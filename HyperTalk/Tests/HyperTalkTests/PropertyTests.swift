@@ -101,6 +101,37 @@ import Testing
     #expect(host.fields["out"] == "12345")
 }
 
+@Test func inlineIfThenElseOnOneLine() async throws {
+    // `if C then S1 else S2` on a single line, both branches inline.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      put 5 into n
+      if n > 3 then put "big" into field "out" else put "small" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "big")
+}
+
+@Test func inlineIfElseNestedInABlockElse() async throws {
+    // A single-line if/else that is the last statement of an outer block
+    // else — the trailing `end if` must close the OUTER if.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      put 1 into n
+      if n is 0 then
+        put "zero" into field "out"
+      else
+        put "start" into field "out"
+        if n is 1 then put "one" into field "out" else put "many" into field "out"
+      end if
+      put "!" after field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "one!")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"
