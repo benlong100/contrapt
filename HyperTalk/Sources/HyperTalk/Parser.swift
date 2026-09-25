@@ -11,6 +11,10 @@ import Foundation
 struct Parser {
     private let tokens: [Token]
     private var index = 0
+    /// While parsing a chunk's index/range (`line <here> of …`), a trailing
+    /// `of` belongs to the chunk, not to a bare-property access, so the
+    /// `<identifier> of` shortcut is suppressed.
+    private var suppressBarePropertyOf = false
 
     init(tokens: [Token]) {
         self.tokens = tokens
@@ -1098,7 +1102,10 @@ struct Parser {
             return .stringLiteral(text)
         case .symbol("("):
             advance()
+            let savedSuppress = suppressBarePropertyOf
+            suppressBarePropertyOf = false
             let inner = try parseExpression()
+            suppressBarePropertyOf = savedSuppress
             guard consumeSymbol(")") else {
                 throw ScriptError(line: line, message: "This '(' is missing its closing ')'.")
             }
@@ -1195,10 +1202,13 @@ struct Parser {
             // `word 2 of X`, `char 1 to 5 of X`.
             let kind = Self.chunkKinds[word]!
             advance()
+            let savedSuppress = suppressBarePropertyOf
+            suppressBarePropertyOf = true
             let start = try parsePrimary()
             let selector: ChunkSelector = consumeWord("to")
                 ? .range(start, try parsePrimary())
                 : .index(start)
+            suppressBarePropertyOf = savedSuppress
             guard consumeWord("of") else {
                 throw ScriptError(line: line, message: "Expected 'of' after '\(word)', like: \(word) 2 of field \"Notes\".")
             }
@@ -1219,7 +1229,7 @@ struct Parser {
             // leading `the`, e.g. `loc of field "x"`, `rect of card field 2`.
             // A plain variable is never legitimately followed by `of`, so
             // treating `<ident> of …` as a property access is safe.
-            if peekIdentifier() == "of" {
+            if !suppressBarePropertyOf, peekIdentifier() == "of" {
                 advance() // of
                 return .property(word.lowercased(), try parseObjectExpr())
             }

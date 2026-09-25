@@ -17,6 +17,19 @@ import Testing
     #expect(host.fields["out"] == "brown")
 }
 
+@Test func variableChunkIndexIsNotSwallowedByBareProperty() async throws {
+    // `line myLine of s` — the `of` belongs to the chunk, not to a bare
+    // property on the index variable. Regression for the bare-`of` shortcut.
+    let host = try await run("""
+    on mouseUp
+      put "alpha" & return & "beta" & return & "gamma" into s
+      put 2 into myLine
+      put line myLine of s into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "beta")
+}
+
 @Test func theFirstAndLastWord() async throws {
     let host = try await run("""
     on mouseUp
