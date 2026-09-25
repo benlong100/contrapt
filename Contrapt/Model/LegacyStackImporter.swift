@@ -365,7 +365,10 @@ private extension LegacyStackImporter {
             let size = u16(o)
             let type: PartType = d[o + 4] == 1 ? .button : .field
             let nameBytes = bytesUntilNUL(o + 0x1E, limit: o + size)
-            let scriptStart = o + 0x1E + nameBytes.count + 1
+            // The script follows the name, but is padded to an even boundary,
+            // so odd-length names leave an extra NUL before it — skip any run.
+            var scriptStart = o + 0x1E + nameBytes.count + 1
+            while scriptStart < o + size, d[scriptStart] == 0 { scriptStart += 1 }
             let scriptBytes = scriptStart < o + size ? bytesUntilNUL(scriptStart, limit: o + size) : []
             return RawPart(id: i16(o + 2), type: type, top: i16(o + 6), left: i16(o + 8),
                            bottom: i16(o + 10), right: i16(o + 12),
