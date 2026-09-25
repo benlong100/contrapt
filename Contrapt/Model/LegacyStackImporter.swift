@@ -25,13 +25,32 @@ enum LegacyStackImporter {
         var errorDescription: String? { message }
     }
 
-    /// Reads `data` (a classic stack's data fork) into a Contrapt `Stack`.
-    static func stack(from data: Data, name: String) throws -> Stack {
+    /// The result of an import: the stack plus the paint-art assets it
+    /// references (card/background WOBA bitmaps rendered to PNG).
+    struct Imported {
+        let stack: Stack
+        let assets: [String: Data]
+    }
+
+    /// Reads `data` (a classic stack's data fork) into a Contrapt stack.
+    static func stack(from data: Data, name: String) throws -> Imported {
         let reader = Reader(data)
         guard reader.tag(at: 0) == "STAK" else {
             throw ImportError(message: "This doesn't look like a HyperCard stack (no STAK header). If it came as a .hqx or .sit, unpack it first.")
         }
         let blocks = reader.walkBlocks()
+        let cardWidth = 512, cardHeight = 342 // HC 1.x screen
+        var assets: [String: Data] = [:]
+        let bmapByID = Dictionary(blocks.filter { $0.type == "BMAP" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+
+        // Render a BMAP block to a stored paint asset, returning its name.
+        func paintAsset(bitmapID: Int) -> String? {
+            guard bitmapID != 0, let bmap = bmapByID[bitmapID],
+                  let png = reader.bmapPaintPNG(bmap, cardWidth: cardWidth, cardHeight: cardHeight) else { return nil }
+            let assetName = UUID().uuidString.lowercased() + ".png"
+            assets[assetName] = png
+            return assetName
+        }
 
         // Card order comes from the PAGE block(s); fall back to file order.
         let cardBlocks = blocks.filter { $0.type == "CARD" }
@@ -44,7 +63,7 @@ enum LegacyStackImporter {
         // per-card, since HyperCard background fields hold per-card text).
         var stack = Stack(formatVersion: StackFormat.currentVersion,
                           id: UUID(), name: name,
-                          cardSize: CardSize(width: 512, height: 342), // HC 1.x screen
+                          cardSize: CardSize(width: Double(cardWidth), height: Double(cardHeight)),
                           script: "", backgrounds: [], cards: [])
 
         var bgInfoByID: [Int: ParsedObject] = [:]
@@ -58,6 +77,7 @@ enum LegacyStackImporter {
                                         script: parsed.script, parts: [])
             background.scriptID = stack.claimScriptID()
             background.parts = parsed.parts.filter { $0.type == .button }.map { part(from: $0, in: &stack) }
+            background.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
             bgUUIDByID[block.id] = background.id
             stack.backgrounds.append(background)
         }
@@ -78,6 +98,7 @@ enum LegacyStackImporter {
                             name: parsed.name.isEmpty ? "Card \(stack.cards.count + 1)" : parsed.name,
                             backgroundID: backgroundUUID, script: parsed.script, parts: [])
             card.scriptID = stack.claimScriptID()
+            card.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
 
             // Background fields, copied onto the card and filled with this
             // card's text (mapped by HyperCard part id).
@@ -107,19 +128,20 @@ enum LegacyStackImporter {
             card.scriptID = stack.claimScriptID()
             stack.cards.append(card)
         }
-        return stack.sanitized()
+        return Imported(stack: stack.sanitized(), assets: assets)
     }
 
     /// Imports the classic stack at `source` and writes it as a `.contrapt`
-    /// file in the temporary directory, returning that URL to open. Artwork is
-    /// deferred (Phase 1), so no assets are written.
+    /// file in the temporary directory, returning that URL to open.
     static func importedContraptFile(from source: URL) throws -> URL {
         let didAccess = source.startAccessingSecurityScopedResource()
         defer { if didAccess { source.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: source)
         let name = source.deletingPathExtension().lastPathComponent
         let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name)
-        let archive = ZipArchive.archive(["stack.json": try imported.fileData()])
+        var entries: [String: Data] = ["stack.json": try imported.stack.fileData()]
+        for (assetName, bytes) in imported.assets { entries["assets/\(assetName)"] = bytes }
+        let archive = ZipArchive.archive(entries)
         // A unique subdirectory per import keeps the friendly filename while
         // ensuring the path is new — otherwise NSDocumentController dedupes by
         // URL and refocuses a previously-imported (stale) window.
@@ -127,7 +149,7 @@ enum LegacyStackImporter {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory
-            .appendingPathComponent(imported.name)
+            .appendingPathComponent(imported.stack.name)
             .appendingPathExtension("contrapt")
         try archive.write(to: url)
         return url
@@ -139,6 +161,7 @@ enum LegacyStackImporter {
         let frame = PartFrame(x: Double(raw.left), y: Double(raw.top),
                               width: Double(max(8, raw.right - raw.left)),
                               height: Double(max(8, raw.bottom - raw.top)))
+        let format = textFormat(from: raw)
         let kind: PartKind
         switch raw.type {
         case .button:
@@ -147,9 +170,10 @@ enum LegacyStackImporter {
             // Icon buttons (name hidden in HyperCard) would otherwise show
             // truncated text; keep them nameless until icons arrive (Phase 2).
             button.showName = raw.showName
+            button.format = format
             kind = .button(button)
         case .field:
-            var field = FieldPart(text: "", placeholder: "", isMultiline: true)
+            var field = FieldPart(text: "", placeholder: "", isMultiline: true, format: format)
             field.style = raw.fieldStyle
             // Imported fields are display-only (a read-only reproduction):
             // locked text renders as static text — no editor scrollbar — and
@@ -163,6 +187,24 @@ enum LegacyStackImporter {
         part.isVisible = raw.visible
         part.scriptID = stack.claimScriptID()
         return part
+    }
+
+    /// Map a part's HyperCard font/size/style/alignment to a TextFormat, so
+    /// imported text matches the original rather than Contrapt's defaults.
+    private static func textFormat(from raw: RawPart) -> TextFormat {
+        var format = TextFormat()
+        if raw.textSize > 0 { format.size = Double(min(max(raw.textSize, 6), 96)) }
+        format.align = raw.textAlign == 1 ? .center : (raw.textAlign < 0 ? .right : .left)
+        // Classic Mac font ids → Contrapt's font families (best effort).
+        switch raw.fontID {
+        case 2, 20: format.fontDesign = .serif       // New York, Times
+        case 4, 22: format.fontDesign = .monospaced  // Monaco, Courier
+        default: format.fontDesign = .standard       // Geneva, Chicago, Helvetica…
+        }
+        format.isBold = raw.textStyleBits & 0x01 != 0
+        format.isItalic = raw.textStyleBits & 0x02 != 0
+        format.isUnderline = raw.textStyleBits & 0x04 != 0
+        return format
     }
 }
 
@@ -181,6 +223,10 @@ private extension LegacyStackImporter {
         var showName: Bool
         var hasIcon: Bool
         var visible: Bool
+        var textAlign: Int
+        var fontID: Int
+        var textSize: Int
+        var textStyleBits: Int
         /// HyperCard button style (low nibble of the style byte) → Contrapt.
         var buttonStyle: ButtonStyleKind {
             switch styleByte {
@@ -210,6 +256,7 @@ private extension LegacyStackImporter {
         var name: String
         var script: String
         var ownerBackgroundID: Int
+        var bitmapID: Int
         var parts: [RawPart]
         /// Field text keyed by the field's HyperCard part id — how card
         /// contents are stored, so mapping is exact rather than positional.
@@ -265,6 +312,7 @@ private extension LegacyStackImporter {
         func parseObject(_ block: BlockInfo, knownFieldIDs: Set<Int>) -> ParsedObject {
             let base = block.offset, end = block.offset + block.size
             let ownerBackground = block.type == "CARD" ? u32(base + 0x20) : block.id
+            let bitmapID = u32(base + 0x0C) // CARD/BKGD both store their BMAP id here
             let parts = parseParts(base: base, end: end)
             let afterParts = parts.last?.recordEnd ?? (base + 0x24)
             let ownFieldIDs = Set(parts.map(\.part).filter { $0.type == .field }.map(\.id))
@@ -276,8 +324,13 @@ private extension LegacyStackImporter {
                 script = run; break
             }
             return ParsedObject(name: "", script: script,
-                                ownerBackgroundID: ownerBackground,
+                                ownerBackgroundID: ownerBackground, bitmapID: bitmapID,
                                 parts: parts.map(\.part), contents: contents)
+        }
+
+        /// The card-sized paint PNG for a BMAP block, or nil if it has no image.
+        func bmapPaintPNG(_ block: BlockInfo, cardWidth: Int, cardHeight: Int) -> Data? {
+            WobaBitmap.paintPNG(block: d, at: block.offset, cardWidth: cardWidth, cardHeight: cardHeight)
         }
 
         /// Parse the field-content section: `[u16 sectionSize]` followed by a
@@ -382,7 +435,9 @@ private extension LegacyStackImporter {
                            styleByte: Int(d[o + 0x0F]) & 0x0F,
                            showName: (d[o + 0x0E] & 0x80) != 0,
                            hasIcon: i16(o + 0x12) != 0,
-                           visible: (d[o + 5] & 0x80) == 0)
+                           visible: (d[o + 5] & 0x80) == 0,
+                           textAlign: i16(o + 0x14), fontID: i16(o + 0x16),
+                           textSize: i16(o + 0x18), textStyleBits: Int(d[o + 0x1A]))
         }
 
         // MARK: string helpers
