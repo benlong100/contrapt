@@ -659,12 +659,13 @@ struct PartView: View {
         )
     }
 
-    /// Whether text looks pre-formatted/tabular — several hard-broken lines
-    /// that are all short (e.g. a calendar grid). Such text is laid out with
-    /// no soft-wrapping so each row stays intact; flowing prose word-wraps.
+    /// Whether text is short/tabular — every line is short (a calendar grid,
+    /// a header like "week 26", a day label). Such text lays out with no
+    /// soft-wrapping so each line stays intact and clips, as in HyperCard;
+    /// flowing prose (any long line) still word-wraps.
     private func isPreformatted(_ text: String) -> Bool {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        return lines.count > 1 && lines.allSatisfy { $0.count <= 40 }
+        return lines.allSatisfy { $0.count <= 40 }
     }
 
     private func lockedAlignment(_ align: TextAlign) -> Alignment {
