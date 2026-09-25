@@ -30,6 +30,17 @@ import Testing
     #expect(host.fields["out"] == "beta")
 }
 
+@Test func bareOrdinalChunkWithoutThe() async throws {
+    // `last char of X`, `first word of X` — HyperTalk's `the` is optional.
+    let host = try await run("""
+    on mouseUp
+      put "the quick brown fox" into s
+      put first word of s & last char of s into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "thex")
+}
+
 @Test func theFirstAndLastWord() async throws {
     let host = try await run("""
     on mouseUp

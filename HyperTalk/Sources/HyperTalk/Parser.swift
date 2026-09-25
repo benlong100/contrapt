@@ -1241,6 +1241,16 @@ struct Parser {
             // reserves both words for dispatch identity).
             if word == "me" { return .property("name", .me) }
             if word == "target" { return .property("name", .target) }
+            // Bare ordinal chunk: `last char of X`, `first word of X`,
+            // `middle line of X` — HyperTalk's `the` is optional.
+            if !suppressBarePropertyOf, let selector = Self.ordinalSelector(word),
+               let kindWord = peekIdentifier(), let kind = Self.chunkKinds[kindWord] {
+                advance() // chunk kind
+                guard consumeWord("of") else {
+                    throw ScriptError(line: line, message: "Expected 'of' after '\(word) \(kindWord)'.")
+                }
+                return .chunk(kind, selector, try parsePrimary())
+            }
             // Bare `<property> of <object>` — HyperTalk lets you drop the
             // leading `the`, e.g. `loc of field "x"`, `rect of card field 2`.
             // A plain variable is never legitimately followed by `of`, so
