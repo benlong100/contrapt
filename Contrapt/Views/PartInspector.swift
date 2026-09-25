@@ -27,10 +27,16 @@ struct PartInspector: View {
             }
             kindSection
             Section("Position and Size") {
-                geometryRow("X", value: $part.frame.x)
-                geometryRow("Y", value: $part.frame.y)
-                geometryRow("Width", value: $part.frame.width)
-                geometryRow("Height", value: $part.frame.height)
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(spacing: 8) {
+                        geometryCell("X", value: $part.frame.x)
+                        geometryCell("Y", value: $part.frame.y)
+                    }
+                    VStack(spacing: 8) {
+                        geometryCell("W", value: $part.frame.width)
+                        geometryCell("H", value: $part.frame.height)
+                    }
+                }
             }
             ScriptFormSection(title: "Script", script: $part.script, onExpand: { isEditorExpanded = true })
                 .id(part.id)
@@ -93,9 +99,18 @@ struct PartInspector: View {
             }
             if properties.kind == .rich {
                 Section("Markdown") {
-                    TextField("Markdown", text: fieldContents, axis: .vertical)
-                        .lineLimit(6...24)
+                    TextEditor(text: fieldContents)
                         .font(.system(.body, design: .monospaced))
+                        .multilineTextAlignment(.leading)
+                        .frame(minHeight: 180)
+                }
+                Section("Text") {
+                    Picker("Font", selection: fieldFontDesign) {
+                        ForEach(FontDesign.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    Stepper(value: fieldTextSize, in: 8...96, step: 1) {
+                        LabeledContent("Size", value: "\(Int(fieldTextSize.wrappedValue)) pt")
+                    }
                 }
             } else {
                 Section("Field") {
@@ -129,10 +144,16 @@ struct PartInspector: View {
         }
     }
 
-    private func geometryRow(_ title: String, value: Binding<Double>) -> some View {
-        LabeledContent(title) {
+    /// One labelled numeric field, sized to pack two per row (X/Y beside W/H).
+    private func geometryCell(_ title: String, value: Binding<Double>) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 16, alignment: .leading)
             TextField(title, value: value, format: .number)
+                .labelsHidden()
                 .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
                 .numericPunctuationKeyboard()
         }
     }

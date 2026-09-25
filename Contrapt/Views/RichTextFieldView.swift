@@ -22,10 +22,12 @@ enum FieldLink {
 /// links to `go`, web links to the system browser — never loaded in place.
 struct RichFieldView: View {
     let markdown: String
+    var fontDesign: FontDesign = .standard
+    var size: Double = 17
     var onFollowLink: (FieldLink) -> Void
 
     var body: some View {
-        RichTextWebView(markdown: markdown, onFollowLink: onFollowLink)
+        RichTextWebView(markdown: markdown, fontDesign: fontDesign, size: size, onFollowLink: onFollowLink)
             .background(Color.cardSurface)
             .overlay {
                 RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
@@ -37,6 +39,8 @@ struct RichFieldView: View {
 /// The web view itself, bridged for both platforms.
 private struct RichTextWebView {
     let markdown: String
+    var fontDesign: FontDesign
+    var size: Double
     var onFollowLink: (FieldLink) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onFollowLink: onFollowLink) }
@@ -59,19 +63,25 @@ private struct RichTextWebView {
 
     fileprivate func update(_ webView: WKWebView, _ coordinator: Coordinator) {
         coordinator.onFollowLink = onFollowLink
-        if coordinator.lastMarkdown != markdown {
+        if coordinator.lastRenderKey != renderKey {
             load(into: webView, coordinator: coordinator)
         }
     }
 
+    /// Reload only when what affects the rendered HTML changes.
+    private var renderKey: String { "\(fontDesign.rawValue)|\(size)|\(markdown)" }
+
     private func load(into webView: WKWebView, coordinator: Coordinator) {
-        coordinator.lastMarkdown = markdown
-        webView.loadHTMLString(MarkdownHTML.document(from: markdown), baseURL: nil)
+        coordinator.lastRenderKey = renderKey
+        webView.loadHTMLString(
+            MarkdownHTML.document(from: markdown, fontDesign: fontDesign, size: size),
+            baseURL: nil
+        )
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var onFollowLink: (FieldLink) -> Void
-        var lastMarkdown: String?
+        var lastRenderKey: String?
 
         init(onFollowLink: @escaping (FieldLink) -> Void) {
             self.onFollowLink = onFollowLink

@@ -14,15 +14,27 @@ import Foundation
 /// its alt text. Links don't load in place; the navigation delegate opens
 /// card links via `go` and web links in the system browser, on tap only.
 enum MarkdownHTML {
-    /// A full HTML document (styling inlined) rendering `markdown`.
-    static func document(from markdown: String) -> String {
+    /// A full HTML document (styling inlined) rendering `markdown`, using the
+    /// field's base font design and size. Headings and other elements scale
+    /// relative to that base.
+    static func document(from markdown: String, fontDesign: FontDesign = .standard, size: Double = 17) -> String {
         let body = renderBlocks(markdown)
         return """
         <!DOCTYPE html>
         <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>\(css)</style></head>
+        <style>\(css(fontFamily: fontFamily(fontDesign), size: size))</style></head>
         <body>\(body)</body></html>
         """
+    }
+
+    /// A CSS font-family stack for each design.
+    private static func fontFamily(_ design: FontDesign) -> String {
+        switch design {
+        case .standard: "-apple-system, system-ui, sans-serif"
+        case .serif: "ui-serif, Georgia, 'Times New Roman', serif"
+        case .monospaced: "ui-monospace, 'SF Mono', Menlo, monospace"
+        case .rounded: "ui-rounded, -apple-system, system-ui, sans-serif"
+        }
     }
 
     // MARK: - Block structure
@@ -209,11 +221,12 @@ enum MarkdownHTML {
             .replacingOccurrences(of: ">", with: "&gt;")
     }
 
-    private static let css = """
+    private static func css(fontFamily: String, size: Double) -> String {
+        """
     :root { color-scheme: light dark; }
     body {
-        font: -apple-system-body;
-        font-family: -apple-system, system-ui, sans-serif;
+        font-family: \(fontFamily);
+        font-size: \(Int(size.rounded()))px;
         margin: 12px; line-height: 1.45;
         -webkit-text-size-adjust: 100%;
     }
@@ -228,4 +241,5 @@ enum MarkdownHTML {
     ul, ol { margin: 0.5em 0; padding-left: 1.4em; }
     hr { border: none; border-top: 1px solid rgba(127,127,127,0.3); margin: 1em 0; }
     """
+    }
 }

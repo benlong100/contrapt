@@ -480,8 +480,13 @@ struct PartView: View {
         case .field(let properties):
             if properties.kind == .rich {
                 // A rich field renders its Markdown, display-only, with
-                // trapped links.
-                RichFieldView(markdown: properties.text, onFollowLink: onFollowLink)
+                // trapped links, at the field's base font and size.
+                RichFieldView(
+                    markdown: properties.text,
+                    fontDesign: properties.format.fontDesign,
+                    size: properties.format.size,
+                    onFollowLink: onFollowLink
+                )
             } else if properties.isMultiline {
                 // A HyperCard-style field: a text area filling its frame.
                 TextEditor(text: fieldText)
