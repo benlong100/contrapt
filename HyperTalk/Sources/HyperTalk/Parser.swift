@@ -378,6 +378,10 @@ struct Parser {
             // current card is what's remembered.
             _ = consumeWord("this"); _ = consumeWord("recent")
             _ = consumeWord("card") || consumeWord("cd")
+            // HyperCard also allows pushing a *named* card (`push card "X"`,
+            // `push myCard`). Contrapt remembers the current card, so any such
+            // descriptor is accepted and skipped rather than resolved.
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .pushCard, line: line)
         case "pop":

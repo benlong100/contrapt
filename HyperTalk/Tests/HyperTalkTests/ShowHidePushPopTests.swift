@@ -75,6 +75,20 @@ import Testing
     #expect(host.destinations.last == .id("42"))
 }
 
+@Test func pushNamedCardIsAcceptedAsCurrentCard() async throws {
+    // `push card "X"` / `push myCard` parse; Contrapt remembers the
+    // current card regardless of the descriptor.
+    let host = MockHost()
+    host.currentCardID = "9"
+    _ = try await run("""
+    on mouseUp
+      push card "About"
+      pop card
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .id("9"))
+}
+
 @Test func popCardIntoContainerReadsReference() async throws {
     let host = MockHost(fields: ["out": ""])
     host.currentCardID = "7"
