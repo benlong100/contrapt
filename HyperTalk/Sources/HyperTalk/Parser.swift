@@ -721,6 +721,11 @@ struct Parser {
             } else {
                 target = .expression(try parseExpression())
             }
+        } else if consumeWord("stack") || (current.kind != .newline && current.kind != .endOfScript) {
+            // `go [to] stack "X"` or a bare `go [to] "Name"` — a card (or, in
+            // HyperCard, a stack) by name/number. Contrapt has no cross-stack
+            // navigation, so it resolves as a card at run time.
+            target = .expression(try parseExpression())
         } else {
             throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
         }

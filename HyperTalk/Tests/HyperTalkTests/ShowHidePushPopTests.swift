@@ -64,6 +64,17 @@ import Testing
     #expect(host.destinations.last == .number(1))
 }
 
+@Test func goToBareNameIsACardDestination() async throws {
+    // `go to "Phone"` — a bare name resolves as a card reference.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      go to "Phone"
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .named("Phone"))
+}
+
 @Test func goBackIsADestination() async throws {
     let host = MockHost()
     _ = try await run("""
