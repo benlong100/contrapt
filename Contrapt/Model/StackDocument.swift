@@ -97,6 +97,59 @@ nonisolated final class StackDocument: ReferenceFileDocument {
         return name
     }
 
+    // MARK: - Manual load / save (iOS WindowGroup, outside DocumentGroup)
+
+    /// Loads the app's Home stack (seeding it first) into a document.
+    static func loadHome() -> StackDocument {
+        let document = StackDocument()
+        if let data = try? Data(contentsOf: HomeStack.ensureSeeded()) {
+            document.load(data)
+        }
+        return document
+    }
+
+    /// A document loaded from a `.contrapt` file at `url` (nil if unreadable).
+    static func load(from url: URL) -> StackDocument? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let document = StackDocument()
+        document.load(data)
+        return document
+    }
+
+    /// Replaces contents from raw `.contrapt` (zip) or legacy JSON bytes —
+    /// the same decoding as `init(configuration:)`, reusable off DocumentGroup.
+    func load(_ data: Data) {
+        if data.starts(with: [0x50, 0x4B]) {
+            guard let entries = try? ZipArchive.extract(data),
+                  let manifest = entries["stack.json"],
+                  let decoded = try? Stack(fileData: manifest).sanitized() else { return }
+            stack = decoded
+            var loaded: [String: Data] = [:]
+            for (name, bytes) in entries where name.hasPrefix("assets/") {
+                loaded[String(name.dropFirst("assets/".count))] = bytes
+            }
+            assets = loaded
+        } else if let decoded = try? Stack(fileData: data).sanitized() {
+            stack = decoded
+        }
+    }
+
+    /// Writes the current contents to `url` as a `.contrapt` archive — for
+    /// manual saving where DocumentGroup's autosave isn't in play.
+    func write(to url: URL) {
+        guard let entries = try? archiveEntries() else { return }
+        try? ZipArchive.archive(entries).write(to: url)
+    }
+
+    private func archiveEntries() throws -> [String: Data] {
+        var entries: [String: Data] = ["stack.json": try stack.fileData()]
+        let referenced = stack.referencedAssetNames()
+        for (name, data) in assets where referenced.contains(name) {
+            entries["assets/\(name)"] = data
+        }
+        return entries
+    }
+
     // MARK: - Mutation choke point
 
     /// Every edit flows through here: assigns the new stack and arranges

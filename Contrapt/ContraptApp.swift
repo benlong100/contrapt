@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
@@ -134,6 +135,153 @@ private struct FullScreenCommand: View {
     }
 }
 
+#if os(iOS)
+/// The iOS root: Home in a plain window (the launch target), saved manually
+/// on a debounce since a WindowGroup has no autosave. Other stacks open from
+/// Files / the share sheet via `.onOpenURL`, presented full-screen over Home.
+private struct RootView: View {
+    @StateObject private var home = StackDocument.loadHome()
+    @State private var opened: OpenedStack?
+    @State private var isImporterPresented = false
+    @State private var isExporterPresented = false
+    @State private var pendingNew: StackDocument?
+    @State private var pendingFilename = "Untitled"
+    @State private var saveTask: Task<Void, Never>?
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        ZStack {
+            NavigationStack {
+                ContentView(document: home, fileURL: HomeStack.workingURL)
+                    // The Stacks menu replaces the document browser: new
+                    // stacks and the tutorial are saved into Files (via the
+                    // exporter), and Open browses for an existing one.
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Menu("Stacks", systemImage: "square.stack") {
+                                Button("New Stack", systemImage: "doc.badge.plus") {
+                                    startNew(.makeNew(), filename: "Untitled")
+                                }
+                                Button("Learn HyperTalk", systemImage: "graduationcap") {
+                                    startNew(.tutorial(), filename: "Learn HyperTalk")
+                                }
+                                Divider()
+                                Button("Open…", systemImage: "folder") {
+                                    isImporterPresented = true
+                                }
+                            }
+                        }
+                    }
+            }
+            // An opened stack simply appears over Home (an opaque layer, not
+            // a sliding sheet), so it feels like being on that stack rather
+            // than a temporary modal.
+            if let opened {
+                OpenedStackView(stack: opened, onClose: closeOpened)
+            }
+        }
+        .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.contraptStack]) { result in
+            if case .success(let url) = result { openExternal(url) }
+        }
+        // New stacks and the tutorial are created in Files, then opened.
+        .fileExporter(
+            isPresented: $isExporterPresented,
+            document: pendingNew,
+            contentType: .contraptStack,
+            defaultFilename: pendingFilename
+        ) { result in
+            if case .success(let url) = result { openExternal(url) }
+        }
+        .onChange(of: home.stack) { scheduleHomeSave() }
+        .onChange(of: home.assets) { scheduleHomeSave() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { saveTask?.cancel(); home.write(to: HomeStack.workingURL) }
+        }
+        .onOpenURL { openExternal($0) }
+    }
+
+    /// Creates a stack in memory and presents the exporter to save it into
+    /// Files; on success it opens over Home.
+    private func startNew(_ stack: Stack, filename: String) {
+        pendingNew = StackDocument(stack: stack)
+        pendingFilename = filename
+        isExporterPresented = true
+    }
+
+    /// Saves and closes the opened stack, releasing its security scope.
+    private func closeOpened() {
+        if let opened, opened.securityScoped {
+            opened.url.stopAccessingSecurityScopedResource()
+        }
+        opened = nil
+    }
+
+    private func scheduleHomeSave() {
+        saveTask?.cancel()
+        saveTask = Task {
+            try? await Task.sleep(for: .seconds(0.5))
+            guard !Task.isCancelled else { return }
+            home.write(to: HomeStack.workingURL)
+        }
+    }
+
+    private func openExternal(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        guard let document = StackDocument.load(from: url) else {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            return
+        }
+        opened = OpenedStack(document: document, url: url, securityScoped: scoped)
+    }
+}
+
+/// A stack opened over Home from Files / the share sheet.
+private struct OpenedStack: Identifiable {
+    let id = UUID()
+    let document: StackDocument
+    let url: URL
+    let securityScoped: Bool
+}
+
+/// Hosts an opened stack full-screen over Home, with a Home button that
+/// saves edits back to the source file and returns.
+private struct OpenedStackView: View {
+    let stack: OpenedStack
+    var onClose: () -> Void
+    @State private var saveTask: Task<Void, Never>?
+
+    var body: some View {
+        NavigationStack {
+            ContentView(document: stack.document, fileURL: stack.url)
+        }
+        .overlay(alignment: .topLeading) {
+            Button {
+                saveTask?.cancel()
+                stack.document.write(to: stack.url)
+                onClose()
+            } label: {
+                Label("Home", systemImage: "house.fill")
+                    .labelStyle(.iconOnly)
+                    .padding(10)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .padding()
+        }
+        .onChange(of: stack.document.stack) { scheduleSave() }
+        .onChange(of: stack.document.assets) { scheduleSave() }
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task {
+            try? await Task.sleep(for: .seconds(0.5))
+            guard !Task.isCancelled else { return }
+            stack.document.write(to: stack.url)
+        }
+    }
+}
+#endif
+
 @main
 struct ContraptApp: App {
     #if os(macOS)
@@ -141,39 +289,37 @@ struct ContraptApp: App {
     #endif
 
     var body: some Scene {
+        #if os(macOS)
         DocumentGroup(newDocument: { StackDocument() }) { file in
             ContentView(document: file.document, fileURL: file.fileURL)
-                #if os(macOS)
                 .frame(minWidth: 900, minHeight: 640)
-                #endif
         }
-        #if os(macOS)
         // Open new document windows large enough to show a whole card
         // comfortably with room for the inspector.
         .defaultSize(width: 1280, height: 900)
         // Don't show the open panel on launch; the app delegate opens Home.
         .defaultLaunchBehavior(.suppressed)
-        #endif
-        // HyperCard's Go menu, driven by the focused document. Also
-        // reaches iPad when a hardware keyboard is attached.
-        .commands {
-            CommandGroup(after: .toolbar) {
-                FullScreenCommand()
-            }
-            CommandMenu("Go") {
-                GoCommands()
-            }
+        .commands { stackCommands }
+        #else
+        // iOS launches straight into Home. `openDocument` is unavailable on
+        // iOS and a WindowGroup can't preempt a DocumentGroup's launch, so
+        // Home is a plain window; other stacks open via .onOpenURL from
+        // Files / the share sheet, full-screen over Home.
+        WindowGroup {
+            RootView()
         }
-        // The launch scene's New/Learn buttons are an iOS-only feature;
-        // macOS gets New and Open from the standard File menu. (A Help-menu
-        // entry point for the tutorial is a natural macOS follow-up.)
-        #if os(iOS)
-        DocumentGroupLaunchScene("Contrapt") {
-            NewDocumentButton("New Stack")
-            NewDocumentButton("Learn HyperTalk", for: StackDocument.self) {
-                StackDocument(stack: .tutorial())
-            }
-        }
+        .commands { stackCommands }
         #endif
+    }
+
+    // HyperCard's Go menu plus the full-screen toggle, driven by the focused
+    // document. Reaches iPad when a hardware keyboard is attached.
+    @CommandsBuilder private var stackCommands: some Commands {
+        CommandGroup(after: .toolbar) {
+            FullScreenCommand()
+        }
+        CommandMenu("Go") {
+            GoCommands()
+        }
     }
 }
