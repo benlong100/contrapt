@@ -602,7 +602,7 @@ struct PartView: View {
         // Locked fields sit tight, but keep a little top inset so the first
         // row clears the painted rule/header just above the field; the bottom
         // stays minimal so the last row isn't clipped.
-        let topPadding: CGFloat = properties.lockText ? 6 : 8
+        let topPadding: CGFloat = properties.lockText ? 16 : 8
         let bottomPadding: CGFloat = properties.lockText ? 2 : 8
         // Pre-formatted tabular text (several short, hard-broken lines, like a
         // calendar grid) should never soft-wrap — a row that's a hair too wide
