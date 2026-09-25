@@ -36,6 +36,47 @@ struct RichFieldView: View {
     }
 }
 
+/// A full-screen Markdown editor for a rich field: the source on the left,
+/// a live rendered preview on the right. Roomier than the inspector column,
+/// for authoring longer content (Home cards, shipped stacks).
+struct LargeMarkdownEditor: View {
+    let title: String
+    @Binding var markdown: String
+    var fontDesign: FontDesign
+    var size: Double
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            HStack(spacing: 0) {
+                TextEditor(text: $markdown)
+                    .font(.system(.body, design: .monospaced))
+                    .autocorrectionDisabled()
+                    .padding(8)
+                    .frame(maxWidth: .infinity)
+                Divider()
+                // Preview links don't navigate here (no card context); external
+                // links stay inert while authoring.
+                RichFieldView(markdown: markdown, fontDesign: fontDesign, size: size) { _ in }
+                    .padding(8)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.cardBackdrop)
+            }
+            .navigationTitle(title)
+            .inlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 820, idealWidth: 1040, minHeight: 520, idealHeight: 720)
+        #endif
+    }
+}
+
 /// The web view itself, bridged for both platforms.
 private struct RichTextWebView {
     let markdown: String

@@ -16,18 +16,26 @@ struct PartInspector: View {
     var onDelete: () -> Void
 
     @State private var isEditorExpanded = false
+    @State private var isMarkdownEditorExpanded = false
 
     var body: some View {
         Form {
             Section("Part") {
                 TextField("Name", text: $part.name)
                 LabeledContent("Kind", value: kindName)
+                if case .field = part.kind {
+                    Picker("Field Kind", selection: fieldKind) {
+                        Text("Plain").tag(FieldKind.plain)
+                        Text("Rich").tag(FieldKind.rich)
+                    }
+                    .pickerStyle(.segmented)
+                }
                 LabeledContent("ID", value: String(part.scriptID))
                 Toggle("Visible", isOn: $part.isVisible)
             }
             kindSection
             Section("Position and Size") {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: 16) {
                     VStack(spacing: 8) {
                         geometryCell("X", value: $part.frame.x)
                         geometryCell("Y", value: $part.frame.y)
@@ -48,6 +56,14 @@ struct PartInspector: View {
         }
         .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: "Script of \(part.name)", script: $part.script)
+        }
+        .platformFullScreenCover(isPresented: $isMarkdownEditorExpanded) {
+            LargeMarkdownEditor(
+                title: "Markdown of \(part.name)",
+                markdown: fieldContents,
+                fontDesign: fieldFontDesign.wrappedValue,
+                size: fieldTextSize.wrappedValue
+            )
         }
     }
 
@@ -82,48 +98,33 @@ struct PartInspector: View {
                 }
             }
         case .field(let properties):
-            Section("Field") {
-                Picker("Kind", selection: fieldKind) {
-                    Text("Plain").tag(FieldKind.plain)
-                    Text("Rich").tag(FieldKind.rich)
-                }
-                .pickerStyle(.segmented)
-                if properties.kind == .rich {
-                    Text("Markdown — bold, italic, headings, lists, and links. Card links like [Home](card:Home) navigate; https links open in the browser.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    TextField("Placeholder", text: fieldPlaceholder)
-                    Toggle("Multiple Lines", isOn: fieldIsMultiline)
-                }
-            }
+            // The Plain/Rich picker lives up in the Part section now.
             if properties.kind == .rich {
-                Section("Markdown") {
+                Section {
                     TextEditor(text: fieldContents)
                         .font(.system(.body, design: .monospaced))
                         .multilineTextAlignment(.leading)
                         .frame(minHeight: 180)
+                    Button("Edit with Preview", systemImage: "arrow.up.left.and.arrow.down.right") {
+                        isMarkdownEditorExpanded = true
+                    }
+                    .buttonStyle(.borderless)
+                } header: {
+                    Text("Markdown")
+                } footer: {
+                    Text("Bold, italic, headings, lists, and links. Card links like [Home](card:Home) navigate; https links open in the browser.")
                 }
                 Section("Text") {
-                    Picker("Font", selection: fieldFontDesign) {
-                        ForEach(FontDesign.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    Stepper(value: fieldTextSize, in: 8...96, step: 1) {
-                        LabeledContent("Size", value: "\(Int(fieldTextSize.wrappedValue)) pt")
-                    }
+                    fontAndSizeRow
                 }
             } else {
                 Section("Field") {
+                    Toggle("Multiple Lines", isOn: fieldIsMultiline)
                     TextField("Contents", text: fieldContents, axis: .vertical)
                         .lineLimit(1...6)
                 }
                 Section("Text") {
-                    Picker("Font", selection: fieldFontDesign) {
-                        ForEach(FontDesign.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    Stepper(value: fieldTextSize, in: 8...96, step: 1) {
-                        LabeledContent("Size", value: "\(Int(fieldTextSize.wrappedValue)) pt")
-                    }
+                    fontAndSizeRow
                     Toggle("Bold", isOn: fieldBold)
                     Toggle("Italic", isOn: fieldItalic)
                     Toggle("Underline", isOn: fieldUnderline)
@@ -144,7 +145,27 @@ struct PartInspector: View {
         }
     }
 
-    /// One labelled numeric field, sized to pack two per row (X/Y beside W/H).
+    /// Font and size on one row. The stepper is label-less (just the +/−
+    /// control) with the value shown as plain text — a titled Stepper under
+    /// fixedSize demands a huge width and stretches the whole inspector.
+    private var fontAndSizeRow: some View {
+        HStack(spacing: 12) {
+            Text("Font").foregroundStyle(.secondary)
+            Picker("Font", selection: fieldFontDesign) {
+                ForEach(FontDesign.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .labelsHidden()
+            Spacer(minLength: 8)
+            Text("Size \(Int(fieldTextSize.wrappedValue)) pt")
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Stepper("Size", value: fieldTextSize, in: 8...96, step: 1)
+                .labelsHidden()
+        }
+    }
+
+    /// One labelled numeric field, fixed to a modest width so X/Y and W/H
+    /// pack into two columns without stretching the inspector.
     private func geometryCell(_ title: String, value: Binding<Double>) -> some View {
         HStack(spacing: 6) {
             Text(title)
@@ -154,6 +175,7 @@ struct PartInspector: View {
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .textFieldStyle(.roundedBorder)
+                .frame(width: 64)
                 .numericPunctuationKeyboard()
         }
     }
@@ -252,20 +274,6 @@ struct PartInspector: View {
     private var fieldItalic: Binding<Bool> { fieldFormat(\.isItalic, default: false) }
     private var fieldUnderline: Binding<Bool> { fieldFormat(\.isUnderline, default: false) }
     private var fieldAlign: Binding<TextAlign> { fieldFormat(\.align, default: .left) }
-
-    private var fieldPlaceholder: Binding<String> {
-        Binding(
-            get: {
-                guard case .field(let properties) = part.kind else { return "" }
-                return properties.placeholder
-            },
-            set: {
-                guard case .field(var properties) = part.kind else { return }
-                properties.placeholder = $0
-                part.kind = .field(properties)
-            }
-        )
-    }
 
     private var fieldContents: Binding<String> {
         Binding(
