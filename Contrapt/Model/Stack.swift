@@ -72,6 +72,10 @@ nonisolated struct Stack: Identifiable, Hashable {
     /// The fill behind the card in full-screen mode: a color name (black,
     /// white, gray, …) or #RRGGBB hex. `the paddingColor of this stack`.
     var paddingColor: String = "black"
+    /// Present the card at its true point size (1:1) rather than scaled to
+    /// fill the window — the classic small HyperCard card on a desktop.
+    /// Imported stacks set this for an "original size" import.
+    var presentAtActualSize: Bool = false
 
     /// Claims the next permanent scriptID.
     mutating func claimScriptID() -> Int {
@@ -84,7 +88,7 @@ nonisolated struct Stack: Identifiable, Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
-        case isFullScreen, paddingColor
+        case isFullScreen, paddingColor, presentAtActualSize
     }
 
     init(from decoder: Decoder) throws {
@@ -99,6 +103,7 @@ extension Stack: Codable {
         nextID = try container.decodeIfPresent(Int.self, forKey: .nextID) ?? 1
         isFullScreen = try container.decodeIfPresent(Bool.self, forKey: .isFullScreen) ?? false
         paddingColor = try container.decodeIfPresent(String.self, forKey: .paddingColor) ?? "black"
+        presentAtActualSize = try container.decodeIfPresent(Bool.self, forKey: .presentAtActualSize) ?? false
     }
 }
 

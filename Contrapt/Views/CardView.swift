@@ -40,7 +40,10 @@ struct CardView: View {
         GeometryReader { proxy in
             let cardWidth = stack.cardSize.width
             let cardHeight = stack.cardSize.height
-            let scale = min(proxy.size.width / cardWidth, proxy.size.height / cardHeight)
+            let fit = min(proxy.size.width / cardWidth, proxy.size.height / cardHeight)
+            // "Actual size" stacks never upscale (a small classic card on the
+            // desktop); they still shrink to fit a smaller window.
+            let scale = stack.presentAtActualSize ? min(fit, 1) : fit
             cardCanvas
                 .frame(width: cardWidth, height: cardHeight)
                 .coordinateSpace(name: Self.canvasSpace)
@@ -79,6 +82,7 @@ struct CardView: View {
            let image = Image(assetData: data) {
             image
                 .resizable()
+                .interpolation(.none) // keep 1-bit paint crisp when scaled up
                 .frame(width: stack.cardSize.width, height: stack.cardSize.height)
                 .allowsHitTesting(false)
         }

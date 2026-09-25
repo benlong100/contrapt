@@ -123,7 +123,9 @@ struct ContentView: View {
                             .transition(cardTransition?.transition ?? .identity)
                     }
                 }
-                .padding()
+                // Actual-size stacks hug the card (small margin for the card
+                // shadow); otherwise the usual breathing room.
+                .padding(document.stack.presentAtActualSize ? 6 : 16)
             }
         }
         .environment(\.stackAssets, document.assets)
@@ -286,6 +288,17 @@ struct ContentView: View {
                 onExit: exitFullScreen
             )
         )
+        // Original-size stacks make the window content hug the card (with the
+        // scene's .windowResizability(.contentSize)); other stacks stay
+        // flexible around a comfortable default.
+        .frame(
+            minWidth: actualSizeWindow ? cardWindowSize.width : 900,
+            idealWidth: actualSizeWindow ? cardWindowSize.width : 1000,
+            maxWidth: actualSizeWindow ? cardWindowSize.width : .infinity,
+            minHeight: actualSizeWindow ? cardWindowSize.height : 640,
+            idealHeight: actualSizeWindow ? cardWindowSize.height : 700,
+            maxHeight: actualSizeWindow ? cardWindowSize.height : .infinity
+        )
         #else
         .overlay(alignment: .topTrailing) {
             if isPresentingFullScreen {
@@ -305,6 +318,18 @@ struct ContentView: View {
     /// mode needs the chrome), and there's a card to show.
     private var isPresentingFullScreen: Bool {
         document.stack.isFullScreen && !isEditing && !document.stack.cards.isEmpty
+    }
+
+    /// Original-size stacks pin the window to the card (macOS). Not while
+    /// full-screen (which owns the whole screen).
+    private var actualSizeWindow: Bool {
+        document.stack.presentAtActualSize && !isPresentingFullScreen
+    }
+
+    /// The window content size for an actual-size stack: the card plus a thin
+    /// margin for its shadow.
+    private var cardWindowSize: CGSize {
+        CGSize(width: document.stack.cardSize.width + 12, height: document.stack.cardSize.height + 12)
     }
 
     private var backdropColor: Color {

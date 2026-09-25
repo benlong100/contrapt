@@ -249,6 +249,7 @@ private struct RootView: View {
     @State private var isImporterPresented = false
     @State private var isLegacyImporterPresented = false
     @State private var isHyperCardAppPickerPresented = false
+    @State private var pendingLegacyStackURL: URL?
     @State private var isExporterPresented = false
     @State private var pendingNew: StackDocument?
     @State private var pendingFilename = "Untitled"
@@ -298,9 +299,16 @@ private struct RootView: View {
         // Classic HyperCard stacks have no uniform type, so accept any file
         // and let the importer validate the STAK header.
         .fileImporter(isPresented: $isLegacyImporterPresented, allowedContentTypes: [.data, .item]) { result in
-            guard case .success(let url) = result,
-                  let contrapt = try? LegacyStackImporter.importedContraptFile(from: url, iconApp: HyperCardAppReference.url()) else { return }
-            openExternal(contrapt)
+            if case .success(let url) = result { pendingLegacyStackURL = url }
+        }
+        // After picking a stack, choose the import size.
+        .confirmationDialog("Import at what size?",
+                            isPresented: Binding(get: { pendingLegacyStackURL != nil },
+                                                 set: { if !$0 { pendingLegacyStackURL = nil } }),
+                            presenting: pendingLegacyStackURL) { url in
+            Button("Original Size") { importLegacy(url, presentAtActualSize: true) }
+            Button("Fill Window") { importLegacy(url, presentAtActualSize: false) }
+            Button("Cancel", role: .cancel) {}
         }
         // Point Contrapt at a HyperCard app so imported button icons resolve.
         .fileImporter(isPresented: $isHyperCardAppPickerPresented, allowedContentTypes: [.data, .item]) { result in
@@ -346,6 +354,14 @@ private struct RootView: View {
             guard !Task.isCancelled else { return }
             home.write(to: HomeStack.workingURL)
         }
+    }
+
+    /// Import a chosen legacy stack at the chosen size, then open it over Home.
+    private func importLegacy(_ url: URL, presentAtActualSize: Bool) {
+        pendingLegacyStackURL = nil
+        guard let contrapt = try? LegacyStackImporter.importedContraptFile(
+            from: url, iconApp: HyperCardAppReference.url(), presentAtActualSize: presentAtActualSize) else { return }
+        openExternal(contrapt)
     }
 
     private func openExternal(_ url: URL) {
@@ -415,6 +431,19 @@ private struct OpenedStackView: View {
     panel.allowsMultipleSelection = false
     panel.message = "Choose a classic HyperCard stack to import."
     guard panel.runModal() == .OK, let url = panel.url else { return }
+    // Present at the original (small, 1:1) card size, or scaled to fill.
+    let sizeAlert = NSAlert()
+    sizeAlert.messageText = "Import Size"
+    sizeAlert.informativeText = "Open the card at its original HyperCard size, or scaled to fill the window?"
+    sizeAlert.addButton(withTitle: "Original Size")
+    sizeAlert.addButton(withTitle: "Fill Window")
+    sizeAlert.addButton(withTitle: "Cancel")
+    let actualSize: Bool
+    switch sizeAlert.runModal() {
+    case .alertFirstButtonReturn: actualSize = true
+    case .alertSecondButtonReturn: actualSize = false
+    default: return
+    }
     // Resolve the HyperCard app for button icons — remembered, or offered once.
     var iconApp = HyperCardAppReference.url()
     if iconApp == nil, let picked = promptForHyperCardApp() {
@@ -422,7 +451,7 @@ private struct OpenedStackView: View {
         iconApp = picked
     }
     do {
-        let contrapt = try LegacyStackImporter.importedContraptFile(from: url, iconApp: iconApp)
+        let contrapt = try LegacyStackImporter.importedContraptFile(from: url, iconApp: iconApp, presentAtActualSize: actualSize)
         NSDocumentController.shared.openDocument(withContentsOf: contrapt, display: true) { _, _, _ in }
     } catch {
         NSAlert(error: error).runModal()
@@ -455,12 +484,16 @@ struct ContraptApp: App {
     var body: some Scene {
         #if os(macOS)
         DocumentGroup(newDocument: { StackDocument() }) { file in
+            // Window size is governed by ContentView's frame (a fixed card size
+            // for original-size imports, else a flexible default) together with
+            // .windowResizability(.contentSize) below.
             ContentView(document: file.document, fileURL: file.fileURL)
-                .frame(minWidth: 900, minHeight: 640)
         }
         // Open new document windows large enough to show a whole card
         // comfortably with room for the inspector.
         .defaultSize(width: 1280, height: 900)
+        // The window hugs its content, so an original-size import opens small.
+        .windowResizability(.contentSize)
         // Don't show the open panel on launch; the app delegate opens Home.
         .defaultLaunchBehavior(.suppressed)
         .commands { stackCommands }
