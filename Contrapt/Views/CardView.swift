@@ -599,7 +599,11 @@ struct PartView: View {
         // margins so text fills the field as it did originally; editable
         // fields keep roomier insets for entry.
         let margin: CGFloat = properties.wideMargins ? 18 : (properties.lockText ? 3 : 8)
-        let verticalPadding: CGFloat = properties.lockText ? 2 : 8
+        // Locked fields sit tight, but keep a little top inset so the first
+        // row clears the painted rule/header just above the field; the bottom
+        // stays minimal so the last row isn't clipped.
+        let topPadding: CGFloat = properties.lockText ? 6 : 8
+        let bottomPadding: CGFloat = properties.lockText ? 2 : 8
         // Pre-formatted tabular text (several short, hard-broken lines, like a
         // calendar grid) should never soft-wrap — a row that's a hair too wide
         // must stay one line and clip, not reflow its last columns. Flowing
@@ -645,7 +649,8 @@ struct PartView: View {
             }
         }
         .padding(.horizontal, margin)
-        .padding(.vertical, verticalPadding)
+        .padding(.top, topPadding)
+        .padding(.bottom, bottomPadding)
         .fieldChrome(
             style: properties.style,
             showLines: properties.showLines,
