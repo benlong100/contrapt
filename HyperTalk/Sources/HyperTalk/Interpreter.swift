@@ -577,8 +577,8 @@ final class Runtime {
         case .variable(let name):
             return variableValue(name) ?? ""
         case .field(let fieldRef):
-            let (reference, domain) = try await resolveFieldRef(fieldRef, line: line)
-            return try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
+            let (reference, domain, onCard) = try await resolveFieldRef(fieldRef, line: line)
+            return try hostCall(line: line) { try host.fieldText(reference, domain: domain, onCard: onCard) }
         case .chunk(let kind, let selector, let base):
             let source = try await containerValue(base, line: line)
             return try await ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
@@ -593,8 +593,8 @@ final class Runtime {
         case .variable(let name):
             setVariable(name, to: value)
         case .field(let fieldRef):
-            let (reference, domain) = try await resolveFieldRef(fieldRef, line: line)
-            try hostCall(line: line) { try host.setFieldText(reference, domain: domain, to: value) }
+            let (reference, domain, onCard) = try await resolveFieldRef(fieldRef, line: line)
+            try hostCall(line: line) { try host.setFieldText(reference, domain: domain, onCard: onCard, to: value) }
         case .chunk(let kind, let selector, let base):
             let source = try await containerValue(base, line: line)
             let updated = try await ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value, itemDelimiter: itemDelimiter) {
@@ -604,10 +604,31 @@ final class Runtime {
         }
     }
 
-    private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain) {
+    private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain, GoDestination?) {
         let value = try await evaluate(fieldRef.expr, line: line)
         let reference: HyperTalkObject.Reference = fieldRef.isID ? .id(value) : self.reference(from: value)
-        return (reference, fieldRef.domain)
+        return (reference, fieldRef.domain, try await resolveCardRef(fieldRef.card, line: line))
+    }
+
+    /// Resolves a field's `of <card>` owner to a navigation destination the
+    /// host can locate (nil for the current card).
+    private func resolveCardRef(_ card: CardRef?, line: Int) async throws -> GoDestination? {
+        guard let card else { return nil }
+        switch card {
+        case .current: return nil
+        case .next: return .next
+        case .previous: return .previous
+        case .first: return .first
+        case .last: return .last
+        case .expression(let expression):
+            let value = try await evaluate(expression, line: line)
+            if let number = Int(value.trimmingCharacters(in: .whitespaces)) {
+                return .number(number)
+            }
+            return .named(value)
+        case .idExpression(let expression):
+            return .id(try await evaluate(expression, line: line))
+        }
     }
 
     private func executeGo(_ target: GoTarget, line: Int) async throws {
@@ -700,8 +721,8 @@ final class Runtime {
             return variableValue(name) ?? name
 
         case .field(let fieldRef):
-            let (reference, domain) = try await resolveFieldRef(fieldRef, line: line)
-            return try hostCall(line: line) { try host.fieldText(reference, domain: domain) }
+            let (reference, domain, onCard) = try await resolveFieldRef(fieldRef, line: line)
+            return try hostCall(line: line) { try host.fieldText(reference, domain: domain, onCard: onCard) }
 
         case .property(let property, let objectExpression):
             let object = try await resolveObject(objectExpression, line: line)

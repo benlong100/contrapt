@@ -166,21 +166,87 @@ final class DocumentScriptHost: HyperTalkHost {
         }
     }
 
-    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String {
-        let location = try locatePart(kind: "field", domain: domain, reference: reference)
-        guard case .field(let properties) = part(at: location).kind else {
+    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) throws -> String {
+        let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
+        let location = try locateField(reference: reference, domain: domain, cardIndex: ci)
+        guard case .field(let properties) = fieldPart(at: location).kind else {
             throw HostError("That part is not a field.")
         }
         return properties.text
     }
 
-    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, to text: String) throws {
-        let location = try locatePart(kind: "field", domain: domain, reference: reference)
-        guard case .field(var properties) = part(at: location).kind else {
+    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?, to text: String) throws {
+        let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
+        let location = try locateField(reference: reference, domain: domain, cardIndex: ci)
+        guard case .field(var properties) = fieldPart(at: location).kind else {
             throw HostError("That part is not a field.")
         }
         properties.text = text
-        setKind(.field(properties), at: location)
+        switch location {
+        case .card(let cardIndex, let partIndex):
+            stackBinding.wrappedValue.cards[cardIndex].parts[partIndex].kind = .field(properties)
+        case .background(let backgroundIndex, let partIndex):
+            stackBinding.wrappedValue.backgrounds[backgroundIndex].parts[partIndex].kind = .field(properties)
+        }
+    }
+
+    /// Where a field lives, including which card — so `field "X" of prev card`
+    /// can read/write without navigating.
+    private enum RemoteFieldLocation {
+        case card(cardIndex: Int, partIndex: Int)
+        case background(backgroundIndex: Int, partIndex: Int)
+    }
+
+    private func fieldPart(at location: RemoteFieldLocation) -> Part {
+        switch location {
+        case .card(let cardIndex, let partIndex): stack.cards[cardIndex].parts[partIndex]
+        case .background(let backgroundIndex, let partIndex): stack.backgrounds[backgroundIndex].parts[partIndex]
+        }
+    }
+
+    private func locateField(reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, cardIndex ci: Int) throws -> RemoteFieldLocation {
+        let card = stack.cards[ci]
+        if domain != .background, let partIndex = index(ofKind: "field", matching: reference, in: card.parts) {
+            return .card(cardIndex: ci, partIndex: partIndex)
+        }
+        if domain != .card,
+           let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+           let partIndex = index(ofKind: "field", matching: reference, in: stack.backgrounds[backgroundIndex].parts) {
+            return .background(backgroundIndex: backgroundIndex, partIndex: partIndex)
+        }
+        switch reference {
+        case .named(let name): throw HostError("There is no field named \"\(name)\" on that card.")
+        case .number(let number): throw HostError("There is no field \(number) on that card.")
+        case .id(let id): throw HostError("There is no field with id \(id) on that card.")
+        }
+    }
+
+    /// Resolves a card destination (from `field … of <card>`) to an index.
+    private func resolveCardIndex(_ destination: GoDestination) throws -> Int {
+        let count = stack.cards.count
+        guard count > 0 else { throw HostError("This stack has no cards.") }
+        switch destination {
+        case .next: return (cardIndex + 1) % count
+        case .previous: return (cardIndex + count - 1) % count
+        case .first: return 0
+        case .last: return count - 1
+        case .number(let number):
+            guard (1...count).contains(number) else { throw HostError("There is no card \(number).") }
+            return number - 1
+        case .named(let name):
+            guard let index = stack.cards.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
+                throw HostError("There is no card named \"\(name)\".")
+            }
+            return index
+        case .id(let id):
+            let wanted = id.trimmingCharacters(in: .whitespaces)
+            guard let index = stack.cards.firstIndex(where: { String($0.scriptID) == wanted }) else {
+                throw HostError("There is no card with id \(id).")
+            }
+            return index
+        case .home, .back:
+            throw HostError("Can't address a field of that card.")
+        }
     }
 
     func showMessage(_ text: String) {

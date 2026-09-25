@@ -88,6 +88,19 @@ import Testing
     #expect(host.properties["button Extend.rect"] == "351,238,431,255")
 }
 
+@Test func fieldOfAnotherCard() async throws {
+    // `field "WeekSecs" of prev card` reads a field on another card.
+    let host = MockHost(fields: ["prev card.weeksecs": "12345", "out": ""])
+    try await run("""
+    on mouseUp
+      get field "WeekSecs" of prev card
+      put it into field "out"
+    end mouseUp
+    """, host: host)
+    // Reading the "prev card." key proves the `of prev card` owner was used.
+    #expect(host.fields["out"] == "12345")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"

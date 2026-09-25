@@ -1006,7 +1006,33 @@ struct Parser {
             return nil
         }
         let isID = consumeWord("id")
-        return FieldRef(domain: domain, isID: isID, expr: try parsePrimary())
+        let expr = try parsePrimary()
+        return FieldRef(domain: domain, isID: isID, expr: expr, card: try parseFieldCardRef())
+    }
+
+    /// An optional `of <card>` after a field reference — `field "X" of prev
+    /// card`, `field 1 of card "About"`. Returns nil (consuming nothing) when
+    /// no card owner follows.
+    private mutating func parseFieldCardRef() throws -> CardRef? {
+        guard peekIdentifier() == "of" else { return nil }
+        let saved = index
+        advance() // of
+        _ = consumeWord("the")
+        if consumeWord("next") { _ = consumeCardWord(); return .next }
+        if consumeWord("previous") || consumeWord("prev") { _ = consumeCardWord(); return .previous }
+        if consumeWord("first") { _ = consumeCardWord(); return .first }
+        if consumeWord("last") { _ = consumeCardWord(); return .last }
+        if consumeWord("this") { _ = consumeCardWord(); return .current }
+        if consumeCardWord() {
+            if consumeWord("id") { return .idExpression(try parsePrimary()) }
+            return .expression(try parsePrimary())
+        }
+        index = saved // not a card owner (e.g. `field "x" of the target`)
+        return nil
+    }
+
+    private mutating func consumeCardWord() -> Bool {
+        consumeWord("card") || consumeWord("cd")
     }
 
     /// An object reference: typed part (`button "OK"`), `card 3`, or

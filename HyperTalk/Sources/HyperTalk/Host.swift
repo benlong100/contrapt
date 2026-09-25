@@ -136,9 +136,11 @@ public protocol HyperTalkHost: AnyObject {
     /// `visual effect` since the last `go` (empty for a plain cut).
     func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
-    /// optionally restricted to the card or background layer.
-    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String
-    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, to text: String) throws
+    /// optionally restricted to the card or background layer. `onCard` names a
+    /// different card the field lives on (`field "X" of prev card`); nil means
+    /// the current card.
+    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) throws -> String
+    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?, to text: String) throws
     /// `put <expr>` with no destination — HyperCard's message box.
     func showMessage(_ text: String)
     /// `beep` — one system beep per call.

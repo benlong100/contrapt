@@ -32,18 +32,40 @@ final class MockHost: HyperTalkHost {
         (domainText(domain) + referenceText(reference)).lowercased()
     }
 
-    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String {
-        guard let text = fields[fieldKey(reference, domain)] else {
+    /// The `onCard` of the last field access, for `field … of <card>` tests.
+    var lastFieldCard: GoDestination?
+
+    func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) throws -> String {
+        lastFieldCard = onCard
+        let key = (cardPrefix(onCard) + fieldKey(reference, domain))
+        guard let text = fields[key] else {
             throw HostError("There is no field \(referenceText(reference)) here.")
         }
         return text
     }
 
-    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, to text: String) throws {
-        guard fields[fieldKey(reference, domain)] != nil else {
+    func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?, to text: String) throws {
+        lastFieldCard = onCard
+        let key = (cardPrefix(onCard) + fieldKey(reference, domain))
+        guard fields[key] != nil else {
             throw HostError("There is no field \(referenceText(reference)) here.")
         }
-        fields[fieldKey(reference, domain)] = text
+        fields[key] = text
+    }
+
+    /// A key prefix identifying `field … of <card>` in the flat `fields` dict.
+    private func cardPrefix(_ onCard: GoDestination?) -> String {
+        switch onCard {
+        case nil: return ""
+        case .previous: return "prev card."
+        case .next: return "next card."
+        case .first: return "first card."
+        case .last: return "last card."
+        case .number(let n): return "card \(n)."
+        case .named(let s): return "card \(s).".lowercased()
+        case .id(let i): return "id \(i)."
+        default: return "other."
+        }
     }
 
     func showMessage(_ text: String) {

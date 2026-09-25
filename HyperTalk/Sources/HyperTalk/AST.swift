@@ -96,6 +96,22 @@ struct FieldRef {
     var domain: HyperTalkObject.PartDomain
     var isID: Bool
     var expr: Expr
+    /// `field "X" of <card>` — which card the field lives on (nil = current).
+    var card: CardRef? = nil
+}
+
+/// A card named as the owner of a field: `field "X" of prev card`,
+/// `field 1 of card "About"`.
+indirect enum CardRef {
+    case current
+    case next
+    case previous
+    case first
+    case last
+    /// `card <expr>` — a number or a name, decided at run time.
+    case expression(Expr)
+    /// `card id <expr>`.
+    case idExpression(Expr)
 }
 
 indirect enum Container {
