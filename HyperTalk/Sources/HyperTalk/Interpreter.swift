@@ -486,6 +486,31 @@ final class Runtime {
         case .passMessage:
             return .passMessage
 
+        case .sortCards(let ascending, let numeric, let keyExpression):
+            let count = try hostCall(line: statement.line) { try host.count(.cards) }
+            var keyed: [(key: String, index: Int)] = []
+            keyed.reserveCapacity(count)
+            for index in 0..<count {
+                host.setSortContext(index)
+                let key = try await evaluate(keyExpression, line: statement.line)
+                keyed.append((key, index))
+            }
+            host.setSortContext(nil)
+            func rank(_ a: (key: String, index: Int), _ b: (key: String, index: Int)) -> ComparisonResult {
+                if numeric {
+                    let x = Double(a.key.trimmingCharacters(in: .whitespaces)) ?? 0
+                    let y = Double(b.key.trimmingCharacters(in: .whitespaces)) ?? 0
+                    return x < y ? .orderedAscending : (x > y ? .orderedDescending : .orderedSame)
+                }
+                return a.key.localizedCaseInsensitiveCompare(b.key)
+            }
+            keyed.sort { a, b in
+                let cmp = rank(a, b)
+                return ascending ? cmp == .orderedAscending : cmp == .orderedDescending
+            }
+            try hostCall(line: statement.line) { try host.reorderCards(keyed.map(\.index)) }
+            return .normal
+
         case .sendMessage(let messageExpression, let objectExpression):
             let text = try await evaluate(messageExpression, line: statement.line)
                 .trimmingCharacters(in: .whitespaces)

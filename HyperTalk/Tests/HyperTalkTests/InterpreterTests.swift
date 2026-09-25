@@ -36,6 +36,8 @@ final class MockHost: HyperTalkHost {
     var lastFieldCard: GoDestination?
 
     func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) throws -> String {
+        // While sorting, every field read yields the current card's sort key.
+        if let sortContext, sortContext < sortKeys.count { return sortKeys[sortContext] }
         lastFieldCard = onCard
         let key = (cardPrefix(onCard) + fieldKey(reference, domain))
         guard let text = fields[key] else {
@@ -226,11 +228,19 @@ final class MockHost: HyperTalkHost {
     var buttonCount = 0
     func count(_ countable: Countable) throws -> Int {
         switch countable {
-        case .cards: return cardCount
+        case .cards: return sortKeys.isEmpty ? cardCount : sortKeys.count
         case .backgrounds: return backgroundCount
         case .parts(let kind, _): return kind == "field" ? fields.count : buttonCount
         }
     }
+
+    /// `sort` support: one key value per card; during sort any field read
+    /// returns the current card's key, so `sort by field "X"` uses these.
+    var sortKeys: [String] = []
+    var sortContext: Int?
+    var reorderedTo: [Int]?
+    func setSortContext(_ cardIndex: Int?) { sortContext = cardIndex }
+    func reorderCards(_ order: [Int]) throws { reorderedTo = order }
 
     /// A field exists if it's in `fields`; any other part/card exists if a
     /// property was preset for it. `this …` objects always exist.

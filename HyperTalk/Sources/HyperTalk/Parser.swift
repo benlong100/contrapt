@@ -389,6 +389,9 @@ struct Parser {
             let object = try parseObjectExpr()
             try expectNewline()
             return Stmt(kind: .sendMessage(message, to: object), line: line)
+        case "sort":
+            advance()
+            return try parseSort(line: line)
         case "show", "hide":
             advance()
             return try parseShowHide(visible: word == "show", line: line)
@@ -664,6 +667,37 @@ struct Parser {
         }
         try expectNewline()
         return Stmt(kind: .find(mode, text: text, inField: field), line: line)
+    }
+
+    /// `sort [this stack] [marked] [cards] [of …] [ascending|descending]
+    /// [text|numeric|international|dateTime] by <expr>` — reorders the stack's
+    /// cards. Contrapt sorts the whole stack; qualifiers it doesn't model
+    /// (marked, of a background) are accepted and ignored.
+    private mutating func parseSort(line: Int) throws -> Stmt {
+        _ = consumeWord("this"); _ = consumeWord("stack")
+        _ = consumeWord("marked")
+        _ = consumeCardWord()
+        // An `of <object>` scope we don't model — skip up to `by`.
+        if peekIdentifier() == "of" {
+            while current.kind != .newline, current.kind != .endOfScript,
+                  peekIdentifier() != "by" { advance() }
+        }
+        var ascending = true
+        var numeric = false
+        // Order and style may appear in either order; accept both.
+        for _ in 0..<2 {
+            if consumeWord("ascending") { ascending = true }
+            else if consumeWord("descending") { ascending = false }
+            else if consumeWord("numeric") { numeric = true }
+            else if consumeWord("text") || consumeWord("international")
+                        || consumeWord("datetime") || consumeWord("date") { numeric = false }
+        }
+        guard consumeWord("by") else {
+            throw ScriptError(line: line, message: "Expected 'by <expression>' in 'sort'.")
+        }
+        let key = try parseExpression()
+        try expectNewline()
+        return Stmt(kind: .sortCards(ascending: ascending, numeric: numeric, key: key), line: line)
     }
 
     /// `show`/`hide <object>` toggles a part's visibility. Targets Contrapt

@@ -189,6 +189,13 @@ public protocol HyperTalkHost: AnyObject {
     func foundValue(_ field: FoundField) -> String
     /// `the number of cards / backgrounds / [card|bkgnd] buttons / fields`.
     func count(_ countable: Countable) throws -> Int
+    /// During `sort`, temporarily resolve field/property lookups against the
+    /// given card index (nil restores the real current card), so the sort key
+    /// can be evaluated on each card without navigating.
+    func setSortContext(_ cardIndex: Int?)
+    /// `sort` — reorder the stack's cards to the given permutation of current
+    /// indices (e.g. `[2,0,1]` puts card 3 first).
+    func reorderCards(_ order: [Int]) throws
     /// `push [this] card` — remember the current card on a session stack.
     func pushCard()
     /// `pop card` — remove and return the most recently pushed card's id (nil

@@ -91,8 +91,30 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private var stack: Stack { stackBinding.wrappedValue }
 
+    /// Set during `sort` so field/property lookups resolve against each card
+    /// in turn (see setSortContext); nil means the real current card.
+    private var sortContextIndex: Int?
+
     private var cardIndex: Int {
-        min(currentCardIndex.wrappedValue, stack.cards.count - 1)
+        if let sortContextIndex { return sortContextIndex }
+        return min(currentCardIndex.wrappedValue, stack.cards.count - 1)
+    }
+
+    func setSortContext(_ cardIndex: Int?) {
+        sortContextIndex = cardIndex
+    }
+
+    func reorderCards(_ order: [Int]) throws {
+        let cards = stack.cards
+        guard order.count == cards.count, Set(order) == Set(0..<cards.count) else {
+            throw HostError("Sort produced an invalid card order.")
+        }
+        // Keep the user on the same card after the reorder.
+        let currentID = cards.indices.contains(cardIndex) ? cards[cardIndex].id : nil
+        stackBinding.wrappedValue.cards = order.map { cards[$0] }
+        if let currentID, let newIndex = stackBinding.wrappedValue.cards.firstIndex(where: { $0.id == currentID }) {
+            currentCardIndex.wrappedValue = newIndex
+        }
     }
 
     // MARK: - HyperTalkHost

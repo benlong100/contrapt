@@ -82,6 +82,9 @@ indirect enum StmtKind {
     /// `add`/`subtract`/`multiply`/`divide` — arithmetic commands that update a
     /// container in place (`add 1 to x`, `subtract 5 from field "n"`).
     case arithmetic(BinaryOp, amount: Expr, container: Container)
+    /// `sort [cards] [ascending|descending] [text|numeric] by <expr>` — reorder
+    /// the stack's cards by a key evaluated on each card.
+    case sortCards(ascending: Bool, numeric: Bool, key: Expr)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
