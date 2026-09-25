@@ -205,6 +205,7 @@ enum LegacyStackImporter {
         case .field:
             var field = FieldPart(text: "", placeholder: "", isMultiline: true, format: format)
             field.style = raw.fieldStyle
+            field.showLines = raw.showLines
             // Imported fields are display-only (a read-only reproduction):
             // locked text renders as static text — no editor scrollbar — and
             // still dispatches taps to scripts. Unlock per-field in the
@@ -251,6 +252,8 @@ private extension LegacyStackImporter {
         var script: String
         var styleByte: Int
         var showName: Bool
+        /// Field "Show Lines" — baseline writing rules (flag byte +0x0E, 0x40).
+        var showLines: Bool
         var iconID: Int
         var visible: Bool
         var textAlign: Int
@@ -485,6 +488,7 @@ private extension LegacyStackImporter {
                            name: roman(nameBytes), script: roman(scriptBytes),
                            styleByte: Int(d[o + 0x0F]) & 0x0F,
                            showName: (d[o + 0x0E] & 0x80) != 0,
+                           showLines: (d[o + 0x0E] & 0x40) != 0,
                            iconID: i16(o + 0x12),
                            visible: (d[o + 5] & 0x80) == 0,
                            textAlign: i16(o + 0x14), fontID: i16(o + 0x16),

@@ -562,7 +562,7 @@ struct PartView: View {
                     onFollowLink: onFollowLink
                 )
             } else {
-                plainField(properties)
+                plainField(properties, fieldHeight: part.frame.height)
             }
         case .label(let properties):
             // Labels take presses too, like HyperCard's locked text:
@@ -594,15 +594,17 @@ struct PartView: View {
     /// text that sends mouseUp to its script. Honors Show Lines (baseline
     /// rules) and Wide Margins (extra inset).
     @ViewBuilder
-    private func plainField(_ properties: FieldPart) -> some View {
+    private func plainField(_ properties: FieldPart, fieldHeight: CGFloat = 0) -> some View {
         // Locked (display-only, e.g. imported) fields use tight HyperCard-like
         // margins so text fills the field as it did originally; editable
         // fields keep roomier insets for entry.
         let margin: CGFloat = properties.wideMargins ? 18 : (properties.lockText ? 3 : 8)
-        // Locked fields sit tight, but keep a little top inset so the first
-        // row clears the painted rule/header just above the field; the bottom
-        // stays minimal so the last row isn't clipped.
-        let topPadding: CGFloat = properties.lockText ? 16 : 8
+        // SwiftUI seats a text line's glyphs nearer the top of the line box
+        // than HyperCard does, so locked text reads a bit high. Nudge it down
+        // by a fraction of the field height — enough for a tall multi-row grid
+        // to clear the rule above it, but capped so a short one-line field
+        // (e.g. a 17pt-tall day-number box) isn't shoved out of view.
+        let topPadding: CGFloat = properties.lockText ? min(16, max(2, fieldHeight * 0.2)) : 8
         let bottomPadding: CGFloat = properties.lockText ? 2 : 8
         // Pre-formatted tabular text (several short, hard-broken lines, like a
         // calendar grid) should never soft-wrap — a row that's a hair too wide
