@@ -1015,29 +1015,41 @@ struct Parser {
             advance() // target
             return .target
         }
-        let partKinds = ["button", "field", "label", "image"]
+        func isPartKind(_ word: String?) -> Bool {
+            guard let word else { return false }
+            return Self.partKindSynonyms[word] != nil
+        }
 
-        // Domain qualifier: `card field 1` / `background button "OK"`.
+        // Domain qualifier: `card field 1` / `bkgnd button "OK"`.
         var domain = HyperTalkObject.PartDomain.any
-        if peekIdentifier() == "card", let next = peekIdentifier(1), partKinds.contains(next) {
+        if let w = peekIdentifier(), Self.cardWords.contains(w), isPartKind(peekIdentifier(1)) {
             advance()
             domain = .card
-        } else if peekIdentifier() == "background" || peekIdentifier() == "bg",
-                  let next = peekIdentifier(1), partKinds.contains(next) {
+        } else if let w = peekIdentifier(), Self.backgroundWords.contains(w), isPartKind(peekIdentifier(1)) {
             advance()
             domain = .background
         }
 
-        if let kind = peekIdentifier(), partKinds.contains(kind) {
+        if let word = peekIdentifier(), let kind = Self.partKindSynonyms[word] {
             advance()
             if consumeWord("id") {
                 return .partByID(kind: kind, domain: domain, id: try parsePrimary())
             }
             return .part(kind: kind, domain: domain, name: try parsePrimary())
         }
-        if consumeWord("card") {
+        // A bare background reference (`bkgnd`, `background`) → this background.
+        if let w = peekIdentifier(), Self.backgroundWords.contains(w) {
+            advance()
+            return .thisBackground
+        }
+        if let w = peekIdentifier(), Self.cardWords.contains(w) {
+            advance()
             if consumeWord("id") {
                 return .cardByID(try parsePrimary())
+            }
+            // A bare `card`/`cd` with nothing naming a specific card → this card.
+            if current.kind == .newline || current.kind == .endOfScript {
+                return .thisCard
             }
             return .card(try parsePrimary())
         }
@@ -1065,6 +1077,16 @@ struct Parser {
     static let nameAdjectives: Set<String> = [
         "short", "long", "abbreviated", "abbrev", "abbr",
     ]
+
+    /// Part nouns (and their HyperTalk abbreviations) → the canonical kind
+    /// the host understands.
+    static let partKindSynonyms: [String: String] = [
+        "button": "button", "btn": "button",
+        "field": "field", "fld": "field",
+        "label": "label", "image": "image", "picture": "image",
+    ]
+    static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg"]
+    static let cardWords: Set<String> = ["card", "cd"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,

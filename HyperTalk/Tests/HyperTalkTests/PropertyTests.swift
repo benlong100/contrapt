@@ -63,6 +63,20 @@ import Testing
     #expect(host.fields["out"] == "3/7")
 }
 
+@Test func bareBackgroundAndCardObjects() async throws {
+    // `the short name of bkgnd` → the current background; `btn` abbreviation.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["this background.name"] = "Weekly"
+    host.properties["button OK.width"] = "50"
+    try await run("""
+    on mouseUp
+      put the short name of bkgnd into field "out"
+      put the width of btn "OK" after field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "Weekly50")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"
