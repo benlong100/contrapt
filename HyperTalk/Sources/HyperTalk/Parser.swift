@@ -706,6 +706,13 @@ struct Parser {
     }
 
     private mutating func parseGo(line: Int) throws -> Stmt {
+        // A go destination never uses a bare `<prop> of <obj>` property, but
+        // `go card whichSix of stack "X"` would otherwise read `whichSix of …`
+        // as one. Suppress the shortcut so the card expr stays a plain value
+        // and the trailing `of …` is handled as a qualifier.
+        let savedSuppress = suppressBarePropertyOf
+        suppressBarePropertyOf = true
+        defer { suppressBarePropertyOf = savedSuppress }
         _ = consumeWord("to")
         _ = consumeWord("the")
         var target: GoTarget
