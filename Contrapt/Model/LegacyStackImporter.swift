@@ -220,6 +220,13 @@ enum LegacyStackImporter {
         return part
     }
 
+    /// Classic bitmap fonts re-render a little large in SwiftUI's system
+    /// fonts at the same point size, so proportional imported text (Times,
+    /// Geneva, Helvetica…) is scaled by this factor to match the original.
+    /// Monospaced text (Courier/Monaco grids) already matches, so it's left
+    /// 1:1. TUNABLE: 1.0 = no change; lower = smaller. Re-import to apply.
+    static let proportionalFontScale = 0.85
+
     /// Map a part's HyperCard font/size/style/alignment to a TextFormat, so
     /// imported text matches the original rather than Contrapt's defaults.
     private static func textFormat(from raw: RawPart) -> TextFormat {
@@ -231,6 +238,9 @@ enum LegacyStackImporter {
         case 2, 20: format.fontDesign = .serif       // New York, Times
         case 4, 22: format.fontDesign = .monospaced  // Monaco, Courier
         default: format.fontDesign = .standard       // Geneva, Chicago, Helvetica…
+        }
+        if format.fontDesign != .monospaced {
+            format.size *= proportionalFontScale
         }
         format.isBold = raw.textStyleBits & 0x01 != 0
         format.isItalic = raw.textStyleBits & 0x02 != 0
