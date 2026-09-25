@@ -135,9 +135,23 @@ struct PartInspector: View {
                 }
             } else {
                 Section("Field") {
-                    Toggle("Multiple Lines", isOn: fieldIsMultiline)
-                    TextField("Contents", text: fieldContents, axis: .vertical)
-                        .lineLimit(1...6)
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(spacing: 8) {
+                            Toggle("Multiple Lines", isOn: fieldIsMultiline)
+                            Toggle("Lock Text", isOn: fieldLockText)
+                        }
+                        VStack(spacing: 8) {
+                            Toggle("Show Lines", isOn: fieldShowLines)
+                            Toggle("Wide Margins", isOn: fieldWideMargins)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Contents").foregroundStyle(.secondary)
+                        TextField("Contents", text: fieldContents, axis: .vertical)
+                            .labelsHidden()
+                            .lineLimit(1...6)
+                            .textFieldStyle(.roundedBorder)
+                    }
                 }
                 Section {
                     fontAndSizeRow
@@ -314,6 +328,25 @@ struct PartInspector: View {
             set: {
                 guard case .field(var properties) = part.kind else { return }
                 properties.isMultiline = $0
+                part.kind = .field(properties)
+            }
+        )
+    }
+
+    private var fieldLockText: Binding<Bool> { fieldFlag(\.lockText) }
+    private var fieldShowLines: Binding<Bool> { fieldFlag(\.showLines) }
+    private var fieldWideMargins: Binding<Bool> { fieldFlag(\.wideMargins) }
+
+    /// A binding to one Bool on the field's FieldPart.
+    private func fieldFlag(_ keyPath: WritableKeyPath<FieldPart, Bool>) -> Binding<Bool> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return false }
+                return properties[keyPath: keyPath]
+            },
+            set: {
+                guard case .field(var properties) = part.kind else { return }
+                properties[keyPath: keyPath] = $0
                 part.kind = .field(properties)
             }
         )

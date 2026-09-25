@@ -375,6 +375,15 @@ final class DocumentScriptHost: HyperTalkHost {
         case "textalign":
             guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.format.align.rawValue
+        case "locktext":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.lockText ? "true" : "false"
+        case "showlines":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.showLines ? "true" : "false"
+        case "widemargins":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.wideMargins ? "true" : "false"
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -447,9 +456,22 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("Unknown alignment \"\(value)\". Try left, center, or right.")
             }
             try withFieldFormat(&part, kind: kind) { $0.align = align }
+        case "locktext":
+            try withField(&part, kind: kind) { $0.lockText = try boolean(value, for: property) }
+        case "showlines":
+            try withField(&part, kind: kind) { $0.showLines = try boolean(value, for: property) }
+        case "widemargins":
+            try withField(&part, kind: kind) { $0.wideMargins = try boolean(value, for: property) }
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
+    }
+
+    /// Mutates a field's FieldPart, or throws if the part isn't a field.
+    private func withField(_ part: inout Part, kind: String, _ body: (inout FieldPart) throws -> Void) throws {
+        guard case .field(var properties) = part.kind else { throw Self.noSuchProperty("field option", of: kind) }
+        try body(&properties)
+        part.kind = .field(properties)
     }
 
     /// Mutates a field's text format, or throws if the part isn't a field.

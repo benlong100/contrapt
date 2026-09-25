@@ -453,6 +453,27 @@ extension EnvironmentValues {
     }
 }
 
+/// HyperCard's Show Lines: evenly-spaced baseline rules across a field.
+private struct FieldBaselineLines: View {
+    let lineHeight: CGFloat
+    let inset: CGFloat
+
+    var body: some View {
+        Canvas { context, size in
+            guard lineHeight > 1 else { return }
+            var y = lineHeight + 8 // below the first line of text (top padding)
+            while y < size.height {
+                var path = Path()
+                path.move(to: CGPoint(x: inset, y: y))
+                path.addLine(to: CGPoint(x: size.width - inset, y: y))
+                context.stroke(path, with: .color(Color.fieldStroke), lineWidth: 0.5)
+                y += lineHeight
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 /// Renders a single part as its native SwiftUI control (D5). Unstyled parts
 /// keep the native look; per-kind style properties come later.
 struct PartView: View {
@@ -487,36 +508,8 @@ struct PartView: View {
                     size: properties.format.size,
                     onFollowLink: onFollowLink
                 )
-            } else if properties.isMultiline {
-                // A HyperCard-style field: a text area filling its frame.
-                TextEditor(text: fieldText)
-                    .font(properties.format.font)
-                    .underline(properties.format.isUnderline)
-                    .multilineTextAlignment(properties.format.align.swiftUI)
-                    .scrollContentBackground(.hidden)
-                    .padding(6)
-                    .background(Color.cardSurface)
-                    .overlay(alignment: .topLeading) {
-                        if properties.text.isEmpty {
-                            Text(properties.placeholder)
-                                .font(properties.format.font)
-                                .foregroundStyle(Color.placeholderTextColor)
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 14)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.fieldStroke, lineWidth: 1)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
-                TextField(properties.placeholder, text: fieldText)
-                    .font(properties.format.font)
-                    .underline(properties.format.isUnderline)
-                    .multilineTextAlignment(properties.format.align.swiftUI)
-                    .textFieldStyle(.roundedBorder)
+                plainField(properties)
             }
         case .label(let properties):
             // Labels take presses too, like HyperCard's locked text:
@@ -541,6 +534,71 @@ struct PartView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(labelPressGesture)
+        }
+    }
+
+    /// A plain (non-rich) field: an editable area, or — when locked — static
+    /// text that sends mouseUp to its script. Honors Show Lines (baseline
+    /// rules) and Wide Margins (extra inset).
+    @ViewBuilder
+    private func plainField(_ properties: FieldPart) -> some View {
+        let margin: CGFloat = properties.wideMargins ? 18 : 8
+        Group {
+            if properties.lockText {
+                // Locked text is display-only and dispatches presses like a
+                // label, so a field can drive a script.
+                Text(properties.text)
+                    .font(properties.format.font)
+                    .underline(properties.format.isUnderline)
+                    .multilineTextAlignment(properties.format.align.swiftUI)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
+                    .contentShape(Rectangle())
+                    .gesture(labelPressGesture)
+            } else if properties.isMultiline {
+                TextEditor(text: fieldText)
+                    .font(properties.format.font)
+                    .underline(properties.format.isUnderline)
+                    .multilineTextAlignment(properties.format.align.swiftUI)
+                    .scrollContentBackground(.hidden)
+                    .overlay(alignment: .topLeading) {
+                        if properties.text.isEmpty {
+                            Text(properties.placeholder)
+                                .font(properties.format.font)
+                                .foregroundStyle(Color.placeholderTextColor)
+                                .padding(.top, 8)
+                                .allowsHitTesting(false)
+                        }
+                    }
+            } else {
+                TextField(properties.placeholder, text: fieldText)
+                    .textFieldStyle(.plain)
+                    .font(properties.format.font)
+                    .underline(properties.format.isUnderline)
+                    .multilineTextAlignment(properties.format.align.swiftUI)
+                    .frame(maxHeight: .infinity, alignment: .center)
+            }
+        }
+        .padding(.horizontal, margin)
+        .padding(.vertical, 8)
+        .background {
+            ZStack {
+                Color.cardSurface
+                if properties.showLines {
+                    FieldBaselineLines(lineHeight: properties.format.size * 1.4, inset: margin)
+                }
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func lockedAlignment(_ align: TextAlign) -> Alignment {
+        switch align {
+        case .left: .topLeading
+        case .center: .top
+        case .right: .topTrailing
         }
     }
 

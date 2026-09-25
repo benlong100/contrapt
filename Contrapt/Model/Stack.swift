@@ -353,20 +353,29 @@ nonisolated struct FieldPart: Hashable {
     var isMultiline: Bool
     var format: TextFormat
     var kind: FieldKind
+    /// HyperCard Field Info options (plain fields). `lockText` makes the
+    /// field non-editable — a tap sends mouseUp to its script, like a button.
+    /// `showLines` draws baseline rules; `wideMargins` adds inner padding.
+    var lockText: Bool
+    var showLines: Bool
+    var wideMargins: Bool
 
-    init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain) {
+    init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain, lockText: Bool = false, showLines: Bool = false, wideMargins: Bool = false) {
         self.text = text
         self.placeholder = placeholder
         self.isMultiline = isMultiline
         self.format = format
         self.kind = kind
+        self.lockText = lockText
+        self.showLines = showLines
+        self.wideMargins = wideMargins
     }
 }
 
 /// Manual Codable so older manifests without the newer fields still decode.
 extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
-        case text, placeholder, isMultiline, format, kind
+        case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins
     }
 
     init(from decoder: Decoder) throws {
@@ -376,6 +385,9 @@ extension FieldPart: Codable {
         isMultiline = try container.decodeIfPresent(Bool.self, forKey: .isMultiline) ?? false
         format = try container.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
         kind = try container.decodeIfPresent(FieldKind.self, forKey: .kind) ?? .plain
+        lockText = try container.decodeIfPresent(Bool.self, forKey: .lockText) ?? false
+        showLines = try container.decodeIfPresent(Bool.self, forKey: .showLines) ?? false
+        wideMargins = try container.decodeIfPresent(Bool.self, forKey: .wideMargins) ?? false
     }
 }
 
