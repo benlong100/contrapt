@@ -85,28 +85,43 @@ struct ContentView: View {
     /// `decoratedStage`) so each modifier chain stays small enough for the
     /// compiler to type-check quickly — the whole chain at once overruns the
     /// budget on iOS.
+    /// A CardView for the current card, optionally limited to one layer (so
+    /// browse-mode transitions animate the card layer over a static background).
+    private func cardView(includeBackground: Bool, includeCard: Bool) -> some View {
+        CardView(
+            stack: stack,
+            cardIndex: cardIndex,
+            isEditing: isEditing,
+            isSnappingEnabled: isSnappingEnabled,
+            selectedPartID: $selectedPartID,
+            findHighlightPartID: findHighlight?.partID,
+            includeBackground: includeBackground,
+            includeCard: includeCard,
+            onMouseMessage: sendMouseMessage,
+            onOpenInspector: { isInspectorPresented = true },
+            onFollowLink: followLink
+        )
+    }
+
     private var cardStage: some View {
         Group {
             if document.stack.cards.isEmpty {
                 ContentUnavailableView("No Cards", systemImage: "rectangle.on.rectangle.slash")
             } else {
-                // The ZStack is a stable container so the outgoing and incoming
-                // cards can overlap during a `visual effect` transition. A
-                // scripted `go` animates the id swap; plain navigation cuts.
+                // Edit mode is a single card view (no transitions). In browse,
+                // the background is drawn statically and only the card layer
+                // carries the `visual effect` transition — so a shared
+                // background stays put, as in HyperCard. The ZStack is a stable
+                // container so the outgoing and incoming card layers overlap.
                 ZStack {
-                    CardView(
-                        stack: stack,
-                        cardIndex: cardIndex,
-                        isEditing: isEditing,
-                        isSnappingEnabled: isSnappingEnabled,
-                        selectedPartID: $selectedPartID,
-                        findHighlightPartID: findHighlight?.partID,
-                        onMouseMessage: sendMouseMessage,
-                        onOpenInspector: { isInspectorPresented = true },
-                        onFollowLink: followLink
-                    )
-                    .id(cardIndex)
-                    .transition(cardTransition?.transition ?? .identity)
+                    if isEditing {
+                        cardView(includeBackground: true, includeCard: true)
+                    } else {
+                        cardView(includeBackground: true, includeCard: false)
+                        cardView(includeBackground: false, includeCard: true)
+                            .id(cardIndex)
+                            .transition(cardTransition?.transition ?? .identity)
+                    }
                 }
                 .padding()
             }

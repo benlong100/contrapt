@@ -17,6 +17,10 @@ struct CardView: View {
     @Binding var selectedPartID: UUID?
     /// The field `find` last matched, boxed on the card (browse mode).
     var findHighlightPartID: UUID? = nil
+    /// Which layers to draw. Splitting them lets a card-transition animate the
+    /// card layer over a static background (default: both, the whole card).
+    var includeBackground = true
+    var includeCard = true
     /// Browse-mode mouse messages: the message name (mouseDown/mouseUp)
     /// plus the part it targets — nil means the card itself.
     var onMouseMessage: (String, Part?) -> Void = { _, _ in }
@@ -47,17 +51,23 @@ struct CardView: View {
     }
 
     /// HyperCard's authentic layering: background paint, background parts,
-    /// card paint, card parts.
+    /// card paint, card parts. The two layers can be rendered separately so a
+    /// `visual effect` transitions only the card layer, leaving a shared
+    /// background static (as in HyperCard) — see `includeBackground`/`includeCard`.
     private var cardCanvas: some View {
         ZStack(alignment: .topLeading) {
-            cardSurface
-            if let backgroundIndex {
-                paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset)
-                partViews(for: $stack.backgrounds[backgroundIndex].parts)
+            if includeBackground {
+                cardSurface
+                if let backgroundIndex {
+                    paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset)
+                    partViews(for: $stack.backgrounds[backgroundIndex].parts)
+                }
             }
-            paintLayer(assetName: stack.cards[cardIndex].paintImageAsset)
-            partViews(for: $stack.cards[cardIndex].parts)
-            guideLines
+            if includeCard {
+                paintLayer(assetName: stack.cards[cardIndex].paintImageAsset)
+                partViews(for: $stack.cards[cardIndex].parts)
+                guideLines
+            }
         }
     }
 
