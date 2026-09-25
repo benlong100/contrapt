@@ -247,6 +247,7 @@ private struct RootView: View {
     @StateObject private var home = StackDocument.loadHome()
     @State private var opened: OpenedStack?
     @State private var isImporterPresented = false
+    @State private var isLegacyImporterPresented = false
     @State private var isExporterPresented = false
     @State private var pendingNew: StackDocument?
     @State private var pendingFilename = "Untitled"
@@ -273,6 +274,9 @@ private struct RootView: View {
                                 Button("Open…", systemImage: "folder") {
                                     isImporterPresented = true
                                 }
+                                Button("Import HyperCard Stack…", systemImage: "tray.and.arrow.down") {
+                                    isLegacyImporterPresented = true
+                                }
                             }
                         }
                     }
@@ -286,6 +290,13 @@ private struct RootView: View {
         }
         .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.contraptStack]) { result in
             if case .success(let url) = result { openExternal(url) }
+        }
+        // Classic HyperCard stacks have no uniform type, so accept any file
+        // and let the importer validate the STAK header.
+        .fileImporter(isPresented: $isLegacyImporterPresented, allowedContentTypes: [.data, .item]) { result in
+            guard case .success(let url) = result,
+                  let contrapt = try? LegacyStackImporter.importedContraptFile(from: url) else { return }
+            openExternal(contrapt)
         }
         // New stacks and the tutorial are created in Files, then opened.
         .fileExporter(
@@ -386,6 +397,25 @@ private struct OpenedStackView: View {
 }
 #endif
 
+#if os(macOS)
+/// Presents an open panel for a classic HyperCard stack, imports it (Phase 1:
+/// structure, parts, text, scripts — artwork deferred), and opens the result
+/// as a new Contrapt document.
+@MainActor private func importLegacyStack() {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = true
+    panel.allowsMultipleSelection = false
+    panel.message = "Choose a classic HyperCard stack to import. (Card artwork is imported in a later pass.)"
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+        let contrapt = try LegacyStackImporter.importedContraptFile(from: url)
+        NSDocumentController.shared.openDocument(withContentsOf: contrapt, display: true) { _, _, _ in }
+    } catch {
+        NSAlert(error: error).runModal()
+    }
+}
+#endif
+
 @main
 struct ContraptApp: App {
     #if os(macOS)
@@ -429,6 +459,9 @@ struct ContraptApp: App {
         CommandGroup(replacing: .newItem) {
             Button("New Stack") {
                 NSDocumentController.shared.newDocument(nil)
+            }
+            Button("Import HyperCard Stack…") {
+                importLegacyStack()
             }
         }
         // Cut/Copy/Paste/Delete act on the selected part in edit mode, else
