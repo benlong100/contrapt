@@ -600,6 +600,11 @@ struct PartView: View {
         // fields keep roomier insets for entry.
         let margin: CGFloat = properties.wideMargins ? 18 : (properties.lockText ? 3 : 8)
         let verticalPadding: CGFloat = properties.lockText ? 2 : 8
+        // Pre-formatted tabular text (several short, hard-broken lines, like a
+        // calendar grid) should never soft-wrap — a row that's a hair too wide
+        // must stay one line and clip, not reflow its last columns. Flowing
+        // prose (a quote with no/long lines) still word-wraps.
+        let preformatted = isPreformatted(properties.text)
         Group {
             if properties.lockText {
                 // Locked text is display-only and dispatches presses like a
@@ -611,7 +616,7 @@ struct PartView: View {
                     .underline(properties.format.isUnderline)
                     .multilineTextAlignment(properties.format.align.swiftUI)
                     .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .fixedSize(horizontal: preformatted, vertical: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
                     .contentShape(Rectangle())
                     .gesture(labelPressGesture)
@@ -647,6 +652,14 @@ struct PartView: View {
             lineHeight: properties.format.size * 1.4,
             inset: margin
         )
+    }
+
+    /// Whether text looks pre-formatted/tabular — several hard-broken lines
+    /// that are all short (e.g. a calendar grid). Such text is laid out with
+    /// no soft-wrapping so each row stays intact; flowing prose word-wraps.
+    private func isPreformatted(_ text: String) -> Bool {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        return lines.count > 1 && lines.allSatisfy { $0.count <= 40 }
     }
 
     private func lockedAlignment(_ align: TextAlign) -> Alignment {
