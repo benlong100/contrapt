@@ -998,16 +998,18 @@ struct Parser {
     /// `card field <ref>`, `background field <ref>`, each with optional
     /// `id`. Returns nil (consuming nothing) otherwise.
     private mutating func parseFieldRefIfPresent() throws -> FieldRef? {
+        let fieldWords: Set<String> = ["field", "fld"]
         let domain: HyperTalkObject.PartDomain
-        if peekIdentifier() == "field" {
+        if let w = peekIdentifier(), fieldWords.contains(w) {
             domain = .any
             advance()
-        } else if peekIdentifier() == "card", peekIdentifier(1) == "field" {
+        } else if let w = peekIdentifier(), Self.cardWords.contains(w),
+                  let next = peekIdentifier(1), fieldWords.contains(next) {
             domain = .card
             advance()
             advance()
-        } else if peekIdentifier() == "background" || peekIdentifier() == "bg",
-                  peekIdentifier(1) == "field" {
+        } else if let w = peekIdentifier(), Self.backgroundWords.contains(w),
+                  let next = peekIdentifier(1), fieldWords.contains(next) {
             domain = .background
             advance()
             advance()

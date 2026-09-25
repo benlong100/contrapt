@@ -7,6 +7,19 @@ import Foundation
 import Testing
 @testable import HyperTalk
 
+@Test func findInBkgndFieldSynonym() async throws {
+    // `find X in bkgnd field "Y"` — the bkgnd synonym + a bg-domain field.
+    // Presetting only the background-keyed field proves the .background
+    // domain was parsed (an .any domain would look up "notes" and throw).
+    let host = MockHost(fields: ["background notes": "hello world"])
+    _ = try await run("""
+    on mouseUp
+      find "hello" in bkgnd field "Notes"
+    end mouseUp
+    """, host: host)
+    #expect(host.findCalls.last?.0 == "hello")
+}
+
 // MARK: - The matcher (pure)
 
 @Test func findCharsMatchesSubstringAnywhere() {
