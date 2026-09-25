@@ -32,6 +32,8 @@ indirect enum StmtKind {
     case exitRepeat
     case nextRepeat
     case exitHandler
+    /// `exit to HyperCard` — abort the entire handler chain, back to idle.
+    case exitToHyperCard
     /// `global a, b` — declares names global for the enclosing handler.
     case declareGlobals([String])
     /// `return <expr>` — exits the handler/function, yielding a value.

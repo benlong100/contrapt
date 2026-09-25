@@ -16,6 +16,24 @@ private func layers(button: String = "", card: String = "", background: String =
     ]
 }
 
+@Test func exitToHyperCardAbortsEveryHandler() async throws {
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      put "a" into field "out"
+      helper
+      put "b" after field "out"
+    end mouseUp
+    on helper
+      put "h" after field "out"
+      exit to HyperCard
+      put "x" after field "out"
+    end helper
+    """, host: host)
+    // Neither the rest of helper ("x") nor mouseUp after the call ("b") runs.
+    #expect(host.fields["out"] == "ah")
+}
+
 @Test func unhandledMessagesBubbleUpThePath() async throws {
     let host = MockHost(fields: ["out": ""])
     let handled = try await HyperTalk.send("mouseUp", along: layers(

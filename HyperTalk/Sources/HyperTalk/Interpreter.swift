@@ -52,7 +52,11 @@ public enum HyperTalk {
     ) async throws -> Bool {
         guard !path.isEmpty else { return false }
         let runtime = Runtime(host: host, path: path, stepsRemaining: maxSteps)
-        return try await runtime.send(message, arguments: arguments, fromLayer: 0, line: 0)
+        do {
+            return try await runtime.send(message, arguments: arguments, fromLayer: 0, line: 0)
+        } catch is AbortToHyperCard {
+            return true // `exit to HyperCard` — the message was handled, then aborted.
+        }
     }
 
     /// Executes one line typed into the message box, in the context of the
@@ -73,6 +77,8 @@ public enum HyperTalk {
             let statements = try Parser.parseLooseStatements(line)
             try await runtime.runLoose(statements)
             return nil
+        } catch is AbortToHyperCard {
+            return nil // `exit to HyperCard` from a message-box line.
         } catch let statementError as ScriptError {
             // If it reads as a bare expression, evaluate it — preferring the
             // expression's own (more specific) error if evaluation fails.
@@ -119,6 +125,10 @@ enum Value {
         }
     }
 }
+
+/// Thrown by `exit to HyperCard` to unwind every running handler and
+/// function back to the dispatch entry, where it's caught and swallowed.
+struct AbortToHyperCard: Error {}
 
 // MARK: - Runtime
 
@@ -352,6 +362,10 @@ final class Runtime {
 
         case .exitHandler:
             return .exitHandler
+
+        case .exitToHyperCard:
+            // Unwinds every running handler/function; caught at the entry.
+            throw AbortToHyperCard()
 
         case .declareGlobals(let names):
             if !frames.isEmpty { frames[frames.count - 1].globalNames.formUnion(names) }

@@ -218,11 +218,17 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .exitRepeat, line: line)
             }
+            // `exit to HyperCard` — abort every running handler, back to idle.
+            if consumeWord("to") {
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .exitToHyperCard, line: line)
+            }
             if consumeWord(handlerName) {
                 try expectNewline()
                 return Stmt(kind: .exitHandler, line: line)
             }
-            throw ScriptError(line: line, message: "'exit' must be followed by 'repeat' or the handler name '\(handlerName)'.")
+            throw ScriptError(line: line, message: "'exit' must be followed by 'repeat', 'to HyperCard', or the handler name '\(handlerName)'.")
         case "next":
             advance()
             guard consumeWord("repeat") else {
