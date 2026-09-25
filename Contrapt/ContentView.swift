@@ -326,6 +326,9 @@ struct ContentView: View {
                     if isEditing {
                         selectedPartID = nil
                         isInspectorPresented = false
+                    } else {
+                        // Entering edit mode opens the inspector.
+                        isInspectorPresented = true
                     }
                     isEditing.toggle()
                 }
