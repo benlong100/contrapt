@@ -120,7 +120,13 @@ enum LegacyStackImporter {
         let name = source.deletingPathExtension().lastPathComponent
         let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name)
         let archive = ZipArchive.archive(["stack.json": try imported.fileData()])
-        let url = FileManager.default.temporaryDirectory
+        // A unique subdirectory per import keeps the friendly filename while
+        // ensuring the path is new — otherwise NSDocumentController dedupes by
+        // URL and refocuses a previously-imported (stale) window.
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory
             .appendingPathComponent(imported.name)
             .appendingPathExtension("contrapt")
         try archive.write(to: url)
