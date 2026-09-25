@@ -357,15 +357,25 @@ private extension LegacyStackImporter {
             let afterParts = parts.last?.recordEnd ?? (base + 0x24)
             let ownFieldIDs = Set(parts.map(\.part).filter { $0.type == .field }.map(\.id))
 
-            let contents = parseContents(from: afterParts, end: end, fieldIDs: knownFieldIDs.union(ownFieldIDs))
-            // The object's own script is a handler-looking run in the block.
-            var script = ""
-            for run in textRuns(from: afterParts, end: end) where looksLikeScript(run) {
-                script = run; break
-            }
-            return ParsedObject(name: "", script: script,
+            let (contents, contentsEnd) = parseContents(from: afterParts, end: end, fieldIDs: knownFieldIDs.union(ownFieldIDs))
+            // After the content section come the object's name and script as
+            // C-strings (name first). Scan there for both.
+            let (name, script) = nameAndScript(from: contentsEnd, end: end)
+            return ParsedObject(name: name, script: script,
                                 ownerBackgroundID: ownerBackground, bitmapID: bitmapID,
                                 parts: parts.map(\.part), contents: contents)
+        }
+
+        /// After the content section, a CARD/BKGD block holds its name then
+        /// its script as C-strings. The name is the first clean run; the
+        /// script is the first handler-looking run.
+        private func nameAndScript(from start: Int, end: Int) -> (name: String, script: String) {
+            var name = "", script = ""
+            for run in textRuns(from: start, end: end) {
+                if looksLikeScript(run) { script = run; break }
+                if name.isEmpty { name = run }
+            }
+            return (name, script)
         }
 
         /// The card-sized paint PNG for a BMAP block, or nil if it has no image.
@@ -377,13 +387,14 @@ private extension LegacyStackImporter {
         /// run of `[i16 partID][NUL-terminated text]` entries. Anchors on the
         /// first offset whose size is sane and whose first entry names a known
         /// field, then reads entries until the section is consumed.
-        private func parseContents(from afterParts: Int, end: Int, fieldIDs: Set<Int>) -> [Int: String] {
+        private func parseContents(from afterParts: Int, end: Int, fieldIDs: Set<Int>) -> (contents: [Int: String], sectionEnd: Int) {
             var result: [Int: String] = [:]
             var sectionStart = -1
             for o in stride(from: afterParts, to: min(afterParts + 0x24, end - 4), by: 2) where isContentSection(o, end: end, fieldIDs: fieldIDs) {
                 sectionStart = o; break
             }
-            guard sectionStart >= 0 else { return result }
+            // No content section: name/script follow the parts directly.
+            guard sectionStart >= 0 else { return (result, afterParts) }
             let sectionEnd = min(sectionStart + 2 + u16(sectionStart), end)
             var p = sectionStart + 2
             while p + 2 <= sectionEnd {
@@ -395,7 +406,7 @@ private extension LegacyStackImporter {
                 if result[partID] == nil, !text.isEmpty { result[partID] = text }
                 p += 1 // skip the NUL terminator
             }
-            return result
+            return (result, sectionEnd)
         }
 
         /// Whether `o` begins a content section: a plausible size word, then a
