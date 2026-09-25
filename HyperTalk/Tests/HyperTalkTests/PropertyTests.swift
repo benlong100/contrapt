@@ -132,6 +132,18 @@ import Testing
     #expect(host.fields["out"] == "one!")
 }
 
+@Test func fieldOfCardWithBackgroundQualifier() async throws {
+    // `field "X" of last card of bkgnd "Weekly"` — the `of bkgnd …` scope is
+    // ignored (Contrapt can't scope a card to a background), leaving `into`.
+    let host = MockHost(fields: ["last card.weeksecs": "999", "out": ""])
+    try await run("""
+    on mouseUp
+      put field "WeekSecs" of last card of bkgnd "Weekly" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "999")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"

@@ -1027,17 +1027,33 @@ struct Parser {
         let saved = index
         advance() // of
         _ = consumeWord("the")
-        if consumeWord("next") { _ = consumeCardWord(); return .next }
-        if consumeWord("previous") || consumeWord("prev") { _ = consumeCardWord(); return .previous }
-        if consumeWord("first") { _ = consumeCardWord(); return .first }
-        if consumeWord("last") { _ = consumeCardWord(); return .last }
-        if consumeWord("this") { _ = consumeCardWord(); return .current }
-        if consumeCardWord() {
-            if consumeWord("id") { return .idExpression(try parsePrimary()) }
-            return .expression(try parsePrimary())
+        let ref: CardRef
+        if consumeWord("next") { _ = consumeCardWord(); ref = .next }
+        else if consumeWord("previous") || consumeWord("prev") { _ = consumeCardWord(); ref = .previous }
+        else if consumeWord("first") { _ = consumeCardWord(); ref = .first }
+        else if consumeWord("last") { _ = consumeCardWord(); ref = .last }
+        else if consumeWord("this") { _ = consumeCardWord(); ref = .current }
+        else if consumeCardWord() {
+            ref = consumeWord("id") ? .idExpression(try parsePrimary()) : .expression(try parsePrimary())
+        } else {
+            index = saved // not a card owner (e.g. `field "x" of the target`)
+            return nil
         }
-        index = saved // not a card owner (e.g. `field "x" of the target`)
-        return nil
+        // `last card of bkgnd "X"` — Contrapt can't scope a card to a
+        // background, so consume and ignore a trailing `of <background>`.
+        try skipOfBackgroundQualifier()
+        return ref
+    }
+
+    /// Consumes an `of <background> [name]` qualifier if present, ignoring it.
+    private mutating func skipOfBackgroundQualifier() throws {
+        guard peekIdentifier() == "of", let word = peekIdentifier(1),
+              Self.backgroundWords.contains(word) else { return }
+        advance() // of
+        advance() // background word
+        if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "into" {
+            _ = try parsePrimary() // the background name/number
+        }
     }
 
     private mutating func consumeCardWord() -> Bool {
