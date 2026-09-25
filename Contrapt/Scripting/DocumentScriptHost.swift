@@ -364,17 +364,17 @@ final class DocumentScriptHost: HyperTalkHost {
             guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.placeholder
         case "textfont":
-            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            return properties.format.fontDesign.rawValue
+            guard let format = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
+            return format.fontDesign.rawValue
         case "textsize":
-            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            return numberText(properties.format.size)
+            guard let format = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
+            return numberText(format.size)
         case "textstyle":
-            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            return Self.styleList(properties.format)
+            guard let format = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
+            return Self.styleList(format)
         case "textalign":
-            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            return properties.format.align.rawValue
+            guard let format = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
+            return format.align.rawValue
         case "locktext":
             guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.lockText ? "true" : "false"
@@ -474,11 +474,27 @@ final class DocumentScriptHost: HyperTalkHost {
         part.kind = .field(properties)
     }
 
-    /// Mutates a field's text format, or throws if the part isn't a field.
+    /// The text format of a part that has one (fields and buttons), else nil.
+    private static func format(of part: Part) -> TextFormat? {
+        switch part.kind {
+        case .field(let properties): properties.format
+        case .button(let properties): properties.format
+        default: nil
+        }
+    }
+
+    /// Mutates the text format of a field or button, or throws otherwise.
     private func withFieldFormat(_ part: inout Part, kind: String, _ body: (inout TextFormat) throws -> Void) throws {
-        guard case .field(var properties) = part.kind else { throw Self.noSuchProperty("text formatting", of: kind) }
-        try body(&properties.format)
-        part.kind = .field(properties)
+        switch part.kind {
+        case .field(var properties):
+            try body(&properties.format)
+            part.kind = .field(properties)
+        case .button(var properties):
+            try body(&properties.format)
+            part.kind = .button(properties)
+        default:
+            throw Self.noSuchProperty("text formatting", of: kind)
+        }
     }
 
     /// "plain", or a comma list of bold/italic/underline.

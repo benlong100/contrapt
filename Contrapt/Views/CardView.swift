@@ -612,12 +612,16 @@ struct PartView: View {
                 Image(systemName: toggleGlyph(properties))
                 if properties.showName {
                     Text(properties.title)
+                        .font(properties.format.font)
+                        .underline(properties.format.isUnderline)
                 }
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         default:
             Text(properties.showName ? properties.title : "")
+                .font(properties.format.font)
+                .underline(properties.format.isUnderline)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

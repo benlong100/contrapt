@@ -103,12 +103,15 @@ struct PartInspector: View {
                         Text(style.label).tag(style)
                     }
                 }
-                Toggle("Show Name", isOn: buttonShowName)
-                if properties.style.isToggle {
-                    Toggle("Hilite (on)", isOn: buttonHilite)
-                } else {
-                    Toggle("Auto Hilite", isOn: buttonAutoHilite)
+                HStack(spacing: 16) {
+                    Toggle("Show Name", isOn: buttonShowName)
+                    if properties.style.isToggle {
+                        Toggle("Hilite", isOn: buttonHilite)
+                    } else {
+                        Toggle("Auto Hilite", isOn: buttonAutoHilite)
+                    }
                 }
+                fontAndSizeRow
                 Button("Link To…", systemImage: "link") {
                     onLinkTo()
                 }
@@ -284,16 +287,28 @@ struct PartInspector: View {
 
     /// Projects one field-format value into a binding that writes back
     /// through the part's kind.
+    /// A binding to one TextFormat property, working for whichever part kind
+    /// carries a format — fields and buttons both do.
     private func fieldFormat<Value>(_ keyPath: WritableKeyPath<TextFormat, Value>, default fallback: Value) -> Binding<Value> {
         Binding(
             get: {
-                guard case .field(let properties) = part.kind else { return fallback }
-                return properties.format[keyPath: keyPath]
+                switch part.kind {
+                case .field(let properties): return properties.format[keyPath: keyPath]
+                case .button(let properties): return properties.format[keyPath: keyPath]
+                default: return fallback
+                }
             },
             set: {
-                guard case .field(var properties) = part.kind else { return }
-                properties.format[keyPath: keyPath] = $0
-                part.kind = .field(properties)
+                switch part.kind {
+                case .field(var properties):
+                    properties.format[keyPath: keyPath] = $0
+                    part.kind = .field(properties)
+                case .button(var properties):
+                    properties.format[keyPath: keyPath] = $0
+                    part.kind = .button(properties)
+                default:
+                    break
+                }
             }
         )
     }

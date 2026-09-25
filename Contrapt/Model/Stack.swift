@@ -262,20 +262,23 @@ nonisolated struct ButtonPart: Hashable {
     /// The persistent on/off state — the check/selection for check-box and
     /// radio styles; scriptable as `the hilite of button`.
     var hilite: Bool
+    /// The title's text formatting (font design/size/style), like a field's.
+    var format: TextFormat
 
     init(title: String, showName: Bool = true, autoHilite: Bool = true,
-         style: ButtonStyleKind = .roundRect, hilite: Bool = false) {
+         style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat()) {
         self.title = title
         self.showName = showName
         self.autoHilite = autoHilite
         self.style = style
         self.hilite = hilite
+        self.format = format
     }
 }
 
 /// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -284,6 +287,7 @@ extension ButtonPart: Codable {
         autoHilite = try container.decodeIfPresent(Bool.self, forKey: .autoHilite) ?? true
         style = try container.decodeIfPresent(ButtonStyleKind.self, forKey: .style) ?? .roundRect
         hilite = try container.decodeIfPresent(Bool.self, forKey: .hilite) ?? false
+        format = try container.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
     }
 }
 
