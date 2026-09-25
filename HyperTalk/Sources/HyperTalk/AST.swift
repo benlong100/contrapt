@@ -61,6 +61,9 @@ indirect enum StmtKind {
     case visualEffect(ScreenEffect)
     /// `wait <n> [seconds|ticks]`, `wait until <cond>`, `wait while <cond>`.
     case wait(WaitKind)
+    /// `find [chars|word|whole|string] <text> [in <field>]` — full-text
+    /// search across the stack, boxing and navigating to the first match.
+    case find(FindMode, text: Expr, inField: FieldRef?)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
@@ -143,6 +146,8 @@ indirect enum Expr {
     case globalProperty(String)
     /// `the date`, `the long time`, `the seconds`, etc.
     case clock(ClockField)
+    /// `the foundText` / `foundChunk` / `foundLine` / `foundField`.
+    case found(FoundField)
     /// `X is [not] a[n] <type>` — a type test (number, integer, point, rect,
     /// logical). Result is true/false.
     case isType(Expr, String, negated: Bool)

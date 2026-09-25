@@ -308,6 +308,9 @@ struct Parser {
             }
             try expectNewline()
             return Stmt(kind: .wait(kind), line: line)
+        case "find":
+            advance()
+            return try parseFind(line: line)
         case "convert":
             advance()
             let target = try parseConvertTarget(line: line)
@@ -532,6 +535,29 @@ struct Parser {
         if consumeWord("to") { _ = peekIdentifier().map { _ in advance() } }
 
         return ScreenEffect(kind: kind, direction: direction, speed: speed)
+    }
+
+    private mutating func parseFind(line: Int) throws -> Stmt {
+        // `find [international|normal] [chars|word|whole|string] <text> [in <field>]`.
+        if peekIdentifier() == "international" || peekIdentifier() == "normal" { advance() }
+        var mode: FindMode = .wordPrefix
+        switch peekIdentifier() {
+        case "chars", "characters": advance(); mode = .chars
+        case "word": advance(); mode = .wholeWord
+        case "whole": advance(); mode = .wholePhrase
+        case "string": advance(); mode = .string
+        default: break
+        }
+        let text = try parseExpression()
+        var field: FieldRef?
+        if consumeWord("in") {
+            guard let reference = try parseFieldRefIfPresent() else {
+                throw ScriptError(line: line, message: "Expected a field after 'in', like: find \"x\" in field \"Notes\".")
+            }
+            field = reference
+        }
+        try expectNewline()
+        return Stmt(kind: .find(mode, text: text, inField: field), line: line)
     }
 
     private mutating func parseGo(line: Int) throws -> Stmt {
@@ -886,6 +912,10 @@ struct Parser {
     ]
 
     /// Functions readable as `the <fn> of X`, not just `fn(X)`.
+    static let foundFields: [String: FoundField] = [
+        "foundtext": .text, "foundchunk": .chunk, "foundline": .line, "foundfield": .field,
+    ]
+
     static let oneArgFunctions: Set<String> = [
         "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
         "ln", "ln1", "log2", "abs", "trunc", "round", "average", "sum",
@@ -976,6 +1006,11 @@ struct Parser {
             if peekIdentifier() == "result" {
                 advance()
                 return .result
+            }
+            // `the foundText` / `foundChunk` / `foundLine` / `foundField`.
+            if let found = Self.foundFields[peekIdentifier() ?? ""], peekIdentifier(1) != "of" {
+                advance()
+                return .found(found)
             }
             // `the [long|short|abbreviated] date/time`, `the seconds/ticks`.
             if let field = parseClockField() {

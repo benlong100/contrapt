@@ -52,6 +52,28 @@ public struct ScreenEffect: Sendable, Equatable {
     }
 }
 
+/// How `find` matches text. The default is word-prefix: each search word
+/// must begin a word somewhere in a searchable field. The variants narrow
+/// or widen that.
+public enum FindMode: String, Sendable, Equatable {
+    /// `find "ab cd"` — every search word begins a word (any order).
+    case wordPrefix
+    /// `find word "ab"` — the text as one or more whole words.
+    case wholeWord
+    /// `find chars "ab"` — the text as a substring, anywhere.
+    case chars
+    /// `find whole "ab cd"` — the phrase, its words whole and in order.
+    case wholePhrase
+    /// `find string "ab cd"` — the phrase as a substring.
+    case string
+}
+
+/// After a `find`, where the match landed — read by `the foundText`,
+/// `the foundChunk`, `the foundLine`, and `the foundField`.
+public enum FoundField: Sendable, Equatable {
+    case text, chunk, line, field
+}
+
 /// Where a `go` command should land.
 public enum GoDestination: Equatable, Sendable {
     case next
@@ -136,6 +158,17 @@ public protocol HyperTalkHost: AnyObject {
     func wait(seconds: Double) async
     /// `there is a[n] <object>` — whether the object exists right now.
     func exists(_ object: HyperTalkObject) -> Bool
+    /// `find` — search the stack's searchable fields for `text` in the given
+    /// mode, starting just past the previous match and wrapping around. On a
+    /// hit the host navigates to that card, boxes the match, and updates the
+    /// found* values; it returns whether anything was found (the interpreter
+    /// sets `the result` to empty on success, "not found" on failure). When
+    /// `inField` is given, only that field (on each card) is searched — and
+    /// the host throws if no such field exists, rather than reporting a miss.
+    func find(_ text: String, mode: FindMode, inField: HyperTalkObject.Reference?, fieldDomain: HyperTalkObject.PartDomain) throws -> Bool
+    /// `the foundText` / `foundChunk` / `foundLine` / `foundField` — details
+    /// of the last successful `find` (empty before any match).
+    func foundValue(_ field: FoundField) -> String
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

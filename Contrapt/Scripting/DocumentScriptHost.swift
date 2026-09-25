@@ -13,6 +13,33 @@ import HyperTalk
     var values: [String: String] = [:]
 }
 
+/// Where `find` last matched, so the view can box it on the card.
+struct FindHighlight: Equatable {
+    var partID: UUID
+    /// Character range within the field's text (for future exact boxing).
+    var range: Range<Int>?
+}
+
+/// The running `find` cursor and its results, kept across script runs (so
+/// repeating `find` walks to the next match, as in HyperCard).
+@MainActor final class FindSession {
+    static let shared = FindSession()
+    var query: String?
+    var mode: FindMode = .wordPrefix
+    var scope: String?          // the field reference searched, if any
+    var cardIndex = 0
+    var partID: UUID?
+    var matchStart = 0
+    var found: [FoundField: String] = [:]
+
+    func reset() {
+        query = nil
+        partID = nil
+        matchStart = 0
+        found = [:]
+    }
+}
+
 /// Bridges a running script to the open document: `go` moves the current
 /// card, `field` reads and writes field parts on the current card and its
 /// background. Scripts can reach nothing else (D7: the interpreter is the
@@ -25,6 +52,7 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onAnswer: (String, [String]) async -> String
     private let onAsk: (String, String) async -> String?
     private let onNavigate: (Int, [ScreenEffect]) -> Void
+    private let onFind: (FindHighlight?) -> Void
 
     init(
         stack: Binding<Stack>,
@@ -32,7 +60,8 @@ final class DocumentScriptHost: HyperTalkHost {
         onMessage: @escaping (String) -> Void,
         onAnswer: @escaping (String, [String]) async -> String,
         onAsk: @escaping (String, String) async -> String?,
-        onNavigate: @escaping (Int, [ScreenEffect]) -> Void
+        onNavigate: @escaping (Int, [ScreenEffect]) -> Void,
+        onFind: @escaping (FindHighlight?) -> Void = { _ in }
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
@@ -40,6 +69,7 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onAnswer = onAnswer
         self.onAsk = onAsk
         self.onNavigate = onNavigate
+        self.onFind = onFind
     }
 
     private var stack: Stack { stackBinding.wrappedValue }
@@ -179,6 +209,156 @@ final class DocumentScriptHost: HyperTalkHost {
             return stack.backgrounds.contains { $0.id == card.backgroundID }
         case .thisStack:
             return true
+        }
+    }
+
+    // MARK: - Find
+
+    /// One searchable field, in stack traversal order.
+    private struct FieldSlot {
+        let cardIndex: Int
+        let isBackground: Bool
+        let ordinal: Int       // position among fields in its own layer
+        let partID: UUID
+        let text: String
+    }
+
+    func find(_ text: String, mode: FindMode, inField reference: HyperTalkObject.Reference?, fieldDomain domain: HyperTalkObject.PartDomain) throws -> Bool {
+        let query = text.trimmingCharacters(in: .whitespaces)
+        let session = FindSession.shared
+        let slots = fieldSlots(inField: reference, domain: domain)
+        // A named-but-missing scoped field is an error, not a quiet miss —
+        // otherwise `find "x" in card field id 16` looks like "x isn't there".
+        if slots.isEmpty, let reference {
+            throw HostError("There is no \(fieldDescription(reference, domain)) to search.")
+        }
+        guard !query.isEmpty, !slots.isEmpty else {
+            beep(); onFind(nil); return false
+        }
+
+        // Continue from the last match when the same search repeats, so
+        // repeating `find` walks to the next occurrence.
+        let scopeKey = reference.map { referenceKey($0, domain) }
+        let continuing = session.query == query && session.mode == mode && session.scope == scopeKey && session.partID != nil
+        let startIndex: Int
+        if continuing, let index = slots.firstIndex(where: { $0.cardIndex == session.cardIndex && $0.partID == session.partID }) {
+            startIndex = index
+        } else {
+            startIndex = slots.firstIndex { $0.cardIndex >= cardIndex } ?? 0
+        }
+
+        // Scan every slot from the start point, giving the first slot the
+        // supplied offset (the rest start at 0).
+        func scan(firstOffset: Int) -> (slot: FieldSlot, range: Range<Int>)? {
+            for step in 0..<slots.count {
+                let slot = slots[(startIndex + step) % slots.count]
+                let from = step == 0 ? firstOffset : 0
+                if let range = FindMatcher.firstRange(in: slot.text, query: query, mode: mode, from: from) {
+                    return (slot, range)
+                }
+            }
+            return nil
+        }
+
+        // Continuing, resume past the last match; if that finds nothing, wrap
+        // around from the top (so repeating `find` on a lone match re-boxes
+        // it, as HyperCard does) rather than reporting "not found".
+        let match = scan(firstOffset: continuing ? session.matchStart + 1 : 0)
+            ?? (continuing ? scan(firstOffset: 0) : nil)
+        guard let (slot, range) = match else {
+            // HyperCard beeps and leaves everything put.
+            beep()
+            onFind(nil)
+            return false
+        }
+
+        // Record the match, navigate to its card, and box the field.
+        let characters = Array(slot.text)
+        let matched = String(characters[range])
+        let descriptor = "\(slot.isBackground ? "background" : "card") field \(slot.ordinal)"
+        let lineNumber = characters[0..<range.lowerBound].filter { $0 == "\n" }.count + 1
+        session.query = query
+        session.mode = mode
+        session.scope = scopeKey
+        session.cardIndex = slot.cardIndex
+        session.partID = slot.partID
+        session.matchStart = range.lowerBound
+        session.found = [
+            .text: matched,
+            .field: descriptor,
+            .chunk: "char \(range.lowerBound + 1) to \(range.upperBound) of \(descriptor)",
+            .line: "line \(lineNumber) of \(descriptor)",
+        ]
+        currentCardIndex.wrappedValue = slot.cardIndex
+        onFind(FindHighlight(partID: slot.partID, range: range))
+        return true
+    }
+
+    func foundValue(_ field: FoundField) -> String {
+        FindSession.shared.found[field] ?? ""
+    }
+
+    /// Every searchable field across the stack, in card order (card fields
+    /// before background fields), honoring `dontSearch` on cards and
+    /// backgrounds and any `in <field>` restriction.
+    private func fieldSlots(inField reference: HyperTalkObject.Reference?, domain: HyperTalkObject.PartDomain) -> [FieldSlot] {
+        var slots: [FieldSlot] = []
+        for (index, card) in stack.cards.enumerated() where !card.dontSearch {
+            if domain != .background {
+                appendFieldSlots(from: card.parts, cardIndex: index, isBackground: false, reference: reference, into: &slots)
+            }
+            if domain != .card,
+               let background = stack.backgrounds.first(where: { $0.id == card.backgroundID }),
+               !background.dontSearch {
+                appendFieldSlots(from: background.parts, cardIndex: index, isBackground: true, reference: reference, into: &slots)
+            }
+        }
+        return slots
+    }
+
+    private func appendFieldSlots(from parts: [Part], cardIndex: Int, isBackground: Bool, reference: HyperTalkObject.Reference?, into slots: inout [FieldSlot]) {
+        var ordinal = 0
+        for part in parts {
+            guard case .field(let properties) = part.kind else { continue }
+            ordinal += 1
+            if let reference, !fieldMatches(part: part, ordinal: ordinal, reference: reference) { continue }
+            slots.append(FieldSlot(cardIndex: cardIndex, isBackground: isBackground, ordinal: ordinal, partID: part.id, text: properties.text))
+        }
+    }
+
+    private func fieldMatches(part: Part, ordinal: Int, reference: HyperTalkObject.Reference) -> Bool {
+        switch reference {
+        case .named(let name): return part.name.caseInsensitiveCompare(name) == .orderedSame
+        case .number(let number): return ordinal == number
+        case .id(let id): return String(part.scriptID) == id.trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    /// A human-readable field reference for `find` errors, e.g.
+    /// "card field id 16" or "background field \"Notes\"".
+    private func fieldDescription(_ reference: HyperTalkObject.Reference, _ domain: HyperTalkObject.PartDomain) -> String {
+        let layer = switch domain {
+        case .any: ""
+        case .card: "card "
+        case .background: "background "
+        }
+        switch reference {
+        case .named(let name): return "\(layer)field \"\(name)\""
+        case .number(let number): return "\(layer)field \(number)"
+        case .id(let id): return "\(layer)field id \(id)"
+        }
+    }
+
+    private func referenceKey(_ reference: HyperTalkObject.Reference, _ domain: HyperTalkObject.PartDomain) -> String {
+        let prefix = switch domain {
+        case .any: ""
+        case .card: "card "
+        case .background: "background "
+        }
+        switch reference {
+        case .named(let name): return prefix + name.lowercased()
+        case .number(let number): return prefix + String(number)
+        case .id(let id): return prefix + "id " + id
         }
     }
 

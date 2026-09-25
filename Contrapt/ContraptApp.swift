@@ -160,11 +160,12 @@ private struct CardCommands: View {
     }
 }
 
+#if os(macOS)
 /// The Edit menu's Cut/Copy/Paste/Delete, made part-aware: in edit mode with a
 /// selected part they act on that part; otherwise they fall through to the
 /// standard text actions via the responder chain, so the same items and
 /// shortcuts serve both parts and text fields. Select All always targets text
-/// (there's no part multi-selection).
+/// (there's no part multi-selection). macOS-only (it calls AppKit directly).
 private struct EditActionCommands: View {
     @FocusedValue(\.partActions) private var parts
 
@@ -212,6 +213,7 @@ private struct EditActionCommands: View {
         NSApp.sendAction(selector, to: nil, from: nil)
     }
 }
+#endif
 
 /// The Help menu's HyperTalk Guide item (macOS, where it's not in the
 /// toolbar). Enabled only when a stack window is focused.

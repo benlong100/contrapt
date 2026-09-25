@@ -420,6 +420,22 @@ final class Runtime {
             }
             return .normal
 
+        case .find(let mode, let textExpression, let fieldRef):
+            let text = try await evaluate(textExpression, line: statement.line)
+            var reference: HyperTalkObject.Reference?
+            var domain: HyperTalkObject.PartDomain = .any
+            if let fieldRef {
+                let resolved = try await resolveFieldRef(fieldRef, line: statement.line)
+                reference = resolved.0
+                domain = resolved.1
+            }
+            let found = try hostCall(line: statement.line) {
+                try host.find(text, mode: mode, inField: reference, fieldDomain: domain)
+            }
+            // HyperCard leaves the result empty on a hit, "not found" on a miss.
+            lastResult = found ? "" : "not found"
+            return .normal
+
         case .doCommand(let expression):
             let source = try await evaluate(expression, line: statement.line)
             let statements: [Stmt]
@@ -661,6 +677,9 @@ final class Runtime {
 
         case .clock(let field):
             return host.clock(field)
+
+        case .found(let field):
+            return host.foundValue(field)
 
         case .isType(let expression, let type, let negated):
             let matches = Self.matchesType(try await evaluate(expression, line: line), type)

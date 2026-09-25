@@ -28,6 +28,8 @@ struct ContentView: View {
     @State private var currentCardIndex = 0
     @State private var isEditing = false
     @State private var selectedPartID: UUID?
+    /// The field `find` last matched, boxed on the card until the next edit.
+    @State private var findHighlight: FindHighlight?
     @State private var isInspectorPresented = false
     @State private var messageBoxText: String?
     @State private var isMessageBoxVisible = false
@@ -79,7 +81,11 @@ struct ContentView: View {
         )
     }
 
-    var body: some View {
+    /// The card and its selection/edit affordances. Split from `body` (with
+    /// `decoratedStage`) so each modifier chain stays small enough for the
+    /// compiler to type-check quickly — the whole chain at once overruns the
+    /// budget on iOS.
+    private var cardStage: some View {
         Group {
             if document.stack.cards.isEmpty {
                 ContentUnavailableView("No Cards", systemImage: "rectangle.on.rectangle.slash")
@@ -94,6 +100,7 @@ struct ContentView: View {
                         isEditing: isEditing,
                         isSnappingEnabled: isSnappingEnabled,
                         selectedPartID: $selectedPartID,
+                        findHighlightPartID: findHighlight?.partID,
                         onMouseMessage: sendMouseMessage,
                         onOpenInspector: { isInspectorPresented = true },
                         onFollowLink: followLink
@@ -134,6 +141,11 @@ struct ContentView: View {
             if !editing { isCardFocused = false }
         }
         #endif
+    }
+
+    /// The card stage plus its pickers, overlays, alerts, and inspector.
+    private var decoratedStage: some View {
+        cardStage
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhoto, matching: .images)
         #if os(macOS)
         .fileImporter(isPresented: $isImageImporterPresented, allowedContentTypes: [.image]) { result in
@@ -231,6 +243,10 @@ struct ContentView: View {
             }
             .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
         }
+    }
+
+    var body: some View {
+        decoratedStage
         .onChange(of: cardIndex) { _, newIndex in
             sendSystemMessage("openCard", toCardAt: newIndex)
         }
@@ -238,131 +254,7 @@ struct ContentView: View {
             sendSystemMessage("openStack", toCardAt: cardIndex)
             sendSystemMessage("openCard", toCardAt: cardIndex)
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if isEditing {
-                    Menu("Add Part", systemImage: "plus") {
-                        Button("Button", systemImage: "hand.tap") {
-                            addPart(.button(ButtonPart(title: "New Button")))
-                        }
-                        Button("Field", systemImage: "character.textbox") {
-                            addPart(.field(FieldPart(text: "", placeholder: "")))
-                        }
-                        Button("Label", systemImage: "textformat") {
-                            addPart(.label(LabelPart(text: "New Label")))
-                        }
-                        Button("Image…", systemImage: "photo") {
-                            #if os(macOS)
-                            isImageImporterPresented = true
-                            #else
-                            isPhotoPickerPresented = true
-                            #endif
-                        }
-                    }
-                    // On macOS these live in the Edit menu (see CardCommands)
-                    // to keep the toolbar uncluttered; iOS has no menu bar, so
-                    // the toolbar menu stays.
-                    #if !os(macOS)
-                    Menu("Cards", systemImage: "rectangle.stack") {
-                        Button("New Card", systemImage: "rectangle.badge.plus") {
-                            addCard()
-                        }
-                        Button("New Background", systemImage: "rectangle.on.rectangle.badge.plus") {
-                            addBackground()
-                        }
-                        Divider()
-                        Button("Cut Card", systemImage: "scissors") {
-                            cutCard()
-                        }
-                        .disabled(!canDeleteCurrentCard)
-                        Button("Copy Card", systemImage: "doc.on.doc") {
-                            copyCard()
-                        }
-                        Button("Paste Card", systemImage: "doc.on.clipboard") {
-                            pasteCard()
-                        }
-                        .disabled(cardClipboard.payload == nil)
-                        Divider()
-                        Button("Delete Card", systemImage: "trash", role: .destructive) {
-                            deleteCurrentCard()
-                        }
-                        .disabled(!canDeleteCurrentCard)
-                    }
-                    #endif
-                    Menu("Arrange", systemImage: "square.3.layers.3d") {
-                        Button("Bring to Front", systemImage: "arrow.up.to.line") { arrangeSelectedPart(.front) }
-                        Button("Bring Closer", systemImage: "chevron.up") { arrangeSelectedPart(.closer) }
-                        Button("Send Farther", systemImage: "chevron.down") { arrangeSelectedPart(.farther) }
-                        Button("Send to Back", systemImage: "arrow.down.to.line") { arrangeSelectedPart(.back) }
-                    }
-                    .disabled(selectedPartID == nil)
-                    Menu("Paint", systemImage: "paintbrush") {
-                        Button("Paint on Card", systemImage: "rectangle") {
-                            openPaintEditor(target: .card)
-                        }
-                        Button("Paint on Background", systemImage: "rectangle.on.rectangle") {
-                            openPaintEditor(target: .background)
-                        }
-                    }
-                    Toggle(isOn: $isSnappingEnabled) {
-                        Label("Snap to Guides", systemImage: "grid")
-                    }
-                    .toggleStyle(.button)
-                    Button("Inspector", systemImage: "slider.horizontal.3") {
-                        isInspectorPresented = true
-                    }
-                }
-                #if os(macOS)
-                Button("Home", systemImage: "house") {
-                    openHome()
-                }
-                #endif
-                // On macOS the guide opens from the Help menu (see
-                // GuideCommand); iOS has no menu bar, so it stays in the toolbar.
-                #if !os(macOS)
-                Button("HyperTalk Guide", systemImage: "book") {
-                    isGuidePresented = true
-                }
-                #endif
-                if let fileURL {
-                    ShareLink(item: fileURL) {
-                        Label("Share Stack", systemImage: "square.and.arrow.up")
-                    }
-                }
-                Button("Message Box", systemImage: "text.and.command.macwindow") {
-                    isMessageBoxVisible.toggle()
-                }
-                Button(isEditing ? "Done" : "Edit") {
-                    if isEditing {
-                        selectedPartID = nil
-                        isInspectorPresented = false
-                    } else {
-                        // Entering edit mode opens the inspector.
-                        isInspectorPresented = true
-                    }
-                    isEditing.toggle()
-                }
-            }
-            ToolbarItemGroup(placement: cardNavigationPlacement) {
-                Button("Previous Card", systemImage: "chevron.left") {
-                    goToPreviousCard()
-                }
-                Spacer()
-                Menu {
-                    Button("First Card", systemImage: "backward.end") { goFirst() }
-                    Button("Last Card", systemImage: "forward.end") { goLast() }
-                } label: {
-                    Text("Card \(cardIndex + 1) of \(document.stack.cards.count)")
-                        .font(.callout)
-                        .monospacedDigit()
-                        .fixedSize()
-                }
-                Spacer()
-                Button("Next Card", systemImage: "chevron.right") {
-                    goToNextCard()
-                }
-            }
-        }
+        .toolbar { mainToolbar }
         .focusedValue(\.cardNavigation, cardNavigation)
         .focusedSceneValue(\.cardActions, cardActions)
         .focusedSceneValue(\.partActions, partActions)
@@ -484,6 +376,143 @@ struct ContentView: View {
 
     @State private var isSendingSystemMessage = false
 
+    /// The main toolbar, extracted into a builder so the body expression stays
+    /// small enough for the compiler to type-check quickly (especially on iOS,
+    /// where the Cards menu keeps the editing group inline).
+    @ToolbarContentBuilder private var mainToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            if isEditing {
+                editingToolbarTools
+            }
+            #if os(macOS)
+            Button("Home", systemImage: "house") {
+                openHome()
+            }
+            #endif
+            // On macOS the guide opens from the Help menu (see GuideCommand);
+            // iOS has no menu bar, so it stays in the toolbar.
+            #if !os(macOS)
+            Button("HyperTalk Guide", systemImage: "book") {
+                isGuidePresented = true
+            }
+            #endif
+            if let fileURL {
+                ShareLink(item: fileURL) {
+                    Label("Share Stack", systemImage: "square.and.arrow.up")
+                }
+            }
+            Button("Message Box", systemImage: "text.and.command.macwindow") {
+                isMessageBoxVisible.toggle()
+            }
+            Button(isEditing ? "Done" : "Edit") {
+                if isEditing {
+                    selectedPartID = nil
+                    isInspectorPresented = false
+                } else {
+                    // Entering edit mode opens the inspector and clears any
+                    // lingering find box (a browse-mode artifact).
+                    isInspectorPresented = true
+                    findHighlight = nil
+                }
+                isEditing.toggle()
+            }
+        }
+        ToolbarItemGroup(placement: cardNavigationPlacement) {
+            Button("Previous Card", systemImage: "chevron.left") {
+                goToPreviousCard()
+            }
+            Spacer()
+            Menu {
+                Button("First Card", systemImage: "backward.end") { goFirst() }
+                Button("Last Card", systemImage: "forward.end") { goLast() }
+            } label: {
+                Text("Card \(cardIndex + 1) of \(document.stack.cards.count)")
+                    .font(.callout)
+                    .monospacedDigit()
+                    .fixedSize()
+            }
+            Spacer()
+            Button("Next Card", systemImage: "chevron.right") {
+                goToNextCard()
+            }
+        }
+    }
+
+    /// The edit-mode toolbar buttons, extracted so the toolbar builder stays
+    /// small enough for the compiler to type-check quickly (especially on iOS,
+    /// where the Cards menu is inline).
+    @ViewBuilder private var editingToolbarTools: some View {
+        Menu("Add Part", systemImage: "plus") {
+            Button("Button", systemImage: "hand.tap") {
+                addPart(.button(ButtonPart(title: "New Button")))
+            }
+            Button("Field", systemImage: "character.textbox") {
+                addPart(.field(FieldPart(text: "", placeholder: "")))
+            }
+            Button("Label", systemImage: "textformat") {
+                addPart(.label(LabelPart(text: "New Label")))
+            }
+            Button("Image…", systemImage: "photo") {
+                #if os(macOS)
+                isImageImporterPresented = true
+                #else
+                isPhotoPickerPresented = true
+                #endif
+            }
+        }
+        // On macOS these live in the Edit menu (see CardCommands) to keep the
+        // toolbar uncluttered; iOS has no menu bar, so the toolbar menu stays.
+        #if !os(macOS)
+        Menu("Cards", systemImage: "rectangle.stack") {
+            Button("New Card", systemImage: "rectangle.badge.plus") {
+                addCard()
+            }
+            Button("New Background", systemImage: "rectangle.on.rectangle.badge.plus") {
+                addBackground()
+            }
+            Divider()
+            Button("Cut Card", systemImage: "scissors") {
+                cutCard()
+            }
+            .disabled(!canDeleteCurrentCard)
+            Button("Copy Card", systemImage: "doc.on.doc") {
+                copyCard()
+            }
+            Button("Paste Card", systemImage: "doc.on.clipboard") {
+                pasteCard()
+            }
+            .disabled(cardClipboard.payload == nil)
+            Divider()
+            Button("Delete Card", systemImage: "trash", role: .destructive) {
+                deleteCurrentCard()
+            }
+            .disabled(!canDeleteCurrentCard)
+        }
+        #endif
+        Menu("Arrange", systemImage: "square.3.layers.3d") {
+            Button("Bring to Front", systemImage: "arrow.up.to.line") { arrangeSelectedPart(.front) }
+            Button("Bring Closer", systemImage: "chevron.up") { arrangeSelectedPart(.closer) }
+            Button("Send Farther", systemImage: "chevron.down") { arrangeSelectedPart(.farther) }
+            Button("Send to Back", systemImage: "arrow.down.to.line") { arrangeSelectedPart(.back) }
+        }
+        .disabled(selectedPartID == nil)
+        Menu("Paint", systemImage: "paintbrush") {
+            Button("Paint on Card", systemImage: "rectangle") {
+                openPaintEditor(target: .card)
+            }
+            Button("Paint on Background", systemImage: "rectangle.on.rectangle") {
+                openPaintEditor(target: .background)
+            }
+        }
+        Toggle(isOn: $isSnappingEnabled) {
+            Label("Snap to Guides", systemImage: "grid")
+        }
+        .toggleStyle(.button)
+        Button("Inspector", systemImage: "slider.horizontal.3") {
+            isInspectorPresented = true
+        }
+    }
+
     private func makeHost() -> DocumentScriptHost {
         DocumentScriptHost(
             stack: stack,
@@ -526,6 +555,10 @@ struct ContentView: View {
                 DispatchQueue.main.async {
                     withAnimation(effect.animation) { currentCardIndex = index }
                 }
+            },
+            // `find` boxes the matched field (or clears the box on a miss).
+            onFind: { highlight in
+                findHighlight = highlight
             }
         )
     }

@@ -71,6 +71,14 @@ struct HyperTalkGuideView: View {
                     go to first card
                     """)
 
+                    section("find", body: "Searches every field in the stack for text, starting at the current card and wrapping around. On a hit it goes to that card and boxes the match; repeating the same `find` steps to the next one. Plain `find` matches the start of any word; `find chars` matches anywhere; `find word` and `find whole` match whole words; `find string` matches an exact run of characters. Add `in <field>` to search just one field. Afterwards `the result` is empty on a hit (\"not found\" on a miss), and `the foundText`, `the foundChunk`, `the foundLine`, and `the foundField` describe the match.", example: """
+                    find "brown"                    -- word beginning with brown
+                    find chars "ell" in field "Notes"
+                    find whole "red car"
+                    if the result is "not found" then beep
+                    put the foundText into field "Hit"
+                    """)
+
                     section("Functions and globals", body: "Define your own functions with `function … end`, call them with parentheses, and return a value. `the result` holds the last command's return. `global` shares a variable across handlers and across taps. Built-ins: length(x), random(n), round/trunc/abs, min/max, sum/average (of a list or arguments), offset(a,b), charToNum/numToChar, math functions sqrt, sin, cos, tan, atan, exp/exp1/exp2, ln/ln1, log2, annuity(rate,n), compound(rate,n) — each also readable as `the sqrt of x` — the number of words/items/lines/chars of X, and the date / the long date / the time / the seconds / the ticks.", example: """
                     on mouseUp
                       put greet("Ada") into field "out"

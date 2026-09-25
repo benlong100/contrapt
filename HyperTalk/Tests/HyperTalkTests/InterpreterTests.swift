@@ -158,6 +158,39 @@ final class MockHost: HyperTalkHost {
         waits.append(seconds)
     }
 
+    /// Records each `find`, and matches (via FindMatcher) against the field
+    /// values it holds — enough to exercise the interpreter's result and
+    /// found* wiring. The real cross-card search lives in the app's host.
+    var findCalls: [(text: String, mode: FindMode, inField: HyperTalkObject.Reference?)] = []
+    private var foundValues: [FoundField: String] = [:]
+
+    func find(_ text: String, mode: FindMode, inField: HyperTalkObject.Reference?, fieldDomain: HyperTalkObject.PartDomain) throws -> Bool {
+        findCalls.append((text, mode, inField))
+        let candidates: [String]
+        if let inField {
+            guard let text = fields[fieldKey(inField, fieldDomain)] else {
+                throw HostError("There is no field \(inField) to search.")
+            }
+            candidates = [text]
+        } else {
+            candidates = Array(fields.values)
+        }
+        for value in candidates {
+            if let range = FindMatcher.firstRange(in: value, query: text, mode: mode) {
+                foundValues = [
+                    .text: String(Array(value)[range]),
+                    .chunk: "char \(range.lowerBound + 1) to \(range.upperBound) of field",
+                    .line: "line 1 of field",
+                    .field: "field",
+                ]
+                return true
+            }
+        }
+        return false
+    }
+
+    func foundValue(_ field: FoundField) -> String { foundValues[field] ?? "" }
+
     /// A field exists if it's in `fields`; any other part/card exists if a
     /// property was preset for it. `this …` objects always exist.
     func exists(_ object: HyperTalkObject) -> Bool {

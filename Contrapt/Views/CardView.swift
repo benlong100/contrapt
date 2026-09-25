@@ -15,6 +15,8 @@ struct CardView: View {
     var isEditing: Bool = false
     var isSnappingEnabled: Bool = true
     @Binding var selectedPartID: UUID?
+    /// The field `find` last matched, boxed on the card (browse mode).
+    var findHighlightPartID: UUID? = nil
     /// Browse-mode mouse messages: the message name (mouseDown/mouseUp)
     /// plus the part it targets — nil means the card itself.
     var onMouseMessage: (String, Part?) -> Void = { _, _ in }
@@ -138,6 +140,15 @@ struct CardView: View {
                         onMouseDown: { onMouseMessage("mouseDown", part) },
                         onFollowLink: onFollowLink
                     )
+                }
+            }
+            // The `find` box: a highlight around the field holding the match.
+            .overlay {
+                if findHighlightPartID == part.id {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(Color.accentColor, lineWidth: 2)
+                        .padding(-2)
+                        .allowsHitTesting(false)
                 }
             }
             .frame(width: part.frame.width, height: part.frame.height)
