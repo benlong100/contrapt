@@ -90,6 +90,15 @@ public enum GoDestination: Equatable, Sendable {
     case back
 }
 
+/// What `the number of …` counts.
+public enum Countable: Sendable, Equatable {
+    case cards
+    case backgrounds
+    /// `the number of [card|background] buttons/fields`. Kind is
+    /// "button"/"field"; `.any` counts both the card and background layers.
+    case parts(kind: String, domain: HyperTalkObject.PartDomain)
+}
+
 /// An object a script can address with `get`/`set` and `the … of …`.
 public enum HyperTalkObject: Sendable, Equatable {
     /// How the script referred to the object.
@@ -173,6 +182,8 @@ public protocol HyperTalkHost: AnyObject {
     /// `the foundText` / `foundChunk` / `foundLine` / `foundField` — details
     /// of the last successful `find` (empty before any match).
     func foundValue(_ field: FoundField) -> String
+    /// `the number of cards / backgrounds / [card|bkgnd] buttons / fields`.
+    func count(_ countable: Countable) throws -> Int
     /// `push [this] card` — remember the current card on a session stack.
     func pushCard()
     /// `pop card` — remove and return the most recently pushed card's id (nil

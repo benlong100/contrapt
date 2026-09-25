@@ -155,6 +155,8 @@ indirect enum Expr {
     case chunk(ChunkKind, ChunkSelector, Expr)
     /// `the number of words of X` — how many chunks of a kind are in X.
     case chunkCount(ChunkKind, Expr)
+    /// `the number of cards / fields / [card|bkgnd] buttons`, etc.
+    case count(Countable)
     /// A function call in an expression: `myFunc(a, b)`, `length(x)`.
     case call(String, [Expr])
     /// `the result` — the value returned by the last command/function.

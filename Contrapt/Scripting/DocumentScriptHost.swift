@@ -145,6 +145,27 @@ final class DocumentScriptHost: HyperTalkHost {
         onNavigate(target, effects)
     }
 
+    func count(_ countable: Countable) throws -> Int {
+        switch countable {
+        case .cards:
+            return stack.cards.count
+        case .backgrounds:
+            return stack.backgrounds.count
+        case .parts(let kind, let domain):
+            let card = stack.cards[cardIndex]
+            let cardParts = card.parts
+            let backgroundParts = stack.backgrounds.first(where: { $0.id == card.backgroundID })?.parts ?? []
+            func matching(_ parts: [Part]) -> Int {
+                parts.filter { $0.kind.word == kind }.count
+            }
+            switch domain {
+            case .card: return matching(cardParts)
+            case .background: return matching(backgroundParts)
+            case .any: return matching(cardParts) + matching(backgroundParts)
+            }
+        }
+    }
+
     func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain) throws -> String {
         let location = try locatePart(kind: "field", domain: domain, reference: reference)
         guard case .field(let properties) = part(at: location).kind else {

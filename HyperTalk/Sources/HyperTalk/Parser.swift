@@ -1104,6 +1104,45 @@ struct Parser {
         }
     }
 
+    /// After `the number of`, reads a countable noun — `cards`,
+    /// `backgrounds`, `[card|bkgnd] buttons/fields` — or nil if what follows
+    /// isn't one (so the caller can fall back to a property like
+    /// `the number of this card`). Consumes tokens only on success.
+    private mutating func parseCountable() -> Countable? {
+        let saved = index
+        // An optional layer qualifier: `card`/`bkgnd`/`background`.
+        var domain: HyperTalkObject.PartDomain = .any
+        var qualified = false
+        switch peekIdentifier() {
+        case "card", "cd":
+            // Ambiguous with the `cards` plural; only treat as a qualifier if
+            // a part-kind plural follows (`card buttons`).
+            if let next = peekIdentifier(1), next == "buttons" || next == "btns"
+                || next == "fields" || next == "flds" {
+                domain = .card; qualified = true; advance()
+            }
+        case "background", "bkgnd", "bg":
+            domain = .background; qualified = true; advance()
+        default:
+            break
+        }
+        let noun = peekIdentifier()
+        if !qualified {
+            if noun == "cards" || noun == "cds" { advance(); return .cards }
+            if noun == "backgrounds" || noun == "bkgnds" || noun == "bgs" {
+                advance(); return .backgrounds
+            }
+        }
+        if noun == "buttons" || noun == "btns" {
+            advance(); return .parts(kind: "button", domain: domain)
+        }
+        if noun == "fields" || noun == "flds" {
+            advance(); return .parts(kind: "field", domain: domain)
+        }
+        index = saved
+        return nil
+    }
+
     /// Maps an ordinal word (or last/middle) to a chunk selector.
     static func ordinalSelector(_ word: String) -> ChunkSelector? {
         if let n = ordinals[word] { return .index(.numberLiteral(Double(n))) }
@@ -1198,6 +1237,16 @@ struct Parser {
                     throw ScriptError(line: line, message: "Expected 'of' after 'the number of \(kindWord)'.")
                 }
                 return .chunkCount(kind, try parsePrimary())
+            }
+            // `the number of cards / backgrounds / [card|bkgnd] buttons/fields`.
+            if peekIdentifier() == "number", peekIdentifier(1) == "of" {
+                let saved = index
+                advance() // number
+                advance() // of
+                if let countable = parseCountable() {
+                    return .count(countable)
+                }
+                index = saved // not a count noun — let a property handle it
             }
             // `the first word of X`, `the last line of X`, etc.
             if let ordinalWord = peekIdentifier(),

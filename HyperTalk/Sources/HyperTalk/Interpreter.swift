@@ -693,6 +693,9 @@ final class Runtime {
             let object = try await resolveObject(objectExpression, line: line)
             return try hostCall(line: line) { try host.propertyValue(property, of: object) }
 
+        case .count(let countable):
+            return try hostCall(line: line) { String(try host.count(countable)) }
+
         case .chunk(let kind, let selector, let sourceExpression):
             let source = try await evaluate(sourceExpression, line: line)
             return try await ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) { expression in

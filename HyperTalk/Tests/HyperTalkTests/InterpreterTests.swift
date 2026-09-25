@@ -197,6 +197,18 @@ final class MockHost: HyperTalkHost {
     func pushCard() { cardStack.append(currentCardID) }
     func popCard() -> String? { cardStack.isEmpty ? nil : cardStack.removeLast() }
 
+    /// Counts for `the number of …`. Fields default to `fields.count`.
+    var cardCount = 1
+    var backgroundCount = 1
+    var buttonCount = 0
+    func count(_ countable: Countable) throws -> Int {
+        switch countable {
+        case .cards: return cardCount
+        case .backgrounds: return backgroundCount
+        case .parts(let kind, _): return kind == "field" ? fields.count : buttonCount
+        }
+    }
+
     /// A field exists if it's in `fields`; any other part/card exists if a
     /// property was preset for it. `this …` objects always exist.
     func exists(_ object: HyperTalkObject) -> Bool {

@@ -52,6 +52,17 @@ import Testing
     #expect(host.fields["out"] == "OKO")
 }
 
+@Test func theNumberOfCountsPartsAndCards() async throws {
+    let host = MockHost(fields: ["a": "", "b": "", "out": ""])
+    host.cardCount = 7
+    try await run("""
+    on mouseUp
+      put the number of fields & "/" & the number of cards into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "3/7")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"
