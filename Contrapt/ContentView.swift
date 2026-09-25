@@ -18,6 +18,7 @@ struct ContentView: View {
     /// The document's location on disk, for sharing. Nil until first save.
     var fileURL: URL?
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.openURL) private var openURL
     #if os(macOS)
     @Environment(\.openDocument) private var openDocument
     #endif
@@ -93,7 +94,8 @@ struct ContentView: View {
                         isSnappingEnabled: isSnappingEnabled,
                         selectedPartID: $selectedPartID,
                         onMouseMessage: sendMouseMessage,
-                        onOpenInspector: { isInspectorPresented = true }
+                        onOpenInspector: { isInspectorPresented = true },
+                        onFollowLink: followLink
                     )
                     .id(cardIndex)
                     .transition(cardTransition?.transition ?? .identity)
@@ -558,6 +560,25 @@ struct ContentView: View {
     /// Dispatches a mouse message (mouseDown/mouseUp) from a press on a
     /// part, or on the card itself when `part` is nil. All pointing devices
     /// — finger, Pencil, trackpad, mouse — arrive through the same gestures.
+    /// A link tapped in a rich field: card links navigate here (like `go`);
+    /// web links hand off to the system browser. The app never fetches.
+    private func followLink(_ link: FieldLink) {
+        switch link {
+        case .card(let reference):
+            let cards = document.stack.cards
+            if let number = Int(reference), (1...cards.count).contains(number) {
+                currentCardIndex = number - 1
+            } else if let index = cards.firstIndex(where: {
+                $0.name.caseInsensitiveCompare(reference) == .orderedSame
+            }) {
+                currentCardIndex = index
+            }
+            // An unknown reference is ignored (no navigation).
+        case .external(let url):
+            openURL(url)
+        }
+    }
+
     private func sendMouseMessage(_ message: String, to part: Part?) {
         let host = makeHost()
         let path = scriptPath(cardAt: cardIndex, part: part)

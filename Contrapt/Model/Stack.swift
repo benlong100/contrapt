@@ -334,26 +334,39 @@ extension TextFormat: Codable {
     }
 }
 
+/// A field's mode. `plain` is the lightweight TextField/TextEditor — the
+/// back-compat default, best for entry and unstyled text. `rich` renders
+/// its text as Markdown (styling + trappable links) in a web view — heavier,
+/// display-only, local content only.
+nonisolated enum FieldKind: String, Codable {
+    case plain
+    case rich
+}
+
 nonisolated struct FieldPart: Hashable {
+    /// For plain fields this is the entered text; for rich fields it's the
+    /// Markdown source, rendered for display.
     var text: String
     var placeholder: String
     /// Multi-line fields render as a text area filling their frame, like
     /// HyperCard fields; single-line fields are compact entry boxes.
     var isMultiline: Bool
     var format: TextFormat
+    var kind: FieldKind
 
-    init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat()) {
+    init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain) {
         self.text = text
         self.placeholder = placeholder
         self.isMultiline = isMultiline
         self.format = format
+        self.kind = kind
     }
 }
 
 /// Manual Codable so older manifests without the newer fields still decode.
 extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
-        case text, placeholder, isMultiline, format
+        case text, placeholder, isMultiline, format, kind
     }
 
     init(from decoder: Decoder) throws {
@@ -362,6 +375,7 @@ extension FieldPart: Codable {
         placeholder = try container.decode(String.self, forKey: .placeholder)
         isMultiline = try container.decodeIfPresent(Bool.self, forKey: .isMultiline) ?? false
         format = try container.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
+        kind = try container.decodeIfPresent(FieldKind.self, forKey: .kind) ?? .plain
     }
 }
 

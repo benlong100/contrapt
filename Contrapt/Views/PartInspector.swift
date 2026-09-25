@@ -75,27 +75,48 @@ struct PartInspector: View {
                     onLinkTo()
                 }
             }
-        case .field:
+        case .field(let properties):
             Section("Field") {
-                TextField("Placeholder", text: fieldPlaceholder)
-                TextField("Contents", text: fieldContents, axis: .vertical)
-                    .lineLimit(1...6)
-                Toggle("Multiple Lines", isOn: fieldIsMultiline)
-            }
-            Section("Text") {
-                Picker("Font", selection: fieldFontDesign) {
-                    ForEach(FontDesign.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                Stepper(value: fieldTextSize, in: 8...96, step: 1) {
-                    LabeledContent("Size", value: "\(Int(fieldTextSize.wrappedValue)) pt")
-                }
-                Toggle("Bold", isOn: fieldBold)
-                Toggle("Italic", isOn: fieldItalic)
-                Toggle("Underline", isOn: fieldUnderline)
-                Picker("Align", selection: fieldAlign) {
-                    ForEach(TextAlign.allCases, id: \.self) { Text($0.label).tag($0) }
+                Picker("Kind", selection: fieldKind) {
+                    Text("Plain").tag(FieldKind.plain)
+                    Text("Rich").tag(FieldKind.rich)
                 }
                 .pickerStyle(.segmented)
+                if properties.kind == .rich {
+                    Text("Markdown — bold, italic, headings, lists, and links. Card links like [Home](card:Home) navigate; https links open in the browser.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    TextField("Placeholder", text: fieldPlaceholder)
+                    Toggle("Multiple Lines", isOn: fieldIsMultiline)
+                }
+            }
+            if properties.kind == .rich {
+                Section("Markdown") {
+                    TextField("Markdown", text: fieldContents, axis: .vertical)
+                        .lineLimit(6...24)
+                        .font(.system(.body, design: .monospaced))
+                }
+            } else {
+                Section("Field") {
+                    TextField("Contents", text: fieldContents, axis: .vertical)
+                        .lineLimit(1...6)
+                }
+                Section("Text") {
+                    Picker("Font", selection: fieldFontDesign) {
+                        ForEach(FontDesign.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    Stepper(value: fieldTextSize, in: 8...96, step: 1) {
+                        LabeledContent("Size", value: "\(Int(fieldTextSize.wrappedValue)) pt")
+                    }
+                    Toggle("Bold", isOn: fieldBold)
+                    Toggle("Italic", isOn: fieldItalic)
+                    Toggle("Underline", isOn: fieldUnderline)
+                    Picker("Align", selection: fieldAlign) {
+                        ForEach(TextAlign.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
             }
         case .label:
             Section("Label") {
@@ -248,6 +269,20 @@ struct PartInspector: View {
             set: {
                 guard case .field(var properties) = part.kind else { return }
                 properties.isMultiline = $0
+                part.kind = .field(properties)
+            }
+        )
+    }
+
+    private var fieldKind: Binding<FieldKind> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return .plain }
+                return properties.kind
+            },
+            set: {
+                guard case .field(var properties) = part.kind else { return }
+                properties.kind = $0
                 part.kind = .field(properties)
             }
         )

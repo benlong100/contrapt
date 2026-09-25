@@ -1,0 +1,125 @@
+//
+//  RichTextFieldView.swift
+//  Contrapt
+//
+
+import SwiftUI
+import WebKit
+
+/// A link followed from a rich field.
+enum FieldLink {
+    /// An internal `card:` link — a card name or number to `go` to.
+    case card(String)
+    /// A web/mail/tel link, to open in the system browser on tap.
+    case external(URL)
+}
+
+/// Renders a rich field's Markdown in a `WKWebView`, trapping link taps.
+///
+/// Privacy (D7): the HTML (from `MarkdownHTML`) has no remote references and
+/// JavaScript is disabled, so the view fetches nothing. Only explicit link
+/// taps do anything, and they're routed out through `onFollowLink` — card
+/// links to `go`, web links to the system browser — never loaded in place.
+struct RichFieldView: View {
+    let markdown: String
+    var onFollowLink: (FieldLink) -> Void
+
+    var body: some View {
+        RichTextWebView(markdown: markdown, onFollowLink: onFollowLink)
+            .background(Color.cardSurface)
+            .overlay {
+                RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// The web view itself, bridged for both platforms.
+private struct RichTextWebView {
+    let markdown: String
+    var onFollowLink: (FieldLink) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onFollowLink: onFollowLink) }
+
+    fileprivate func makeWebView(_ coordinator: Coordinator) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        // No scripts are needed and none should run — belt with the braces of
+        // having no remote content in the first place.
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = coordinator
+        #if os(iOS)
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+        #endif
+        load(into: webView, coordinator: coordinator)
+        return webView
+    }
+
+    fileprivate func update(_ webView: WKWebView, _ coordinator: Coordinator) {
+        coordinator.onFollowLink = onFollowLink
+        if coordinator.lastMarkdown != markdown {
+            load(into: webView, coordinator: coordinator)
+        }
+    }
+
+    private func load(into webView: WKWebView, coordinator: Coordinator) {
+        coordinator.lastMarkdown = markdown
+        webView.loadHTMLString(MarkdownHTML.document(from: markdown), baseURL: nil)
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var onFollowLink: (FieldLink) -> Void
+        var lastMarkdown: String?
+
+        init(onFollowLink: @escaping (FieldLink) -> Void) {
+            self.onFollowLink = onFollowLink
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+            if navigationAction.navigationType == .linkActivated {
+                switch url.scheme?.lowercased() {
+                case "card":
+                    let raw = String(url.absoluteString.dropFirst("card:".count))
+                    let ref = (raw.removingPercentEncoding ?? raw)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\"' "))
+                    onFollowLink(.card(ref))
+                case "http", "https", "mailto", "tel":
+                    onFollowLink(.external(url))
+                default:
+                    break // unknown scheme: ignore
+                }
+                decisionHandler(.cancel)
+                return
+            }
+            // Allow only our own inline content; block anything that would
+            // reach the network.
+            if url.scheme == nil || url.scheme == "about" || url.isFileURL {
+                decisionHandler(.allow)
+            } else {
+                decisionHandler(.cancel)
+            }
+        }
+    }
+}
+
+#if os(iOS)
+extension RichTextWebView: UIViewRepresentable {
+    func makeUIView(context: Context) -> WKWebView { makeWebView(context.coordinator) }
+    func updateUIView(_ webView: WKWebView, context: Context) { update(webView, context.coordinator) }
+}
+#elseif os(macOS)
+extension RichTextWebView: NSViewRepresentable {
+    func makeNSView(context: Context) -> WKWebView { makeWebView(context.coordinator) }
+    func updateNSView(_ webView: WKWebView, context: Context) { update(webView, context.coordinator) }
+}
+#endif

@@ -19,6 +19,8 @@ struct CardView: View {
     /// plus the part it targets — nil means the card itself.
     var onMouseMessage: (String, Part?) -> Void = { _, _ in }
     var onOpenInspector: () -> Void = {}
+    /// A link tapped in a rich field: a card link to follow, or a web link.
+    var onFollowLink: (FieldLink) -> Void = { _ in }
 
     @State private var guides = AlignmentGuides()
     @State private var isCardPressed = false
@@ -133,7 +135,8 @@ struct CardView: View {
                     PartView(
                         part: $part,
                         onTap: { onMouseMessage("mouseUp", part) },
-                        onMouseDown: { onMouseMessage("mouseDown", part) }
+                        onMouseDown: { onMouseMessage("mouseDown", part) },
+                        onFollowLink: onFollowLink
                     )
                 }
             }
@@ -456,6 +459,7 @@ struct PartView: View {
     @Binding var part: Part
     var onTap: () -> Void
     var onMouseDown: () -> Void = {}
+    var onFollowLink: (FieldLink) -> Void = { _ in }
 
     @Environment(\.stackAssets) private var stackAssets
     @State private var isPressed = false
@@ -474,7 +478,11 @@ struct PartView: View {
             .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite))
             .simultaneousGesture(pressDetector)
         case .field(let properties):
-            if properties.isMultiline {
+            if properties.kind == .rich {
+                // A rich field renders its Markdown, display-only, with
+                // trapped links.
+                RichFieldView(markdown: properties.text, onFollowLink: onFollowLink)
+            } else if properties.isMultiline {
                 // A HyperCard-style field: a text area filling its frame.
                 TextEditor(text: fieldText)
                     .font(properties.format.font)
