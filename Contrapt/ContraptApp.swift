@@ -148,6 +148,59 @@ private struct CardCommands: View {
     }
 }
 
+/// The Edit menu's Cut/Copy/Paste/Delete, made part-aware: in edit mode with a
+/// selected part they act on that part; otherwise they fall through to the
+/// standard text actions via the responder chain, so the same items and
+/// shortcuts serve both parts and text fields. Select All always targets text
+/// (there's no part multi-selection).
+private struct EditActionCommands: View {
+    @FocusedValue(\.partActions) private var parts
+
+    var body: some View {
+        Button("Cut") {
+            if let parts, parts.canCopy, !isEditingText { parts.cut() }
+            else { send(#selector(NSText.cut(_:))) }
+        }
+        .keyboardShortcut("x", modifiers: .command)
+
+        Button("Copy") {
+            if let parts, parts.canCopy, !isEditingText { parts.copy() }
+            else { send(#selector(NSText.copy(_:))) }
+        }
+        .keyboardShortcut("c", modifiers: .command)
+
+        Button("Paste") {
+            if let parts, parts.canPaste, !isEditingText { parts.paste() }
+            else { send(#selector(NSText.paste(_:))) }
+        }
+        .keyboardShortcut("v", modifiers: .command)
+
+        // Part-only: duplicate the selected part in place.
+        Button("Duplicate") { parts?.duplicate() }
+            .keyboardShortcut("d", modifiers: .command)
+            .disabled(!(parts?.canCopy ?? false) || isEditingText)
+
+        Button("Delete") {
+            if let parts, parts.canCopy, !isEditingText { parts.delete() }
+            else { send(#selector(NSText.delete(_:))) }
+        }
+
+        Button("Select All") { send(#selector(NSText.selectAll(_:))) }
+            .keyboardShortcut("a", modifiers: .command)
+    }
+
+    /// True while a field editor (or any text view) is first responder, so
+    /// text editing keeps the standard behavior.
+    private var isEditingText: Bool {
+        let responder = NSApp.keyWindow?.firstResponder
+        return responder is NSText || responder is NSTextView
+    }
+
+    private func send(_ selector: Selector) {
+        NSApp.sendAction(selector, to: nil, from: nil)
+    }
+}
+
 /// The Help menu's HyperTalk Guide item (macOS, where it's not in the
 /// toolbar). Enabled only when a stack window is focused.
 private struct GuideCommand: View {
@@ -363,6 +416,11 @@ struct ContraptApp: App {
             Button("New Stack") {
                 NSDocumentController.shared.newDocument(nil)
             }
+        }
+        // Cut/Copy/Paste/Delete act on the selected part in edit mode, else
+        // on text (Select All stays text-only).
+        CommandGroup(replacing: .pasteboard) {
+            EditActionCommands()
         }
         // The Card menu's items, folded into the Edit menu after the standard
         // Cut/Copy/Paste group.

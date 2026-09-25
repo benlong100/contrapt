@@ -23,6 +23,7 @@ struct ContentView: View {
     @Environment(\.openDocument) private var openDocument
     #endif
     @ObservedObject private var cardClipboard = CardClipboard.shared
+    @ObservedObject private var partClipboard = PartClipboard.shared
 
     @State private var currentCardIndex = 0
     @State private var isEditing = false
@@ -368,6 +369,7 @@ struct ContentView: View {
         }
         .focusedValue(\.cardNavigation, cardNavigation)
         .focusedSceneValue(\.cardActions, cardActions)
+        .focusedSceneValue(\.partActions, partActions)
         .focusedSceneValue(\.stackFullScreen, fullScreenBinding)
         .focusedSceneValue(\.guidePresented, $isGuidePresented)
         // Full-screen (presentation) mode: hide the app chrome and let the
@@ -816,6 +818,85 @@ struct ContentView: View {
         selectedPartID = nil
     }
 
+    // MARK: - Cut / Copy / Paste Part
+
+    /// The selected part, wherever it lives (card layer or background layer).
+    private func selectedPart() -> Part? {
+        guard let id = selectedPartID else { return nil }
+        if let part = document.stack.cards[cardIndex].parts.first(where: { $0.id == id }) {
+            return part
+        }
+        let card = document.stack.cards[cardIndex]
+        if let background = document.stack.backgrounds.first(where: { $0.id == card.backgroundID }) {
+            return background.parts.first(where: { $0.id == id })
+        }
+        return nil
+    }
+
+    private func copySelectedPart() {
+        guard let part = selectedPart() else { return }
+        var assets: [String: Data] = [:]
+        if case .image(let image) = part.kind, let data = document.assets[image.assetName] {
+            assets[image.assetName] = data
+        }
+        partClipboard.payload = PartClipboard.Payload(part: part, assets: assets)
+    }
+
+    private func cutSelectedPart() {
+        guard let id = selectedPartID, selectedPart() != nil else { return }
+        copySelectedPart()
+        deletePart(id: id)
+    }
+
+    /// Pastes the clipboard's part onto the current card, nudged down-right so
+    /// it doesn't hide the original, with a fresh identity so repeated pastes
+    /// never collide. Asset names are UUIDs, so re-adding them can't clash.
+    private func pastePart() {
+        guard let payload = partClipboard.payload else { return }
+        for (name, data) in payload.assets where document.assets[name] == nil {
+            document.assets[name] = data
+        }
+        var updated = document.stack
+        var part = payload.part
+        part.id = UUID()
+        part.scriptID = updated.claimScriptID()
+        part.frame.x += 20
+        part.frame.y += 20
+        updated.cards[cardIndex].parts.append(part)
+        stack.wrappedValue = updated
+        selectedPartID = part.id
+    }
+
+    /// Duplicates the selected part in place — a fresh copy nudged down-right,
+    /// without touching the clipboard (as macOS's Duplicate does).
+    private func duplicateSelectedPart() {
+        guard let part = selectedPart() else { return }
+        var updated = document.stack
+        var copy = part
+        copy.id = UUID()
+        copy.scriptID = updated.claimScriptID()
+        copy.frame.x += 20
+        copy.frame.y += 20
+        updated.cards[cardIndex].parts.append(copy)
+        stack.wrappedValue = updated
+        selectedPartID = copy.id
+    }
+
+    /// Part-editing actions published to the Edit menu on macOS. The flags are
+    /// only true in edit mode, so the menu falls back to text editing (and
+    /// card operations) otherwise.
+    private var partActions: PartActions {
+        PartActions(
+            cut: cutSelectedPart,
+            copy: copySelectedPart,
+            paste: pastePart,
+            duplicate: duplicateSelectedPart,
+            delete: { if let id = selectedPartID { deletePart(id: id) } },
+            canCopy: isEditing && selectedPartID != nil,
+            canPaste: isEditing && partClipboard.payload != nil
+        )
+    }
+
     private func addCard() {
         let current = document.stack.cards[cardIndex]
         var card = Card(
@@ -1066,6 +1147,34 @@ final class CardClipboard: ObservableObject {
     @Published var payload: Payload?
 }
 
+/// Bridges the focused document's part-editing actions (Cut/Copy/Paste/Delete
+/// on the selected part) to the Edit menu on macOS. `canCopy`/`canPaste` are
+/// only true in edit mode with a selection, so the standard text and card
+/// actions take over otherwise.
+struct PartActions {
+    var cut: () -> Void
+    var copy: () -> Void
+    var paste: () -> Void
+    var duplicate: () -> Void
+    var delete: () -> Void
+    var canCopy: Bool
+    var canPaste: Bool
+}
+
+/// An in-app clipboard for a single part, carrying any asset bytes the part
+/// references (image parts) so Paste works across cards and windows. Asset
+/// names are UUIDs, so re-inserting them can't collide.
+final class PartClipboard: ObservableObject {
+    static let shared = PartClipboard()
+
+    struct Payload {
+        let part: Part
+        let assets: [String: Data]
+    }
+
+    @Published var payload: Payload?
+}
+
 /// Bridges the focused document's card-management actions to the Edit menu
 /// (macOS). Nil when no document is focused, which disables the commands.
 struct CardActions {
@@ -1085,6 +1194,10 @@ struct CardNavigationKey: FocusedValueKey {
 
 struct CardActionsKey: FocusedValueKey {
     typealias Value = CardActions
+}
+
+struct PartActionsKey: FocusedValueKey {
+    typealias Value = PartActions
 }
 
 /// Carries a binding to the focused stack's full-screen flag, so the View
@@ -1108,6 +1221,11 @@ extension FocusedValues {
     var cardActions: CardActions? {
         get { self[CardActionsKey.self] }
         set { self[CardActionsKey.self] = newValue }
+    }
+
+    var partActions: PartActions? {
+        get { self[PartActionsKey.self] }
+        set { self[PartActionsKey.self] = newValue }
     }
 
     var stackFullScreen: Binding<Bool>? {
