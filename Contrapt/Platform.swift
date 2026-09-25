@@ -363,6 +363,13 @@ extension Color {
         #endif
     }
 
+    /// The card "desktop": the surround behind a card in the document view,
+    /// a classic Mac medium gray — the era's screen background, and what
+    /// shows around a card that's smaller than the window (as in HyperCard).
+    static var cardDesktop: Color {
+        Color(red: 0.6, green: 0.6, blue: 0.6)
+    }
+
     /// A field's hairline border.
     static var fieldStroke: Color {
         #if canImport(UIKit)
