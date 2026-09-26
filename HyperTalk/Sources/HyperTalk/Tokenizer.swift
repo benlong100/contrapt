@@ -182,7 +182,11 @@ struct Tokenizer {
         case "≠":
             return make("<>", consume: 1)
         default:
-            throw ScriptError(line: startLine, message: "Unexpected character '\(character)'.")
+            // Any other character (stray high-Mac-Roman glyphs like ∞ • °, a
+            // colon, etc.) becomes a lone symbol token rather than a hard
+            // tokenizer failure. Such glyphs appear in decorative banners and
+            // notes outside handlers, which the parser skips as loose text.
+            return make(String(character), consume: 1)
         }
     }
 }

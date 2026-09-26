@@ -19,6 +19,37 @@ import Testing
     try HyperTalk.check("")
 }
 
+@Test func checkSkipsDecorativeBannersAndLooseText() async throws {
+    // Apple's 2.x scripts open with ∞∞∞ banners and prose outside handlers,
+    // and use stray glyphs/colons. HyperCard ignores non-handler text.
+    try HyperTalk.check("""
+    ∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞
+    Script from background: Home Cards
+
+    THE MESSAGE HANDLERS IN THIS SCRIPT:
+    openStack,closeStack,openBackground
+    ∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞
+
+    -----  Open/Resume Scripts  --------
+
+    on openStack
+      put 1 into x
+    end openStack
+    """)
+}
+
+@Test func looseTextHandlerStillRuns() async throws {
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    ∞∞∞ banner ∞∞∞
+    notes: openStack, foo
+    on mouseUp
+      put "ok" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ok")
+}
+
 @Test func checkAcceptsThePlotsPieButtonScript() async throws {
     // The Plots stack's "Pie" button — exercises paint no-ops, arithmetic
     // chunk indices, `number of … in`, `.02`, and bare-name globals.

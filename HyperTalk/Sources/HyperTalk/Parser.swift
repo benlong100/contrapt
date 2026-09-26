@@ -145,7 +145,11 @@ struct Parser {
                 }
                 functions[function.name] = function
             } else {
-                throw ScriptError(line: current.line, message: "Expected 'on <handlerName>' or 'function <name>' here, but found \(describe(current)).")
+                // Loose text outside any handler — decorative banners, notes,
+                // the "MESSAGE HANDLERS IN THIS SCRIPT" comment blocks common in
+                // Apple's stacks. HyperCard ignores it; skip the line and go on.
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                if current.kind == .newline { advance() }
             }
         }
         return ParsedScript(handlers: handlers, functions: functions)
