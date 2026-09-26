@@ -331,8 +331,8 @@ struct ContentView: View {
         .focusedSceneValue(\.partActions, partActions)
         .focusedSceneValue(\.stackFullScreen, fullScreenBinding)
         .focusedSceneValue(\.guidePresented, $isGuidePresented)
-        .focusedSceneValue(\.websiteExport, WebsiteExport { directory in
-            try WebsiteExporter.export(stack: document.stack, assets: document.assets, into: directory)
+        .focusedSceneValue(\.websiteExport, WebsiteExport { directory, actualSize in
+            try WebsiteExporter.export(stack: document.stack, assets: document.assets, into: directory, actualSize: actualSize)
         })
         // Full-screen (presentation) mode: hide the app chrome and let the
         // padding color own the space around the card.
@@ -1470,8 +1470,9 @@ struct GuidePresentedKey: FocusedValueKey {
 /// Carried as a focused value so the File menu can drive it for whichever
 /// stack window is frontmost.
 struct WebsiteExport {
-    /// Writes the site into the given directory; returns the created folder.
-    let export: (URL) throws -> URL
+    /// Writes the site into the given directory (at 1:1 if `actualSize`);
+    /// returns the created folder.
+    let export: (URL, Bool) throws -> URL
 }
 
 struct WebsiteExportKey: FocusedValueKey {

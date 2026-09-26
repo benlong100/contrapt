@@ -24,8 +24,10 @@ enum WebsiteExporter {
     /// Writes a static-website folder for `stack` into `parentDirectory`,
     /// returning the created site folder. `assets` are the document's media
     /// (image/paint PNGs); only those the stack still references are written.
+    /// `actualSize` bakes the player's display mode: the card at its true point
+    /// size (1:1, scroll if larger than the window) vs. scaled to fill.
     @discardableResult
-    static func export(stack: Stack, assets: [String: Data], into parentDirectory: URL) throws -> URL {
+    static func export(stack: Stack, assets: [String: Data], into parentDirectory: URL, actualSize: Bool = false) throws -> URL {
         let fm = FileManager.default
         let folderName = sanitizedFolderName(stack.name.isEmpty ? "Stack" : stack.name) + " Website"
         let site = parentDirectory.appendingPathComponent(folderName, isDirectory: true)
@@ -40,6 +42,7 @@ enum WebsiteExporter {
         // reads window.__STACK__ from a <script> (which loads fine locally) and
         // only falls back to fetch when the site is served over http.
         let dataJS = "window.__STACK__ = " + (String(data: json, encoding: .utf8) ?? "null") + ";\n"
+            + "window.__ACTUAL_SIZE__ = " + (actualSize ? "true" : "false") + ";\n"
         try Data(dataJS.utf8).write(to: site.appendingPathComponent("stack-data.js"))
 
         let referenced = stack.referencedAssetNames()
@@ -81,7 +84,7 @@ extension WebsiteExporter {
       html, body { margin: 0; height: 100%; background: #6b6b6b;
         font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; }
       #stage { position: absolute; inset: 0 0 64px 0; display: flex;
-        align-items: center; justify-content: center; overflow: hidden; }
+        align-items: center; justify-content: center; overflow: auto; }
       #card { position: relative; background: #fff; transform-origin: center center;
         box-shadow: 0 2px 16px rgba(0,0,0,.4); overflow: hidden; }
       .paint { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -191,7 +194,9 @@ extension WebsiteExporter {
         return d;
       }
       function fit() {
-        const s = Math.min((window.innerWidth - 40) / W, (window.innerHeight - 104) / H, 2);
+        const s = window.__ACTUAL_SIZE__
+          ? 1
+          : Math.min((window.innerWidth - 40) / W, (window.innerHeight - 104) / H, 2);
         root.style.transform = 'scale(' + s + ')';
       }
       function render() {

@@ -247,8 +247,22 @@ private struct ExportWebsiteCommand: View {
         panel.message = "Choose a folder to write the exported website into."
         panel.prompt = "Export"
         guard panel.runModal() == .OK, let directory = panel.url else { return }
+        // Mirror import's size choice: render the exported page at the card's
+        // true size, or scaled to fill the browser window.
+        let sizeAlert = NSAlert()
+        sizeAlert.messageText = "Website Size"
+        sizeAlert.informativeText = "Show the card at its original size, or scaled to fill the browser window?"
+        sizeAlert.addButton(withTitle: "Original Size")
+        sizeAlert.addButton(withTitle: "Scaled to Fit")
+        sizeAlert.addButton(withTitle: "Cancel")
+        let actualSize: Bool
+        switch sizeAlert.runModal() {
+        case .alertFirstButtonReturn: actualSize = true
+        case .alertSecondButtonReturn: actualSize = false
+        default: return
+        }
         do {
-            let site = try export.export(directory)
+            let site = try export.export(directory, actualSize)
             NSWorkspace.shared.activateFileViewerSelecting([site])
         } catch {
             NSAlert(error: error).runModal()
