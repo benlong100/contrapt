@@ -393,6 +393,15 @@ struct Parser {
             let object = try parseObjectExpr()
             try expectNewline()
             return Stmt(kind: .sendMessage(message, to: object), line: line)
+        case "delete":
+            // `delete menu "X"`, `delete button …`, etc. Contrapt doesn't model
+            // object deletion via this verb (card deletion is `doMenu "Delete
+            // Card"`), and no sample uses chunk deletion — so accept and ignore
+            // so stacks that manage their own menus/objects don't error.
+            advance()
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
         case "choose", "drag", "type", "reset":
             // Paint/tool automation Contrapt doesn't model: `choose <tool>
             // tool`, `drag from a to b`, `type "…"`, `reset paint`. Accepted
@@ -1234,6 +1243,19 @@ struct Parser {
             }
             return .card(try parsePrimary())
         }
+        // Menus aren't modeled in Contrapt; `menu "X"`, `menuItem N of menu
+        // "X"`, and `menuBar` still parse so old stacks that test for or delete
+        // their own menus don't break. They resolve to an absent object.
+        if let w = peekIdentifier(), w == "menu" || w == "menuitem" || w == "menubar" {
+            advance()
+            if w == "menubar" { return .menu(.stringLiteral("")) }
+            _ = consumeWord("id")
+            let name: Expr = (current.kind == .newline || current.kind == .endOfScript)
+                ? .stringLiteral("") : try parsePrimary()
+            // `menuItem N of menu "X"` — consume and ignore the owning menu.
+            if consumeWord("of") { _ = consumeWord("menu"); _ = try? parsePrimary() }
+            return .menu(name)
+        }
         throw ScriptError(line: line, message: "Expected an object here, like button \"OK\", field \"Name\", card 2, or this card.")
     }
 
@@ -1509,10 +1531,11 @@ struct Parser {
             return .chunk(kind, selector, try parsePrimary())
         case .identifier(let word):
             advance()
-            // `there is a[n] <object>` / `there is no <object>` — existence.
+            // `there is a[n] <object>` / `there is no <object>` /
+            // `there is not a[n] <object>` — existence.
             if word == "there", consumeWord("is") {
-                let negated = consumeWord("no")
-                if !negated { _ = consumeWord("a") || consumeWord("an") }
+                let negated = consumeWord("no") || consumeWord("not")
+                _ = consumeWord("a") || consumeWord("an")
                 return .exists(try parseObjectExpr(), negated: negated)
             }
             // `me` / `target` on their own → the object's name (HyperTalk

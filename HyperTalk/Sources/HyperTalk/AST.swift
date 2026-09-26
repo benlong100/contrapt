@@ -240,6 +240,10 @@ indirect enum ObjectExpr {
     case me
     /// `the target` — the object the current message was first sent to.
     case target
+    /// `menu "X"` / `menuItem N of menu "X"` — HyperCard menus, which Contrapt
+    /// doesn't model. Parses so `there is a menu …` (false) and `delete menu …`
+    /// (no-op) don't break old stacks that manage their own menus.
+    case menu(Expr)
 }
 
 enum BinaryOp {

@@ -887,6 +887,11 @@ final class Runtime {
             return (negated ? !matches : matches) ? "true" : "false"
 
         case .exists(let objectExpression, let negated):
+            if case .menu = objectExpression {
+                // Contrapt has no HyperCard menus, so `there is a menu …` is
+                // always false (and `there is not a menu …` always true).
+                return negated ? "true" : "false"
+            }
             let object = try await resolveObject(objectExpression, line: line)
             let present = host.exists(object)
             return (negated ? !present : present) ? "true" : "false"
@@ -1119,6 +1124,10 @@ final class Runtime {
             return try layerObject(at: currentLayerIndex, keyword: "me", line: line)
         case .target:
             return try layerObject(at: 0, keyword: "the target", line: line)
+        case .menu:
+            // Reached only if a menu is used somewhere other than `there is a
+            // menu …` (which short-circuits) — Contrapt has no menus.
+            throw ScriptError(line: line, message: "Contrapt doesn't have HyperCard menus.")
         }
     }
 

@@ -43,6 +43,19 @@ import Testing
     """)
 }
 
+@Test func menuObjectIsAbsentAndDeleteIsNoOp() async throws {
+    // Home stacks manage their own menus: `if there is a menu "X" then delete
+    // menu "X"`. Contrapt has no menus, so the test is false and delete no-ops.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      if there is a menu "Home" then delete menu "Home"
+      if there is not a menu "Home" then put "no menu" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "no menu")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""
