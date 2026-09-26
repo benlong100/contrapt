@@ -37,7 +37,7 @@ enum LegacyStackImporter {
     /// button ICON bitmaps the stack references — embedded per-use as assets.
     /// `presentAtActualSize` opens the card at its true point size (1:1, small,
     /// like classic HyperCard) rather than scaled to fill the window.
-    static func stack(from data: Data, name: String, iconFork: Data? = nil, presentAtActualSize: Bool = false) throws -> Imported {
+    static func stack(from data: Data, name: String, iconFork: Data? = nil, stackFork: Data? = nil, presentAtActualSize: Bool = false) throws -> Imported {
         var reader = Reader(data)
         guard reader.tag(at: 0) == "STAK" else {
             throw ImportError(message: "This doesn't look like a HyperCard stack (no STAK header). If it came as a .hqx or .sit, unpack it first.")
@@ -49,7 +49,11 @@ enum LegacyStackImporter {
         let cardWidth = 512, cardHeight = 342 // HC 1.x screen
         var assets: [String: Data] = [:]
         let bmapByID = Dictionary(blocks.filter { $0.type == "BMAP" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let iconLibrary = iconFork.map { ResourceFork.icons(from: $0) } ?? [:]
+        // Icons come from the HyperCard app's fork plus the stack's own
+        // resource fork — custom icons (QuickTime, AppleScript…) that Apple
+        // ships inside the stack, not the app. Stack icons win on any id clash.
+        var iconLibrary = iconFork.map { ResourceFork.icons(from: $0) } ?? [:]
+        if let stackFork { iconLibrary.merge(ResourceFork.icons(from: stackFork)) { _, stackIcon in stackIcon } }
         var iconAssetByID: [Int: String] = [:] // dedupe: one asset per icon id used
 
         // Render a BMAP block to a stored paint asset, returning its name.
@@ -184,13 +188,15 @@ enum LegacyStackImporter {
         defer { if didAccess { source.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: source)
         let name = source.deletingPathExtension().lastPathComponent
+        // The stack's own resource fork carries any custom button icons.
+        let stackFork = ResourceFork.forkData(of: source)
         var iconFork: Data?
         if let iconApp {
             let iconAccess = iconApp.startAccessingSecurityScopedResource()
             defer { if iconAccess { iconApp.stopAccessingSecurityScopedResource() } }
             iconFork = ResourceFork.forkData(of: iconApp)
         }
-        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, presentAtActualSize: presentAtActualSize)
+        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, stackFork: stackFork, presentAtActualSize: presentAtActualSize)
         var entries: [String: Data] = ["stack.json": try imported.stack.fileData()]
         for (assetName, bytes) in imported.assets { entries["assets/\(assetName)"] = bytes }
         let archive = ZipArchive.archive(entries)
