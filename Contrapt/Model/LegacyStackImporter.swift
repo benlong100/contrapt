@@ -230,7 +230,9 @@ enum LegacyStackImporter {
             // Honor the field's real Lock Text flag: display/label fields import
             // locked (static text that still dispatches taps to scripts), while
             // input fields import editable — as the stack author intended.
-            field.lockText = raw.lockText
+            // Shared-text fields are background labels (copyright, "Home"), so
+            // they're locked too — static text, no editable caret in browse.
+            field.lockText = raw.lockText || raw.sharedText
             kind = .field(field)
         }
         var part = Part(id: UUID(), name: raw.name, frame: frame,
