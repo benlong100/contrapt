@@ -1229,10 +1229,14 @@ struct Parser {
 
         if let word = peekIdentifier(), let kind = Self.partKindSynonyms[word] {
             advance()
+            let part: ObjectExpr
             if consumeWord("id") {
-                return .partByID(kind: kind, domain: domain, id: try parsePrimary())
+                part = .partByID(kind: kind, domain: domain, id: try parsePrimary())
+            } else {
+                part = .part(kind: kind, domain: domain, name: try parsePrimary())
             }
-            return .part(kind: kind, domain: domain, name: try parsePrimary())
+            skipPartScopeIfPresent()
+            return part
         }
         // A bare background reference (`bkgnd`, `background`) → this background.
         if let w = peekIdentifier(), Self.backgroundWords.contains(w) {
@@ -1401,6 +1405,29 @@ struct Parser {
         _ = consumeWord("id")
         if case .number = current.kind { advance() }
         else if case .string = current.kind { advance() }
+    }
+
+    /// A part reference may be scoped to a specific card/background —
+    /// `bg btn 3 of cd 5`, `cd fld 2 of this card`, `bg btn X of first bg`.
+    /// Contrapt's background parts are shared across cards, so the owning
+    /// card/background is parsed and ignored; it only needs consuming so the
+    /// surrounding `set … to …` (or property read) sees what follows. Restores
+    /// the cursor if the `of …` isn't actually a card/background scope.
+    private mutating func skipPartScopeIfPresent() {
+        let saved = index
+        guard consumeWord("of") else { return }
+        _ = consumeWord("this")
+        if let w = peekIdentifier(),
+           w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil {
+            advance()
+        }
+        guard consumeCardWord() || consumeBackgroundWord() else { index = saved; return }
+        _ = consumeWord("id")
+        // An optional identifier/number/string naming the card (`of cd curCard`,
+        // `of card 5`, `of bg "X"`) — but not a following statement keyword.
+        if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
+            _ = try? parsePrimary()
+        }
     }
 
     /// Maps an ordinal word (or last/middle) to a chunk selector.
