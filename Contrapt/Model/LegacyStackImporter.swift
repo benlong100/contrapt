@@ -95,10 +95,12 @@ enum LegacyStackImporter {
         var bgInfoByID: [Int: ParsedObject] = [:]
         var bgUUIDByID: [Int: UUID] = [:]
         var fieldIDs = Set<Int>()
+        var partIDs = Set<Int>() // all background parts (fields + buttons) — 2.x card contents key on buttons too
         for block in blocks where block.type == "BKGD" {
             let parsed = reader.parseObject(block, knownFieldIDs: [])
             bgInfoByID[block.id] = parsed
             fieldIDs.formUnion(parsed.parts.filter { $0.type == .field }.map(\.id))
+            partIDs.formUnion(parsed.parts.map(\.id))
             var background = Background(id: UUID(), name: parsed.name.isEmpty ? "Background \(stack.backgrounds.count + 1)" : parsed.name,
                                         script: parsed.script, parts: [])
             background.scriptID = stack.claimScriptID()
@@ -115,7 +117,7 @@ enum LegacyStackImporter {
         }
 
         for block in orderedCardBlocks {
-            let parsed = reader.parseObject(block, knownFieldIDs: fieldIDs)
+            let parsed = reader.parseObject(block, knownFieldIDs: fieldIDs, knownPartIDs: partIDs)
             let bgID = parsed.ownerBackgroundID
             let backgroundUUID = bgUUIDByID[bgID] ?? stack.backgrounds[0].id
             let templateFields = (bgInfoByID[bgID]?.parts ?? []).filter { $0.type == .field }
@@ -372,9 +374,11 @@ private extension LegacyStackImporter {
         }
 
         /// Parse a CARD or BKGD block into parts, contents, and script.
-        /// `knownFieldIDs` anchors the content-entry scan (card contents are
-        /// keyed by the background's field ids).
-        func parseObject(_ block: BlockInfo, knownFieldIDs: Set<Int>) -> ParsedObject {
+        /// `knownFieldIDs` anchors the 1.x content-entry scan (card contents are
+        /// keyed by the background's field ids). `knownPartIDs` (all background
+        /// parts, buttons included) bounds the 2.x scan, whose entries also
+        /// cover buttons and must be walked to reach the name.
+        func parseObject(_ block: BlockInfo, knownFieldIDs: Set<Int>, knownPartIDs: Set<Int> = []) -> ParsedObject {
             let base = block.offset, end = block.offset + block.size
             let ownerBackground = block.type == "CARD" ? u32(base + 0x20 + headerDelta) : block.id
             let bitmapID = u32(base + 0x0C + headerDelta) // CARD/BKGD both store their BMAP id here
@@ -382,7 +386,13 @@ private extension LegacyStackImporter {
             let afterParts = parts.last?.recordEnd ?? (base + 0x24)
             let ownFieldIDs = Set(parts.map(\.part).filter { $0.type == .field }.map(\.id))
 
-            let (contents, contentsEnd) = parseContents(from: afterParts, end: end, fieldIDs: knownFieldIDs.union(ownFieldIDs))
+            let (contents, contentsEnd): ([Int: String], Int)
+            if headerDelta > 0 {
+                let known = knownPartIDs.union(parts.map(\.part.id))
+                (contents, contentsEnd) = parseContentsV2(from: afterParts, end: end, knownIDs: known)
+            } else {
+                (contents, contentsEnd) = parseContents(from: afterParts, end: end, fieldIDs: knownFieldIDs.union(ownFieldIDs))
+            }
             // After the content section come the object's name and script as
             // C-strings (name first). Scan there for both.
             let (name, script) = nameAndScript(from: contentsEnd, end: end)
@@ -432,6 +442,29 @@ private extension LegacyStackImporter {
                 p += 1 // skip the NUL terminator
             }
             return (result, sectionEnd)
+        }
+
+        /// HyperCard 2.x part-content section: a run of entries, each
+        /// `[s16 partID][u16 length][length bytes]`, padded to an even total.
+        /// A positive partID is a background field, negative a card field
+        /// (keyed here by absolute id, matching how parts are filled). The
+        /// content bytes start with a style flag / style-run prefix that
+        /// `contentText` skips. Entries run until the next word isn't a known
+        /// field id — that's where the object's name and script C-strings begin.
+        private func parseContentsV2(from start: Int, end: Int, knownIDs: Set<Int>) -> (contents: [Int: String], sectionEnd: Int) {
+            var result: [Int: String] = [:]
+            var o = start
+            while o + 4 <= end {
+                let absID = abs(i16(o))
+                guard absID != 0, knownIDs.contains(absID) else { break }
+                let length = u16(o + 2)
+                guard length >= 1, o + 4 + length <= end else { break }
+                let text = contentText(from: o + 4, to: o + 4 + length)
+                if result[absID] == nil, !text.isEmpty { result[absID] = text }
+                o += 4 + length
+                if o & 1 != 0 { o += 1 } // entries pad to an even boundary
+            }
+            return (result, o)
         }
 
         /// Whether `o` begins a content section: a plausible size word, then a
