@@ -13,6 +13,16 @@ import HyperTalk
 import UIKit
 #endif
 
+/// The iOS Home "Stacks" launcher actions, supplied by the Home root so the
+/// menu can be built inside ContentView's own toolbar.
+struct HomeStackActions {
+    var newStack: () -> Void
+    var learnHyperTalk: () -> Void
+    var open: () -> Void
+    var importLegacy: () -> Void
+    var setIconApp: () -> Void
+}
+
 /// The document view. Browse mode shows the current card with live parts;
 /// button taps dispatch mouseUp through the interpreter. Edit mode makes
 /// parts selectable, movable, and resizable, with a property inspector.
@@ -24,11 +34,12 @@ struct ContentView: View {
     /// that's a RootView concern, so it's injected. nil on macOS, which opens
     /// a document window directly.
     var onOpenStackFile: ((URL, GoDestination?) -> Void)? = nil
-    /// A view (the iOS Home "Stacks" menu) hosted in this view's *own* toolbar's
-    /// leading slot. It must live here rather than in a second `.toolbar`
-    /// attached by the Home root: two `.toolbar` modifiers on one view break
-    /// `Menu` item selection on iPad (the whole menu highlights, nothing fires).
-    var leadingToolbarContent: AnyView? = nil
+    /// The iOS Home "Stacks" menu actions, injected by the Home root. When set,
+    /// ContentView builds the Stacks menu inline in its own `.primaryAction`
+    /// toolbar group — same construction as the working Add menu. (Hosting it as
+    /// a `.topBarLeading` item instead made the menu unselectable on iPad — the
+    /// whole menu highlighted and no row fired.)
+    var homeStackActions: HomeStackActions? = nil
     @Environment(\.undoManager) private var undoManager
     @Environment(\.openURL) private var openURL
     #if os(macOS)
@@ -487,14 +498,22 @@ struct ContentView: View {
     /// small enough for the compiler to type-check quickly (especially on iOS,
     /// where the Cards menu keeps the editing group inline).
     @ToolbarContentBuilder private var mainToolbar: some ToolbarContent {
-        #if os(iOS)
-        if let leadingToolbarContent {
-            ToolbarItem(placement: .topBarLeading) {
-                leadingToolbarContent
-            }
-        }
-        #endif
         ToolbarItemGroup(placement: .primaryAction) {
+            #if os(iOS)
+            // Home's Stacks launcher. Built inline here (not as a separate
+            // .topBarLeading item) so it uses the same working construction as
+            // the Add menu — a leading placement left it unselectable on iPad.
+            if let actions = homeStackActions {
+                Menu("Stacks", systemImage: "square.stack") {
+                    Button("New Stack", systemImage: "doc.badge.plus", action: actions.newStack)
+                    Button("Learn HyperTalk", systemImage: "graduationcap", action: actions.learnHyperTalk)
+                    Divider()
+                    Button("Open…", systemImage: "folder", action: actions.open)
+                    Button("Import HyperCard Stack…", systemImage: "tray.and.arrow.down", action: actions.importLegacy)
+                    Button("Set HyperCard App for Icons…", systemImage: "app.badge", action: actions.setIconApp)
+                }
+            }
+            #endif
             if isEditing {
                 editingToolbarTools
             }
