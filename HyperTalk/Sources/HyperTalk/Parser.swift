@@ -1320,9 +1320,15 @@ struct Parser {
             skipPartScopeIfPresent()
             return part
         }
-        // A bare background reference (`bkgnd`, `background`) → this background.
+        // A background reference (`bkgnd`, `background`) → this background.
+        // `bkgnd id 2717` / `bkgnd "Home Cards"` / `bkgnd 2` name a specific
+        // background; Contrapt has one background context per card, so the
+        // id/name/number is consumed and ignored.
         if let w = peekIdentifier(), Self.backgroundWords.contains(w) {
             advance()
+            if consumeWord("id") { _ = try parsePrimary() }
+            else if case .string = current.kind { advance() }
+            else if case .number = current.kind { advance() }
             return .thisBackground
         }
         if let w = peekIdentifier(), Self.cardWords.contains(w) {

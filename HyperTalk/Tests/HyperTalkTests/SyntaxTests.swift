@@ -104,6 +104,17 @@ import Testing
     """)
 }
 
+@Test func backgroundByIdParsesAsAnObject() throws {
+    // The Home stack's newLink forwards to the Home background:
+    // `send "newLink" && theType to bkgnd id 2717`.
+    try HyperTalk.check("""
+    on newLink theType
+      if short name of this stack = "Home"
+      then send "newLink" && theType to bkgnd id 2717
+    end newLink
+    """)
+}
+
 @Test func checkReportsProblemsWithLineNumbers() async {
     do {
         try HyperTalk.check("""
