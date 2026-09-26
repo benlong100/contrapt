@@ -10,6 +10,9 @@ import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // Note: programmatically opening a document at a URL uses SwiftUI's
 // openDocument action, which is macOS-only. On iOS the document browser
@@ -303,7 +306,6 @@ private struct RootView: View {
     /// stacking multiple `.fileImporter` modifiers on one view is a SwiftUI bug
     /// where the earlier ones silently never present (which broke Import).
     @State private var activeImport: ImportKind?
-    @State private var pendingLegacyStackURL: URL?
     @State private var isExporterPresented = false
     @State private var pendingNew: StackDocument?
     @State private var pendingFilename = "Untitled"
@@ -348,24 +350,16 @@ private struct RootView: View {
             switch kind {
             case .contraptStack: openExternal(url)
             case .legacyStack:
-                // Let the picker finish dismissing before the size dialog —
-                // presenting it in the same update as the dismissal drops it.
+                // Let the picker finish dismissing, then ask the size via a
+                // UIKit alert. (A SwiftUI confirmationDialog on this scene never
+                // presented — hence the imperative UIAlertController.)
                 Task { @MainActor in
                     try? await Task.sleep(for: .seconds(0.4))
-                    pendingLegacyStackURL = url
+                    chooseImportSize(for: url)
                 }
             case .iconApp: HyperCardAppReference.save(url)
             case .none: break
             }
-        }
-        // After picking a classic stack, choose the import size.
-        .confirmationDialog("Import at what size?",
-                            isPresented: Binding(get: { pendingLegacyStackURL != nil },
-                                                 set: { if !$0 { pendingLegacyStackURL = nil } }),
-                            presenting: pendingLegacyStackURL) { url in
-            Button("Original Size") { importLegacy(url, presentAtActualSize: true) }
-            Button("Fill Window") { importLegacy(url, presentAtActualSize: false) }
-            Button("Cancel", role: .cancel) {}
         }
         // New stacks and the tutorial are created in Files, then opened.
         .fileExporter(
@@ -410,14 +404,41 @@ private struct RootView: View {
     }
 
     /// Import a chosen legacy stack at the chosen size, then open it over Home.
+    /// Ask the import size with a UIKit alert (robust where a SwiftUI dialog on
+    /// this scene wasn't presenting), then import at the chosen size.
+    private func chooseImportSize(for url: URL) {
+        guard let top = Self.topViewController() else { return }
+        let alert = UIAlertController(
+            title: "Import at what size?",
+            message: "Open the card at its original HyperCard size, or scaled to fill the window?",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Original Size", style: .default) { _ in
+            importLegacy(url, presentAtActualSize: true)
+        })
+        alert.addAction(UIAlertAction(title: "Fill Window", style: .default) { _ in
+            importLegacy(url, presentAtActualSize: false)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        top.present(alert, animated: true)
+    }
+
     private func importLegacy(_ url: URL, presentAtActualSize: Bool) {
-        pendingLegacyStackURL = nil
         // A document-picker URL is sandboxed; claim access before reading it.
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let contrapt = try? LegacyStackImporter.importedContraptFile(
             from: url, iconApp: HyperCardAppReference.url(), presentAtActualSize: presentAtActualSize) else { return }
         openExternal(contrapt)
+    }
+
+    /// The frontmost presented view controller, for imperative UIKit alerts.
+    @MainActor static func topViewController() -> UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        let window = scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first
+        var top = window?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
     }
 
     private func openExternal(_ url: URL) {
