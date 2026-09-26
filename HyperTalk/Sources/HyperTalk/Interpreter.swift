@@ -732,6 +732,11 @@ final class Runtime {
         case .inBackground(let base, let backgroundExpression):
             return .inBackground(try await destination(for: base, line: line),
                                  background: try await evaluate(backgroundExpression, line: line))
+        case .inStack(let nameExpression, let card):
+            let name = try await evaluate(nameExpression, line: line)
+            var cardDestination: GoDestination?
+            if let card { cardDestination = try await destination(for: card, line: line) }
+            return .stack(name: name, card: cardDestination)
         }
     }
 

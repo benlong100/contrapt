@@ -91,6 +91,9 @@ public enum GoDestination: Equatable, Sendable {
     /// A card scoped to a background: `first/last/Nth card of background X`.
     /// `which` is `.first`, `.last`, or `.number(n)` within that background.
     indirect case inBackground(GoDestination, background: String)
+    /// Another stack by name, with an optional card destination within it
+    /// (nil = its first card): `go stack "X"`, `go card N of stack "X"`.
+    indirect case stack(name: String, card: GoDestination?)
 }
 
 /// What `the number of …` counts.

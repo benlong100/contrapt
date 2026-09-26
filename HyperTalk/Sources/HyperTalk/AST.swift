@@ -166,6 +166,9 @@ indirect enum GoTarget {
     case back
     /// `go <first|last|N> card of background <name>`.
     case inBackground(GoTarget, background: Expr)
+    /// `go [to] stack "X"` or `go card N of stack "X"` — another stack, with
+    /// an optional card destination within it (nil = the stack's first card).
+    case inStack(name: Expr, card: GoTarget?)
 }
 
 indirect enum RepeatKind {

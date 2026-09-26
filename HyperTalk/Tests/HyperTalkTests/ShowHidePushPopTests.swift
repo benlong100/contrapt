@@ -101,7 +101,7 @@ import Testing
 
 @Test func goCardByVariableWithStackQualifier() async throws {
     // `go card whichSix of stack "X"` — the variable card number mustn't be
-    // read as a bare property; the trailing `of stack …` is ignored.
+    // read as a bare property; it resolves to that card within the stack.
     let host = MockHost()
     _ = try await run("""
     on mouseUp
@@ -109,7 +109,27 @@ import Testing
       go card whichSix of stack "DateBook"
     end mouseUp
     """, host: host)
-    #expect(host.destinations.last == .number(3))
+    #expect(host.destinations.last == .stack(name: "DateBook", card: .number(3)))
+}
+
+@Test func goToStackByName() async throws {
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      go to stack "Phone"
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .stack(name: "Phone", card: nil))
+}
+
+@Test func goCardOfStack() async throws {
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      go card 3 of stack "DateBook"
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .stack(name: "DateBook", card: .number(3)))
 }
 
 @Test func goToBareNameIsACardDestination() async throws {

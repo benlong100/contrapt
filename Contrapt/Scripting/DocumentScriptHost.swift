@@ -69,6 +69,7 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onFind: (FindHighlight?) -> Void
     private let onGoHome: () -> Void
     private let onClickPart: (Part) -> Void
+    private let onGoStack: (String, GoDestination?) -> Void
 
     init(
         stack: Binding<Stack>,
@@ -79,7 +80,8 @@ final class DocumentScriptHost: HyperTalkHost {
         onNavigate: @escaping (Int, [ScreenEffect]) -> Void,
         onFind: @escaping (FindHighlight?) -> Void = { _ in },
         onGoHome: @escaping () -> Void = {},
-        onClickPart: @escaping (Part) -> Void = { _ in }
+        onClickPart: @escaping (Part) -> Void = { _ in },
+        onGoStack: @escaping (String, GoDestination?) -> Void = { _, _ in }
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
@@ -90,6 +92,7 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onFind = onFind
         self.onGoHome = onGoHome
         self.onClickPart = onClickPart
+        self.onGoStack = onGoStack
     }
 
     private var stack: Stack { stackBinding.wrappedValue }
@@ -175,6 +178,7 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws {
         if case .home = destination { onGoHome(); return }
+        if case .stack(let name, let card) = destination { onGoStack(name, card); return }
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
         // `go back` returns to the last card the script navigated away from.
@@ -214,8 +218,8 @@ final class DocumentScriptHost: HyperTalkHost {
             target = index
         case .inBackground:
             target = try resolveCardIndex(destination)
-        case .home, .back:
-            return // handled above
+        case .home, .back, .stack:
+            return // handled above / not a same-stack destination
         }
         // Remember where we came from so a later `go back` can return here.
         VisitHistory.shared.ids.append(String(stack.cards[cardIndex].scriptID))
@@ -340,7 +344,7 @@ final class DocumentScriptHost: HyperTalkHost {
             default:
                 throw HostError("That card reference isn't supported within a background.")
             }
-        case .home, .back:
+        case .home, .back, .stack:
             throw HostError("Can't address a field of that card.")
         }
     }

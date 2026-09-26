@@ -793,16 +793,22 @@ struct Parser {
             } else {
                 target = .expression(try parseExpression())
             }
-        } else if consumeWord("stack") || (current.kind != .newline && current.kind != .endOfScript) {
-            // `go [to] stack "X"` or a bare `go [to] "Name"` — a card (or, in
-            // HyperCard, a stack) by name/number. Contrapt has no cross-stack
-            // navigation, so it resolves as a card at run time.
+        } else if consumeWord("stack") {
+            // `go [to] stack "X"` — another stack (opens at its first card).
+            target = .inStack(name: try parseExpression(), card: nil)
+        } else if current.kind != .newline && current.kind != .endOfScript {
+            // A bare `go [to] "Name"` — a card by name/number.
             target = .expression(try parseExpression())
         } else {
             throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
         }
-        // `go <first|last|N> card of background "X"` — scope to a background.
-        if let background = try parseOfBackground() {
+        // `… of stack "X"` — a card within another stack (`go card N of
+        // stack "X"`). Checked before the background/lenient handling.
+        if peekIdentifier() == "of", peekIdentifier(1) == "stack" {
+            advance(); advance() // of stack
+            target = .inStack(name: try parseExpression(), card: target)
+        } else if let background = try parseOfBackground() {
+            // `go <first|last|N> card of background "X"` — scope to a background.
             target = .inBackground(target, background: background)
         } else if peekIdentifier() == "of" {
             // Some other trailing `of …` qualifier we don't model — ignore it.
