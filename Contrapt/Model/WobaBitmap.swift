@@ -163,15 +163,21 @@ enum WobaBitmap {
 
         for cardY in 0..<cardHeight {
             for cardX in 0..<cardWidth {
+                let black = bit(image, imageX, imageY, cardX, cardY)
+                // A black image pixel is always opaque. Otherwise the painted
+                // (white, opaque) region is the mask where present, else the
+                // whole image rect. The mask can cover a different area than
+                // the image (e.g. a small drop-cap image with an unrelated
+                // mask), so it must not gate the image's own black pixels.
                 let opaque: Bool
                 if mask != nil {
-                    opaque = bit(mask, maskX, maskY, cardX, cardY)
+                    opaque = black || bit(mask, maskX, maskY, cardX, cardY)
                 } else {
                     opaque = cardY >= imageRect.top && cardY < imageRect.bottom
                         && cardX >= imageRect.left && cardX < imageRect.right
                 }
                 guard opaque else { continue }
-                let value: UInt8 = bit(image, imageX, imageY, cardX, cardY) ? 0 : 255
+                let value: UInt8 = black ? 0 : 255
                 let p = (cardY * cardWidth + cardX) * 4
                 pixels[p] = value; pixels[p+1] = value; pixels[p+2] = value; pixels[p+3] = 255
             }
