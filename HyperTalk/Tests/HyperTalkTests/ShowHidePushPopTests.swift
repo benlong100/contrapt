@@ -144,6 +144,20 @@ import Testing
     #expect(host.fields["out"] == "Renamed")
 }
 
+@Test func indirectObjectReferenceThroughAVariable() async throws {
+    // dragHCButton receives a descriptor in a variable and drives the part
+    // through it: `set hilite of theButton to not hilite of theButton`.
+    let host = MockHost()
+    host.properties["card button id 34.hilite"] = "false"
+    _ = try await run("""
+    on mouseUp
+      put "cd btn id 34" into theButton
+      set hilite of theButton to not hilite of theButton
+    end mouseUp
+    """, host: host)
+    #expect(host.properties["card button id 34.hilite"] == "true")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""

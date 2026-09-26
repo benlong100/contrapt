@@ -259,6 +259,10 @@ indirect enum ObjectExpr {
     case partByOrdinal(kind: String, domain: HyperTalkObject.PartDomain, ordinal: Ordinal)
     /// `last card`, `middle cd` — a card by a positional keyword.
     case cardByOrdinal(Ordinal)
+    /// A container whose *value* names the object — `set loc of theButton to …`
+    /// where `theButton` holds "cd btn id 34". The value is re-parsed as an
+    /// object descriptor when evaluated (HyperCard's indirect reference).
+    case indirect(Expr)
 }
 
 /// A positional keyword that resolves against a live count: `last`, `middle`,

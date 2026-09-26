@@ -38,6 +38,14 @@ struct Parser {
         return try parser.parseSoleExpression()
     }
 
+    /// Parses the whole source as a single object descriptor — used to resolve
+    /// an indirect reference (`set loc of theButton …` where `theButton` holds
+    /// "cd btn id 34") by re-parsing the container's value at run time.
+    static func parseSoleObject(_ source: String) throws -> ObjectExpr {
+        var parser = Parser(tokens: try Tokenizer.tokenize(source))
+        return try parser.parseSoleObject()
+    }
+
     private mutating func parseLooseStatements() throws -> [Stmt] {
         var statements: [Stmt] = []
         while true {
@@ -55,6 +63,16 @@ struct Parser {
             throw ScriptError(line: current.line, message: "Expected the end of the line here, but found \(describe(current)).")
         }
         return expression
+    }
+
+    private mutating func parseSoleObject() throws -> ObjectExpr {
+        skipNewlines()
+        let object = try parseObjectExpr()
+        skipNewlines()
+        guard current.kind == .endOfScript else {
+            throw ScriptError(line: current.line, message: "Expected the end of the line here, but found \(describe(current)).")
+        }
+        return object
     }
 
     // MARK: - Token access
@@ -1221,6 +1239,10 @@ struct Parser {
             advance() // target
             return .target
         }
+        // A leading `the` before an object is a noise article (`the last cd
+        // btn`, `the moon`); the dispatch words (`me`, `the target`) above are
+        // already handled.
+        _ = consumeWord("the")
         func isPartKind(_ word: String?) -> Bool {
             guard let word else { return false }
             return Self.partKindSynonyms[word] != nil
@@ -1317,6 +1339,13 @@ struct Parser {
             // `menuItem N of menu "X"` — consume and ignore the owning menu.
             if consumeWord("of") { _ = consumeWord("menu"); _ = try? parsePrimary() }
             return .menu(name)
+        }
+        // A bare identifier here is an indirect reference: a container whose
+        // value names the object (`set loc of theButton to …`, where
+        // `theButton` holds "cd btn id 34"). Re-parsed at run time.
+        if let word = peekIdentifier() {
+            advance()
+            return .indirect(.variable(word))
         }
         throw ScriptError(line: line, message: "Expected an object here, like button \"OK\", field \"Name\", card 2, or this card.")
     }

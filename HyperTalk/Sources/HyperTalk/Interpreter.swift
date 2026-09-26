@@ -1161,6 +1161,21 @@ final class Runtime {
         case .cardByOrdinal(let ordinal):
             let total = try hostCall(line: line) { try host.count(.cards) }
             return .card(.number(Self.resolveOrdinal(ordinal, count: total)))
+        case .indirect(let expression):
+            // A container whose value names the object — re-parse it as a
+            // descriptor and resolve that. Guard against a value that's itself
+            // a bare word (which would parse back to `.indirect` forever).
+            let descriptor = try await evaluate(expression, line: line)
+            let parsed: ObjectExpr
+            do {
+                parsed = try Parser.parseSoleObject(descriptor)
+            } catch {
+                throw ScriptError(line: line, message: "Can't understand \"\(descriptor)\" as an object.")
+            }
+            if case .indirect = parsed {
+                throw ScriptError(line: line, message: "Can't understand \"\(descriptor)\" as an object.")
+            }
+            return try await resolveObject(parsed, line: line)
         }
     }
 
