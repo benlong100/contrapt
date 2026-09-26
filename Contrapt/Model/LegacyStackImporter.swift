@@ -104,7 +104,21 @@ enum LegacyStackImporter {
             var background = Background(id: UUID(), name: parsed.name.isEmpty ? "Background \(stack.backgrounds.count + 1)" : parsed.name,
                                         script: parsed.script, parts: [])
             background.scriptID = stack.claimScriptID()
-            background.parts = parsed.parts.filter { $0.type == .button }.map { part(from: $0, in: &stack, iconAsset: iconAsset(iconID: $0.iconID)) }
+            // Buttons live on the background, as do shared-text fields —
+            // background labels (copyright, "Home") whose one value is stored
+            // in the background block. Other fields become per-card copies.
+            background.parts = parsed.parts.compactMap { raw -> Part? in
+                if raw.type == .button {
+                    return part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID))
+                }
+                guard raw.sharedText else { return nil }
+                var fieldPart = part(from: raw, in: &stack)
+                if case .field(var props) = fieldPart.kind {
+                    props.text = parsed.contents[raw.id] ?? ""
+                    fieldPart.kind = .field(props)
+                }
+                return fieldPart
+            }
             background.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
             bgUUIDByID[block.id] = background.id
             stack.backgrounds.append(background)
@@ -120,7 +134,9 @@ enum LegacyStackImporter {
             let parsed = reader.parseObject(block, knownFieldIDs: fieldIDs, knownPartIDs: partIDs)
             let bgID = parsed.ownerBackgroundID
             let backgroundUUID = bgUUIDByID[bgID] ?? stack.backgrounds[0].id
-            let templateFields = (bgInfoByID[bgID]?.parts ?? []).filter { $0.type == .field }
+            // Shared-text fields already live on the background; only per-card
+            // fields are copied onto the card and filled with this card's text.
+            let templateFields = (bgInfoByID[bgID]?.parts ?? []).filter { $0.type == .field && !$0.sharedText }
 
             var card = Card(id: UUID(),
                             name: parsed.name.isEmpty ? "Card \(stack.cards.count + 1)" : parsed.name,
@@ -270,6 +286,10 @@ private extension LegacyStackImporter {
         var showLines: Bool
         /// Field "Lock Text" — display-only, dispatches clicks (flag +0x05, 0x01).
         var lockText: Bool
+        /// Field "Shared Text" — the same text on every card, stored once in
+        /// the background block (flag +0x05, 0x08). Background labels like a
+        /// copyright notice. Imported onto the background, not per-card.
+        var sharedText: Bool
         var iconID: Int
         var visible: Bool
         var textAlign: Int
@@ -545,6 +565,7 @@ private extension LegacyStackImporter {
                            showName: (d[o + 0x0E] & 0x80) != 0,
                            showLines: (d[o + 0x0E] & 0x40) != 0,
                            lockText: (d[o + 5] & 0x01) != 0,
+                           sharedText: (d[o + 5] & 0x08) != 0,
                            iconID: i16(o + 0x12),
                            visible: (d[o + 5] & 0x80) == 0,
                            textAlign: i16(o + 0x14), fontID: i16(o + 0x16),
