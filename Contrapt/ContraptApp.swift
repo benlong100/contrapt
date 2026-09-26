@@ -347,7 +347,13 @@ private struct RootView: View {
             guard case .success(let url) = result else { return }
             switch kind {
             case .contraptStack: openExternal(url)
-            case .legacyStack: pendingLegacyStackURL = url
+            case .legacyStack:
+                // Let the picker finish dismissing before the size dialog —
+                // presenting it in the same update as the dismissal drops it.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.4))
+                    pendingLegacyStackURL = url
+                }
             case .iconApp: HyperCardAppReference.save(url)
             case .none: break
             }
@@ -406,6 +412,9 @@ private struct RootView: View {
     /// Import a chosen legacy stack at the chosen size, then open it over Home.
     private func importLegacy(_ url: URL, presentAtActualSize: Bool) {
         pendingLegacyStackURL = nil
+        // A document-picker URL is sandboxed; claim access before reading it.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let contrapt = try? LegacyStackImporter.importedContraptFile(
             from: url, iconApp: HyperCardAppReference.url(), presentAtActualSize: presentAtActualSize) else { return }
         openExternal(contrapt)
