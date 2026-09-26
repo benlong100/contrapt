@@ -498,12 +498,12 @@ struct ContentView: View {
     /// small enough for the compiler to type-check quickly (especially on iOS,
     /// where the Cards menu keeps the editing group inline).
     @ToolbarContentBuilder private var mainToolbar: some ToolbarContent {
-        #if os(iOS)
-        // Home's Stacks launcher, in the leading slot. (Menu selection here was
-        // broken until browse-mode card gestures stopped monopolizing the
-        // gesture arena — see CardView's .simultaneousGesture note.)
-        if let actions = homeStackActions {
-            ToolbarItem(placement: .topBarLeading) {
+        ToolbarItemGroup(placement: .primaryAction) {
+            #if os(iOS)
+            // Home's Stacks launcher. Kept in .primaryAction (not .topBarLeading)
+            // because a leading toolbar Menu selects its rows but never fires
+            // their actions on iPad; the primary-action group triggers reliably.
+            if let actions = homeStackActions {
                 Menu("Stacks", systemImage: "square.stack") {
                     Button("New Stack", systemImage: "doc.badge.plus", action: actions.newStack)
                     Button("Learn HyperTalk", systemImage: "graduationcap", action: actions.learnHyperTalk)
@@ -513,9 +513,7 @@ struct ContentView: View {
                     Button("Set HyperCard App for Icons…", systemImage: "app.badge", action: actions.setIconApp)
                 }
             }
-        }
-        #endif
-        ToolbarItemGroup(placement: .primaryAction) {
+            #endif
             if isEditing {
                 editingToolbarTools
             }
