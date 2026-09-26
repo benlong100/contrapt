@@ -33,7 +33,14 @@ enum WebsiteExporter {
         if fm.fileExists(atPath: site.path) { try fm.removeItem(at: site) }
         try fm.createDirectory(at: site, withIntermediateDirectories: true)
 
-        try stack.fileData().write(to: site.appendingPathComponent("stack.json"))
+        let json = try stack.fileData()
+        try json.write(to: site.appendingPathComponent("stack.json"))
+        // Also emit the data as a JS global. Opening index.html from a file://
+        // URL blocks fetch() of a sibling file (local-file CORS), so the player
+        // reads window.__STACK__ from a <script> (which loads fine locally) and
+        // only falls back to fetch when the site is served over http.
+        let dataJS = "window.__STACK__ = " + (String(data: json, encoding: .utf8) ?? "null") + ";\n"
+        try Data(dataJS.utf8).write(to: site.appendingPathComponent("stack-data.js"))
 
         let referenced = stack.referencedAssetNames()
         if !referenced.isEmpty {
@@ -110,6 +117,7 @@ extension WebsiteExporter {
         <span id="cardLabel"></span>
         <span id="note">Static preview — scripts don't run yet</span>
       </div>
+      <script src="stack-data.js"></script>
       <script src="player.js"></script>
     </body>
     </html>
@@ -117,7 +125,7 @@ extension WebsiteExporter {
 
     static let playerJS = """
     (async function () {
-      const stack = await (await fetch('stack.json')).json();
+      const stack = window.__STACK__ || await (await fetch('stack.json')).json();
       const bgById = {};
       (stack.backgrounds || []).forEach(b => { bgById[b.id] = b; });
       const W = stack.cardSize.width, H = stack.cardSize.height;
