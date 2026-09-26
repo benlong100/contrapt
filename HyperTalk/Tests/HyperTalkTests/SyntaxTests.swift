@@ -19,6 +19,47 @@ import Testing
     try HyperTalk.check("")
 }
 
+@Test func checkAcceptsThePlotsPieButtonScript() async throws {
+    // The Plots stack's "Pie" button — exercises paint no-ops, arithmetic
+    // chunk indices, `number of … in`, `.02`, and bare-name globals.
+    try HyperTalk.check("""
+    on mouseUp
+      put the userLevel into saveLevel
+      if the userLevel < 3 then set userLevel to 3
+      if the userLevel < 3 then exit mouseUp
+      put "Sample Pie Chart" into field "Title"
+      put frameBottom()-frameHeight()+10 into pieTop
+      put frameLeft()+5 into pieLeft
+      clearScreen
+      reset paint
+      choose oval tool
+      set lineSize to 2
+      set dragSpeed to 0
+      drag from pieLeft,pieTop to pieLeft+10, pieTop+10
+      set centered to false
+      put the number of lines in field "Data" into dataCount
+      repeat with i = 1 to dataCount+1
+        choose line tool
+        drag from 1,2 to 3,4
+        if change > .02 then
+          set pattern to getPattern(i)
+          choose bucket tool
+          click at halfX, halfY
+        end if
+        get line i of field "data"
+        put item (i mod 12)+1 of "2,13,11" into pat
+      end repeat
+      reset paint
+      choose browse tool
+      set userLevel to saveLevel
+    end mouseUp
+
+    function getPattern selector
+      return item (selector mod 12)+1 of "2,13,11,3,14,6,21,17,31,18,4,32"
+    end getPattern
+    """)
+}
+
 @Test func checkReportsProblemsWithLineNumbers() async {
     do {
         try HyperTalk.check("""
