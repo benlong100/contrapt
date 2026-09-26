@@ -39,6 +39,9 @@ struct ContentView: View {
     /// so transparent or hidden parts are findable. Remembered across sessions.
     @AppStorage("revealButtons") private var revealButtons = false
     @AppStorage("revealFields") private var revealFields = false
+    /// HyperCard's background mode (Cmd-B): show only the background layer,
+    /// hiding card-layer parts and paint. Transient per session.
+    @State private var backgroundOnly = false
     /// The inspector's Card/Background/Stack selection — also the layer that
     /// newly-added parts (buttons, fields, images…) go onto.
     @State private var objectScope: ObjectScriptsInspector.Scope = .card
@@ -135,7 +138,9 @@ struct ContentView: View {
                 // container so the outgoing and incoming card layers overlap.
                 ZStack {
                     if isEditing {
-                        cardView(includeBackground: true, includeCard: true)
+                        // Background mode (HyperCard's Cmd-B) hides the card
+                        // layer, leaving the background alone to edit/view.
+                        cardView(includeBackground: true, includeCard: !backgroundOnly)
                     } else {
                         cardView(includeBackground: true, includeCard: false)
                         cardView(includeBackground: false, includeCard: true)
@@ -594,6 +599,22 @@ struct ContentView: View {
         Menu("Reveal", systemImage: "eye") {
             Toggle("Show Buttons", isOn: $revealButtons)
             Toggle("Show Fields", isOn: $revealFields)
+            Divider()
+            // HyperCard's background mode (Cmd-B): see the background alone.
+            Toggle("Background Only", isOn: $backgroundOnly)
+        }
+        .onChange(of: backgroundOnly) { _, hidingCard in
+            if hidingCard {
+                // A card-layer part that's now hidden shouldn't stay selected,
+                // and (as in HyperCard) editing now targets the background.
+                if let id = selectedPartID,
+                   stack.cards[cardIndex].parts.contains(where: { $0.id == id }) {
+                    selectedPartID = nil
+                }
+                objectScope = .background
+            } else {
+                objectScope = .card
+            }
         }
         // Painting is an iPad capability (finger/Pencil); the Mac imports
         // finished art as images instead. See PaintEditor.
