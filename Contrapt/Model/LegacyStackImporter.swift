@@ -206,11 +206,10 @@ enum LegacyStackImporter {
             var field = FieldPart(text: "", placeholder: "", isMultiline: true, format: format)
             field.style = raw.fieldStyle
             field.showLines = raw.showLines
-            // Imported fields are display-only (a read-only reproduction):
-            // locked text renders as static text — no editor scrollbar — and
-            // still dispatches taps to scripts. Unlock per-field in the
-            // inspector to edit. Style 4 is HyperCard's scrolling field.
-            field.lockText = true
+            // Honor the field's real Lock Text flag: display/label fields import
+            // locked (static text that still dispatches taps to scripts), while
+            // input fields import editable — as the stack author intended.
+            field.lockText = raw.lockText
             kind = .field(field)
         }
         var part = Part(id: UUID(), name: raw.name, frame: frame,
@@ -264,6 +263,8 @@ private extension LegacyStackImporter {
         var showName: Bool
         /// Field "Show Lines" — baseline writing rules (flag byte +0x0E, 0x40).
         var showLines: Bool
+        /// Field "Lock Text" — display-only, dispatches clicks (flag +0x05, 0x01).
+        var lockText: Bool
         var iconID: Int
         var visible: Bool
         var textAlign: Int
@@ -499,6 +500,7 @@ private extension LegacyStackImporter {
                            styleByte: Int(d[o + 0x0F]) & 0x0F,
                            showName: (d[o + 0x0E] & 0x80) != 0,
                            showLines: (d[o + 0x0E] & 0x40) != 0,
+                           lockText: (d[o + 5] & 0x01) != 0,
                            iconID: i16(o + 0x12),
                            visible: (d[o + 5] & 0x80) == 0,
                            textAlign: i16(o + 0x14), fontID: i16(o + 0x16),
