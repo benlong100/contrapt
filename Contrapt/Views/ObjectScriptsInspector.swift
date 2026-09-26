@@ -38,6 +38,11 @@ struct ObjectScriptsInspector: View {
             if scope == .card {
                 Section("Card") {
                     TextField("Name", text: $stack.cards[cardIndex].name)
+                    Picker("Background", selection: cardBackgroundBinding) {
+                        ForEach(Array(stack.backgrounds.enumerated()), id: \.element.id) { index, background in
+                            Text(backgroundLabel(background, index: index)).tag(background.id)
+                        }
+                    }
                     Toggle("Card Marked", isOn: $stack.cards[cardIndex].isMarked)
                     Toggle("Don't Search Card", isOn: $stack.cards[cardIndex].dontSearch)
                     Toggle("Can't Delete Card", isOn: $stack.cards[cardIndex].cantDelete)
@@ -106,6 +111,23 @@ struct ObjectScriptsInspector: View {
     private var backgroundIndex: Int? {
         let backgroundID = stack.cards[cardIndex].backgroundID
         return stack.backgrounds.firstIndex { $0.id == backgroundID }
+    }
+
+    /// Reassigns the current card to another existing background. The card
+    /// keeps its own (card-layer) parts; only the shared background changes.
+    private var cardBackgroundBinding: Binding<UUID> {
+        Binding(
+            get: { stack.cards[cardIndex].backgroundID },
+            set: { stack.cards[cardIndex].backgroundID = $0 }
+        )
+    }
+
+    /// A background's picker label: its name (or "Background N") plus how many
+    /// cards share it, so multiple backgrounds are easy to tell apart.
+    private func backgroundLabel(_ background: Background, index: Int) -> String {
+        let name = background.name.isEmpty ? "Background \(index + 1)" : background.name
+        let count = stack.cards.filter { $0.backgroundID == background.id }.count
+        return "\(name)  ·  \(count) card\(count == 1 ? "" : "s")"
     }
 
     /// Shows the preset name when the size matches one, else the dimensions.
