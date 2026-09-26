@@ -2,5 +2,7 @@
 .DS_Store
 xcuserdata/
 
-# Apple HyperCard sample stacks (copyrighted; local test fixtures only)
+# Apple HyperCard sample stacks & apps (copyrighted; local test fixtures only)
 HyperCard Stacks/
+HyperCard 2 Stacks/
+HyperCard apps/
