@@ -530,12 +530,20 @@ private extension LegacyStackImporter {
                 let contentStart = o + 4, contentEnd = o + 4 + length
                 var textStart = contentStart
                 if length >= 2, d[contentStart] & 0x80 != 0 {
-                    let styleBytes = u16(contentStart) & 0x7FFF
-                    textStart = min(contentStart + 2 + styleBytes, contentEnd)
+                    // Styled: a u16 whose low 15 bits are the TOTAL header
+                    // length (the u16 itself plus its style-run bytes); the
+                    // text follows immediately after.
+                    textStart = min(contentStart + (u16(contentStart) & 0x7FFF), contentEnd)
                 } else if d[contentStart] == 0 {
                     textStart = contentStart + 1 // a lone 0 style flag
                 }
-                let text = contentText(from: textStart, to: contentEnd)
+                // The header is already skipped, so take the text verbatim —
+                // keep printable + Mac Roman high bytes (®, —, curly quotes) and
+                // carriage returns; drop only NUL/other control. (No leading
+                // skip, which would eat a leading high byte like ®.)
+                var textBytes: [UInt8] = []
+                for i in textStart..<contentEnd where d[i] == 0x0D || d[i] >= 0x20 { textBytes.append(d[i]) }
+                let text = roman(textBytes)
                 if result[absID] == nil, !text.isEmpty { result[absID] = text }
                 o += 4 + length
                 if o & 1 != 0 { o += 1 } // entries pad to an even boundary
