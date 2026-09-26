@@ -398,9 +398,37 @@ private extension LegacyStackImporter {
         func stackScript(_ block: BlockInfo) -> String {
             for run in textRuns(from: block.offset + 0x30, end: block.offset + block.size)
                 where looksLikeScript(run) {
-                return run
+                return trimToCompleteHandlers(run)
             }
             return ""
+        }
+
+        /// Keep a script only through its last complete top-level handler
+        /// (`on X`/`function X` … matching `end X`), dropping trailing truncated
+        /// handlers and leading orphan fragments. Legacy blocks can hold
+        /// stale/half-overwritten script bytes that bleed into the next block —
+        /// e.g. an unterminated `doMenu "` — which would otherwise fail to
+        /// tokenize. A clean script (banner + whole handlers) is returned as-is.
+        private func trimToCompleteHandlers(_ script: String) -> String {
+            let lines = script.components(separatedBy: "\n")
+            func headWord(_ line: String, _ keyword: String) -> String? {
+                let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
+                guard trimmed == keyword || trimmed.hasPrefix(keyword + " ") else { return nil }
+                return trimmed.dropFirst(keyword.count).drop(while: { $0 == " " })
+                    .split(separator: " ").first.map(String.init)
+            }
+            var open: String?
+            var lastCompleteEnd: Int?
+            for (i, line) in lines.enumerated() {
+                if let name = headWord(line, "on") ?? headWord(line, "function") {
+                    open = name // a new handler; any unclosed one is abandoned
+                } else if let endName = headWord(line, "end"), let o = open, endName == o {
+                    lastCompleteEnd = i; open = nil // matching end closes the handler
+                    // (end if / end repeat / orphan end don't match and are ignored)
+                }
+            }
+            guard let last = lastCompleteEnd else { return "" }
+            return lines[0...last].joined(separator: "\n")
         }
 
         /// Parse a CARD or BKGD block into parts, contents, and script.
@@ -437,7 +465,7 @@ private extension LegacyStackImporter {
         private func nameAndScript(from start: Int, end: Int) -> (name: String, script: String) {
             var name = "", script = ""
             for run in textRuns(from: start, end: end) {
-                if looksLikeScript(run) { script = run; break }
+                if looksLikeScript(run) { script = trimToCompleteHandlers(run); break }
                 if name.isEmpty { name = run }
             }
             return (name, script)
