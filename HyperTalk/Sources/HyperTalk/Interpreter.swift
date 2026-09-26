@@ -599,6 +599,17 @@ final class Runtime {
             setVariable("it", to: await host.answer(prompt, buttons: buttons))
             return .normal
 
+        case .answerFile(let promptExpression, let typeExpression):
+            // Evaluate the operands (for side effects/errors), then simulate a
+            // cancelled file dialog — Contrapt can't present one mid-script.
+            _ = try await evaluate(promptExpression, line: statement.line)
+            if let typeExpression {
+                _ = try await evaluate(typeExpression, line: statement.line)
+            }
+            setVariable("it", to: "")
+            lastResult = "Cancel"
+            return .normal
+
         case .ask(let promptExpression, let initialExpression):
             let prompt = try await evaluate(promptExpression, line: statement.line)
             let initial: String

@@ -20,6 +20,20 @@ import Testing
     #expect(host.answerPrompts == ["Save changes?"])
 }
 
+@Test func answerFileSimulatesCancel() async throws {
+    // The Home stack's selectHCFile: `answer file prompt of type filter`, then
+    // `if (it is empty) or (the result = "Cancel") then exit to HyperCard`.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      put "STAK" into filter
+      answer file "Select the stack to open:" of type filter
+      put it & "/" & the result into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "/Cancel")
+}
+
 @Test func answerDefaultsToFirstButton() async throws {
     let host = MockHost(fields: ["out": ""])
     // No scripted choice → the host returns the first button.

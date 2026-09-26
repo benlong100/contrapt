@@ -58,6 +58,10 @@ indirect enum StmtKind {
     /// `ask <prompt> [with <default>]` — a modal text prompt; the entered
     /// text (empty if cancelled) lands in `it`.
     case ask(Expr, initialAnswer: Expr?)
+    /// `answer file <prompt> [of type <filter>]` — a file-open dialog. Contrapt
+    /// can't present one mid-script, so it simulates a cancel (empty `it`, the
+    /// result "Cancel"), which stacks treat as "no file chosen".
+    case answerFile(Expr, type: Expr?)
     /// `visual [effect] <effect> [<direction>] [<speed>]` — queues a screen
     /// transition for the next `go`.
     case visualEffect(ScreenEffect)

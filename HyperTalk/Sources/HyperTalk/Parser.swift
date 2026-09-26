@@ -283,6 +283,20 @@ struct Parser {
             return Stmt(kind: .doCommand(expression), line: line)
         case "answer":
             advance()
+            // `answer file <prompt> [of type <filter>]` — a file-open dialog.
+            if consumeWord("file") {
+                let savedSuppress = suppressBarePropertyOf
+                suppressBarePropertyOf = true // so `prompt of type …` doesn't read as a property
+                let prompt = try parseExpression()
+                suppressBarePropertyOf = savedSuppress
+                var type: Expr?
+                if consumeWord("of") {
+                    _ = consumeWord("type")
+                    type = try parseExpression()
+                }
+                try expectNewline()
+                return Stmt(kind: .answerFile(prompt, type: type), line: line)
+            }
             let prompt = try parseExpression()
             var buttons: [Expr] = []
             if consumeWord("with") {
