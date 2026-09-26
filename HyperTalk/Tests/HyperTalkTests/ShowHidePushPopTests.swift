@@ -143,6 +143,22 @@ import Testing
     #expect(host.destinations.last == .named("Phone"))
 }
 
+@Test func bareDoMenuAndNumberOfLinesIn() async throws {
+    // `doMenu select all` (bare multi-word) parses; `the number of lines in X`
+    // accepts `in` for `of`.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      doMenu select all
+      doMenu clear picture
+      put "a" & return & "b" & return & "c" into what
+      put the number of lines in what into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "3")
+    #expect(host.performedMenu.contains("select all"))
+}
+
 @Test func paintToolCommandsAndGlobalsAreNoOps() async throws {
     // A paint-tool script must parse and run without erroring, even though
     // Contrapt doesn't script painting.

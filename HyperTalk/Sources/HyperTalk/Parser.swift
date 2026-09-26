@@ -408,9 +408,7 @@ struct Parser {
             return Stmt(kind: .clickAt(h, v), line: line)
         case "domenu":
             advance()
-            let item = try parseExpression()
-            try expectNewline()
-            return Stmt(kind: .doMenu(item), line: line)
+            return Stmt(kind: .doMenu(try parseMenuItem()), line: line)
         case "sort":
             advance()
             return try parseSort(line: line)
@@ -689,6 +687,29 @@ struct Parser {
         }
         try expectNewline()
         return Stmt(kind: .find(mode, text: text, inField: field), line: line)
+    }
+
+    /// A `doMenu` item: a quoted string or single variable is an expression
+    /// (`doMenu "New Card"`, `doMenu menuItem`); bare multi-word text is the
+    /// literal menu name (`doMenu Select All`, `doMenu clear picture`).
+    private mutating func parseMenuItem() throws -> Expr {
+        if case .string = current.kind {
+            let item = try parseExpression()
+            try expectNewline()
+            return item
+        }
+        var words: [String] = []
+        while current.kind != .newline, current.kind != .endOfScript {
+            if let word = peekIdentifier() { words.append(word) }
+            else if case .string(let text) = current.kind { words.append(text) }
+            else if case .number(let value) = current.kind { words.append(Value.string(from: value)) }
+            advance()
+        }
+        try expectNewline()
+        // A lone bare word is a variable holding the item; multiple words are
+        // the literal menu name.
+        if words.count == 1 { return .variable(words[0]) }
+        return .stringLiteral(words.joined(separator: " "))
     }
 
     /// `sort [this stack] [marked] [cards] [of …] [ascending|descending]
@@ -1419,7 +1440,7 @@ struct Parser {
                 advance() // number
                 advance() // of
                 advance() // kind
-                guard consumeWord("of") else {
+                guard consumeWord("of") || consumeWord("in") else {
                     throw ScriptError(line: line, message: "Expected 'of' after 'the number of \(kindWord)'.")
                 }
                 return .chunkCount(kind, try parsePrimary())
