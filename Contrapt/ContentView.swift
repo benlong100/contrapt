@@ -131,19 +131,20 @@ struct ContentView: View {
             if document.stack.cards.isEmpty {
                 ContentUnavailableView("No Cards", systemImage: "rectangle.on.rectangle.slash")
             } else {
-                // Edit mode is a single card view (no transitions). In browse,
-                // the background is drawn statically and only the card layer
-                // carries the `visual effect` transition — so a shared
-                // background stays put, as in HyperCard. The ZStack is a stable
-                // container so the outgoing and incoming card layers overlap.
+                // Browse transitions animate the *whole* card (background and
+                // card layers together), as HyperCard does — so a card's paint
+                // and cover buttons that mask shared background parts stay in
+                // place throughout the effect, in both the outgoing and incoming
+                // frames. (An earlier split drew a static background and wiped
+                // only the card layer, which briefly exposed masked-out
+                // background buttons.) The ZStack is a stable overlap container.
                 ZStack {
                     if isEditing {
                         // Background mode (HyperCard's Cmd-B) hides the card
                         // layer, leaving the background alone to edit/view.
                         cardView(includeBackground: true, includeCard: !backgroundOnly)
                     } else {
-                        cardView(includeBackground: true, includeCard: false)
-                        cardView(includeBackground: false, includeCard: true)
+                        cardView(includeBackground: true, includeCard: true)
                             .id(cardIndex)
                             .transition(cardTransition?.transition ?? .identity)
                     }
