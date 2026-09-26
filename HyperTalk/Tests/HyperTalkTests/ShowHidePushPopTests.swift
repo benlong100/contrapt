@@ -185,6 +185,19 @@ import Testing
     #expect(host.fields["out"] == "Phone")
 }
 
+@Test func putIntoMenuIsANoOp() async throws {
+    // createTheMenus builds the Home menu:
+    // `put homeMenuItems() into menu "Home" with menuMsgs homeMenuMsgs()`.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      put "New,Open,-,Quit" into menu "Home" with menuMsgs "a,b,c,d"
+      put "ok" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ok")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""

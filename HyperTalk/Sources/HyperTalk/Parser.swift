@@ -547,6 +547,14 @@ struct Parser {
             return Stmt(kind: .put(value, .into, nil), line: line)
         }
 
+        // `put … into menu "X" [with menuMsgs …]` populates a HyperCard menu,
+        // which Contrapt doesn't model — accept and ignore the whole line.
+        if let w = peekIdentifier(), w == "menu" || w == "menuitem" || w == "menubar" {
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        }
+
         let container = try parseContainer(line: line)
         try expectNewline()
         return Stmt(kind: .put(value, mode, container), line: line)
