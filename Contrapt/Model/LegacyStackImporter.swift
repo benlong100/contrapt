@@ -263,9 +263,11 @@ enum LegacyStackImporter {
         format.align = raw.textAlign == 1 ? .center : (raw.textAlign < 0 ? .right : .left)
         // Classic Mac font ids → Contrapt's font families (best effort).
         switch raw.fontID {
-        case 2, 20: format.fontDesign = .serif       // New York, Times
         case 4, 22: format.fontDesign = .monospaced  // Monaco, Courier
-        default: format.fontDesign = .standard       // Geneva, Chicago, Helvetica…
+        case 2, 14, 16, 20, 34:
+            // New York, Bookman, Palatino, Times, New Century Schoolbook.
+            format.fontDesign = .serif
+        default: format.fontDesign = .standard       // Geneva, Chicago, Helvetica, Avant Garde…
         }
         if format.fontDesign != .monospaced {
             format.size *= proportionalFontScale
