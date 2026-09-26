@@ -31,6 +31,10 @@ struct ContentView: View {
     /// The field `find` last matched, boxed on the card until the next edit.
     @State private var findHighlight: FindHighlight?
     @State private var isInspectorPresented = false
+    /// Edit-mode reveal overlays — HyperCard's button/field tool highlighting,
+    /// so transparent or hidden parts are findable. Remembered across sessions.
+    @AppStorage("revealButtons") private var revealButtons = false
+    @AppStorage("revealFields") private var revealFields = false
     @State private var messageBoxText: String?
     @State private var isMessageBoxVisible = false
     @State private var scriptErrorText: String?
@@ -95,6 +99,8 @@ struct ContentView: View {
             isSnappingEnabled: isSnappingEnabled,
             selectedPartID: $selectedPartID,
             findHighlightPartID: findHighlight?.partID,
+            revealButtons: revealButtons,
+            revealFields: revealFields,
             includeBackground: includeBackground,
             includeCard: includeCard,
             onMouseMessage: sendMouseMessage,
@@ -544,6 +550,12 @@ struct ContentView: View {
             Button("Send to Back", systemImage: "arrow.down.to.line") { arrangeSelectedPart(.back) }
         }
         .disabled(selectedPartID == nil)
+        // HyperCard's button/field tool highlighting: outline all buttons or
+        // fields so transparent and hidden ones are findable while editing.
+        Menu("Reveal", systemImage: "eye") {
+            Toggle("Show Buttons", isOn: $revealButtons)
+            Toggle("Show Fields", isOn: $revealFields)
+        }
         Menu("Paint", systemImage: "paintbrush") {
             Button("Paint on Card", systemImage: "rectangle") {
                 openPaintEditor(target: .card)

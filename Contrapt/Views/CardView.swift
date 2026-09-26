@@ -17,6 +17,9 @@ struct CardView: View {
     @Binding var selectedPartID: UUID?
     /// The field `find` last matched, boxed on the card (browse mode).
     var findHighlightPartID: UUID? = nil
+    /// Edit-mode reveal overlays (HyperCard's button/field tool highlighting).
+    var revealButtons = false
+    var revealFields = false
     /// Which layers to draw. Splitting them lets a card-transition animate the
     /// card layer over a static background (default: both, the whole card).
     var includeBackground = true
@@ -143,6 +146,8 @@ struct CardView: View {
                         isSelected: selectedPartID == part.id,
                         snap: snapContext,
                         guides: $guides,
+                        revealButtons: revealButtons,
+                        revealFields: revealFields,
                         onSelect: { selectedPartID = part.id },
                         onOpenInspector: onOpenInspector
                     )
@@ -290,8 +295,26 @@ private struct EditablePart: View {
     let isSelected: Bool
     let snap: SnapContext
     @Binding var guides: AlignmentGuides
+    var revealButtons = false
+    var revealFields = false
     var onSelect: () -> Void
     var onOpenInspector: () -> Void
+
+    /// Whether this part's kind is being revealed (button/field tool
+    /// highlighting), so transparent or hidden parts show their bounds.
+    private var isRevealed: Bool {
+        switch part.kind {
+        case .button: return revealButtons
+        case .field: return revealFields
+        default: return false
+        }
+    }
+
+    /// A distinct tint per kind, echoing HyperCard's separate tools.
+    private var revealColor: Color {
+        if case .button = part.kind { return .blue }
+        return .green
+    }
 
     @State private var frameAtGestureStart: PartFrame?
 
@@ -307,7 +330,18 @@ private struct EditablePart: View {
             }
             .onTapGesture { onSelect() }
             .gesture(moveGesture)
+            .background {
+                // Reveal fill behind the part, so a transparent/empty one
+                // still shows where it is.
+                if isRevealed {
+                    revealColor.opacity(0.12)
+                }
+            }
             .overlay {
+                if isRevealed, !isSelected {
+                    Rectangle()
+                        .stroke(revealColor.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                }
                 if isSelected {
                     Rectangle()
                         .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 3]))
