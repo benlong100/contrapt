@@ -24,10 +24,13 @@ enum WobaBitmap {
     /// Decodes a BMAP block into a card-sized PNG (black paint on transparent),
     /// or nil if there's no image data. `cardSize` is the whole card; the
     /// bitmap is composited at its bounding-rect offset.
-    static func paintPNG(block: [UInt8], at blockOffset: Int, cardWidth: Int, cardHeight: Int) -> Data? {
+    /// `headerDelta` shifts every header field: HyperCard 2.x (STAK format
+    /// version ≥ 9) inserts 4 bytes into block headers, so the whole BMAP
+    /// header — rects and data lengths alike — moves by +4. 1.x passes 0.
+    static func paintPNG(block: [UInt8], at blockOffset: Int, cardWidth: Int, cardHeight: Int, headerDelta: Int = 0) -> Data? {
         func u32(_ o: Int) -> Int { Int((UInt32(block[o]) << 24) | (UInt32(block[o+1]) << 16) | (UInt32(block[o+2]) << 8) | UInt32(block[o+3])) }
         func i16(_ o: Int) -> Int { Int(Int16(bitPattern: UInt16((UInt16(block[o]) << 8) | UInt16(block[o+1])))) }
-        let base = blockOffset
+        let base = blockOffset + headerDelta
         guard base + 0x3C <= block.count else { return nil }
         let imageLen = u32(base + 0x38)
         guard imageLen > 0 else { return nil }

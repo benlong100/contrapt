@@ -38,10 +38,13 @@ enum LegacyStackImporter {
     /// `presentAtActualSize` opens the card at its true point size (1:1, small,
     /// like classic HyperCard) rather than scaled to fill the window.
     static func stack(from data: Data, name: String, iconFork: Data? = nil, presentAtActualSize: Bool = false) throws -> Imported {
-        let reader = Reader(data)
+        var reader = Reader(data)
         guard reader.tag(at: 0) == "STAK" else {
             throw ImportError(message: "This doesn't look like a HyperCard stack (no STAK header). If it came as a .hqx or .sit, unpack it first.")
         }
+        // HyperCard 2.x block headers carry 4 extra bytes; shift the fixed
+        // offsets so bitmap ids, owner-background ids, and WOBA art all read.
+        reader.headerDelta = reader.formatVersion >= 9 ? 4 : 0
         let blocks = reader.walkBlocks()
         let cardWidth = 512, cardHeight = 342 // HC 1.x screen
         var assets: [String: Data] = [:]
@@ -311,7 +314,15 @@ private extension LegacyStackImporter {
 
     struct Reader {
         let d: [UInt8]
+        /// HyperCard 2.x (STAK format version ≥ 9) inserts 4 bytes into every
+        /// CARD/BKGD/BMAP block header, shifting the bitmap id, owner-background
+        /// id, and all WOBA header fields by +4. 1.x leaves this 0.
+        var headerDelta = 0
         init(_ data: Data) { d = [UInt8](data) }
+
+        /// STAK block sits at offset 0; +0x10 is the format version (8 = 1.2.x,
+        /// 9 = 2.0, 10 = 2.2+). Version ≥ 9 uses the shifted block layout.
+        var formatVersion: Int { u32(0x10) }
 
         func u32(_ o: Int) -> Int { Int((UInt32(d[o]) << 24) | (UInt32(d[o+1]) << 16) | (UInt32(d[o+2]) << 8) | UInt32(d[o+3])) }
         func u16(_ o: Int) -> Int { Int((UInt16(d[o]) << 8) | UInt16(d[o+1])) }
@@ -365,8 +376,8 @@ private extension LegacyStackImporter {
         /// keyed by the background's field ids).
         func parseObject(_ block: BlockInfo, knownFieldIDs: Set<Int>) -> ParsedObject {
             let base = block.offset, end = block.offset + block.size
-            let ownerBackground = block.type == "CARD" ? u32(base + 0x20) : block.id
-            let bitmapID = u32(base + 0x0C) // CARD/BKGD both store their BMAP id here
+            let ownerBackground = block.type == "CARD" ? u32(base + 0x20 + headerDelta) : block.id
+            let bitmapID = u32(base + 0x0C + headerDelta) // CARD/BKGD both store their BMAP id here
             let parts = parseParts(base: base, end: end)
             let afterParts = parts.last?.recordEnd ?? (base + 0x24)
             let ownFieldIDs = Set(parts.map(\.part).filter { $0.type == .field }.map(\.id))
@@ -394,7 +405,7 @@ private extension LegacyStackImporter {
 
         /// The card-sized paint PNG for a BMAP block, or nil if it has no image.
         func bmapPaintPNG(_ block: BlockInfo, cardWidth: Int, cardHeight: Int) -> Data? {
-            WobaBitmap.paintPNG(block: d, at: block.offset, cardWidth: cardWidth, cardHeight: cardHeight)
+            WobaBitmap.paintPNG(block: d, at: block.offset, cardWidth: cardWidth, cardHeight: cardHeight, headerDelta: headerDelta)
         }
 
         /// Parse the field-content section: `[u16 sectionSize]` followed by a
