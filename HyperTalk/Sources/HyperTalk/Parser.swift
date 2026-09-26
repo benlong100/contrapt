@@ -808,7 +808,7 @@ struct Parser {
         let ignorable = ["menubar", "menu", "titlebar", "message", "msg", "tool",
                          "pattern", "patterns", "picture", "pict", "background",
                          "card", "bkgnd", "bg", "all", "cards", "window", "windows",
-                         "groups", "scroll"]
+                         "groups", "scroll", "variable"]
         if let first = peekIdentifier(), ignorable.contains(first),
            !isPartReference() {
             while current.kind != .newline, current.kind != .endOfScript { advance() }

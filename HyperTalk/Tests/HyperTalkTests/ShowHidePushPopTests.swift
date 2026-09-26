@@ -39,6 +39,8 @@ import Testing
       hide menuBar
       show message box
       hide card picture
+      show message watcher
+      show variable watcher
     end mouseUp
     """)
 }
