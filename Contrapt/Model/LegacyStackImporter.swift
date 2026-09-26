@@ -561,23 +561,35 @@ private extension LegacyStackImporter {
 
         private struct PlacedPart { let part: RawPart; let recordEnd: Int }
 
-        /// Find and parse the part-record chain. Scans for the first offset
-        /// that begins a run of ≥1 plausible part records (avoids depending on
-        /// per-block-type header sizes, which differ between CARD and BKGD).
+        /// Find and parse the part-record chain, avoiding a dependency on
+        /// per-block-type header sizes (which differ between CARD and BKGD).
+        /// A naive "first plausible record" scan can latch onto a false
+        /// positive in the header (e.g. a bogus id-0 record) and stop after one
+        /// part; the real chain then reads as content/name garbage. So measure
+        /// the chain length from every candidate start and keep the longest —
+        /// false starts and mid-chain starts are always shorter than the true
+        /// beginning.
         private func parseParts(base: Int, end: Int) -> [PlacedPart] {
-            for start in stride(from: base + 0x20, to: base + 0x60, by: 2) where start + 0x20 < end {
-                if isPart(start, end: end) {
-                    var parts: [PlacedPart] = []
-                    var o = start
-                    while o + 0x1E < end, isPart(o, end: end) {
-                        let size = u16(o)
-                        parts.append(PlacedPart(part: readPart(o), recordEnd: o + size))
-                        o += size
-                    }
-                    if !parts.isEmpty { return parts }
-                }
+            func chainLength(from start: Int) -> Int {
+                var o = start, count = 0
+                while o + 0x1E < end, isPart(o, end: end) { count += 1; o += u16(o) }
+                return count
             }
-            return []
+            var bestStart = -1, bestCount = 0
+            for start in stride(from: base + 0x20, to: base + 0x60, by: 2) where start + 0x20 < end {
+                guard isPart(start, end: end) else { continue }
+                let count = chainLength(from: start)
+                if count > bestCount { bestCount = count; bestStart = start }
+            }
+            guard bestStart >= 0 else { return [] }
+            var parts: [PlacedPart] = []
+            var o = bestStart
+            while o + 0x1E < end, isPart(o, end: end) {
+                let size = u16(o)
+                parts.append(PlacedPart(part: readPart(o), recordEnd: o + size))
+                o += size
+            }
+            return parts
         }
 
         /// A plausible part record: sane size, a button/field type byte, and a
