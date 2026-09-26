@@ -9,6 +9,9 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 import HyperTalk
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// The document view. Browse mode shows the current card with live parts;
 /// button taps dispatch mouseUp through the interpreter. Edit mode makes
@@ -50,6 +53,12 @@ struct ContentView: View {
     @State private var scriptErrorText: String?
     @State private var undoFlushTask: Task<Void, Never>?
     @State private var isPhotoPickerPresented = false
+    #if os(iOS)
+    /// Export-as-website (iOS): the size prompt, then the generated .zip to
+    /// hand to the share sheet.
+    @State private var isExportSizeDialogPresented = false
+    @State private var exportedWebsite: ExportedWebsite?
+    #endif
     @State private var selectedPhoto: PhotosPickerItem?
     #if !os(macOS)
     /// Keyboard focus for the card area, so the Delete key can remove the
@@ -218,6 +227,16 @@ struct ContentView: View {
             ) { finished in
                 savePaint(finished)
             }
+        }
+        .confirmationDialog("Website Size", isPresented: $isExportSizeDialogPresented, titleVisibility: .visible) {
+            Button("Original Size") { exportWebsite(actualSize: true) }
+            Button("Scaled to Fit") { exportWebsite(actualSize: false) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Show the card at its original size, or scaled to fill the browser window?")
+        }
+        .sheet(item: $exportedWebsite) { export in
+            ShareSheet(items: [export.url])
         }
         #endif
         .onChange(of: selectedPhoto) { _, item in
@@ -500,6 +519,13 @@ struct ContentView: View {
                     Label("Share Stack", systemImage: "square.and.arrow.up")
                 }
             }
+            #if os(iOS)
+            // macOS exports from File ▸ Export as Website…; iOS has no menu bar,
+            // so it lives in the toolbar and shares the site as a .zip.
+            Button("Export as Website", systemImage: "globe") {
+                isExportSizeDialogPresented = true
+            }
+            #endif
             Button("Message Box", systemImage: "text.and.command.macwindow") {
                 isMessageBoxVisible.toggle()
             }
@@ -952,6 +978,20 @@ struct ContentView: View {
             updated.backgrounds[backgroundIndex].paintImageAsset = imageName
         }
         stack.wrappedValue = updated
+    }
+
+    /// Builds the static-website .zip and hands it to the share sheet.
+    private func exportWebsite(actualSize: Bool) {
+        do {
+            let data = try WebsiteExporter.zipData(stack: document.stack, assets: document.assets, actualSize: actualSize)
+            let name = WebsiteExporter.folderName(for: document.stack)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".zip")
+            try? FileManager.default.removeItem(at: url)
+            try data.write(to: url)
+            exportedWebsite = ExportedWebsite(url: url)
+        } catch {
+            // Best-effort: a failed export simply presents nothing.
+        }
     }
     #endif
 
@@ -1478,6 +1518,25 @@ struct WebsiteExport {
 struct WebsiteExportKey: FocusedValueKey {
     typealias Value = WebsiteExport
 }
+
+#if os(iOS)
+/// A generated website .zip on disk, presented via the iOS share sheet.
+/// Identifiable so `.sheet(item:)` re-presents for each fresh export.
+struct ExportedWebsite: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// Thin wrapper around `UIActivityViewController` so an exported .zip can be
+/// shared or saved to Files from the iOS toolbar.
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif
 
 extension FocusedValues {
     var cardNavigation: CardNavigation? {

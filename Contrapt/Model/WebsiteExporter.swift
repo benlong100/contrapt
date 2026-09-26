@@ -21,43 +21,56 @@ import Foundation
 enum WebsiteExporter {
     struct ExportError: LocalizedError { let message: String; var errorDescription: String? { message } }
 
-    /// Writes a static-website folder for `stack` into `parentDirectory`,
-    /// returning the created site folder. `assets` are the document's media
-    /// (image/paint PNGs); only those the stack still references are written.
-    /// `actualSize` bakes the player's display mode: the card at its true point
-    /// size (1:1, scroll if larger than the window) vs. scaled to fill.
-    @discardableResult
-    static func export(stack: Stack, assets: [String: Data], into parentDirectory: URL, actualSize: Bool = false) throws -> URL {
-        let fm = FileManager.default
-        let folderName = sanitizedFolderName(stack.name.isEmpty ? "Stack" : stack.name) + " Website"
-        let site = parentDirectory.appendingPathComponent(folderName, isDirectory: true)
-        // Fresh folder each export so stale cards/assets don't linger.
-        if fm.fileExists(atPath: site.path) { try fm.removeItem(at: site) }
-        try fm.createDirectory(at: site, withIntermediateDirectories: true)
-
+    /// The site's files as a path→bytes map: `index.html`, `player.js`,
+    /// `stack.json`, `stack-data.js`, and `assets/<name>` for each referenced
+    /// asset. Shared by the macOS folder export and the iOS zip. `actualSize`
+    /// bakes the player's display mode (card at true size vs. scaled to fill).
+    static func siteEntries(stack: Stack, assets: [String: Data], actualSize: Bool) throws -> [String: Data] {
+        var entries: [String: Data] = [:]
         let json = try stack.fileData()
-        try json.write(to: site.appendingPathComponent("stack.json"))
+        entries["stack.json"] = json
         // Also emit the data as a JS global. Opening index.html from a file://
         // URL blocks fetch() of a sibling file (local-file CORS), so the player
         // reads window.__STACK__ from a <script> (which loads fine locally) and
         // only falls back to fetch when the site is served over http.
         let dataJS = "window.__STACK__ = " + (String(data: json, encoding: .utf8) ?? "null") + ";\n"
             + "window.__ACTUAL_SIZE__ = " + (actualSize ? "true" : "false") + ";\n"
-        try Data(dataJS.utf8).write(to: site.appendingPathComponent("stack-data.js"))
-
-        let referenced = stack.referencedAssetNames()
-        if !referenced.isEmpty {
-            let assetsDir = site.appendingPathComponent("assets", isDirectory: true)
-            try fm.createDirectory(at: assetsDir, withIntermediateDirectories: true)
-            for name in referenced {
-                guard let data = assets[name] else { continue }
-                try data.write(to: assetsDir.appendingPathComponent(name))
-            }
+        entries["stack-data.js"] = Data(dataJS.utf8)
+        entries["index.html"] = Data(indexHTML.utf8)
+        entries["player.js"] = Data(playerJS.utf8)
+        for name in stack.referencedAssetNames() {
+            guard let data = assets[name] else { continue }
+            entries["assets/\(name)"] = data
         }
+        return entries
+    }
 
-        try Data(indexHTML.utf8).write(to: site.appendingPathComponent("index.html"))
-        try Data(playerJS.utf8).write(to: site.appendingPathComponent("player.js"))
+    /// A filesystem-safe base name for the exported site (no path separators).
+    static func folderName(for stack: Stack) -> String {
+        sanitizedFolderName(stack.name.isEmpty ? "Stack" : stack.name) + " Website"
+    }
+
+    /// Writes a static-website folder for `stack` into `parentDirectory`
+    /// (macOS), returning the created site folder.
+    @discardableResult
+    static func export(stack: Stack, assets: [String: Data], into parentDirectory: URL, actualSize: Bool = false) throws -> URL {
+        let fm = FileManager.default
+        let site = parentDirectory.appendingPathComponent(folderName(for: stack), isDirectory: true)
+        // Fresh folder each export so stale cards/assets don't linger.
+        if fm.fileExists(atPath: site.path) { try fm.removeItem(at: site) }
+        try fm.createDirectory(at: site, withIntermediateDirectories: true)
+        for (path, data) in try siteEntries(stack: stack, assets: assets, actualSize: actualSize) {
+            let dest = site.appendingPathComponent(path)
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: dest)
+        }
         return site
+    }
+
+    /// The site packaged as a `.zip` (store-only), for platforms without a
+    /// folder picker (iOS) — the user unzips and opens `index.html`.
+    static func zipData(stack: Stack, assets: [String: Data], actualSize: Bool = false) throws -> Data {
+        ZipArchive.archive(try siteEntries(stack: stack, assets: assets, actualSize: actualSize))
     }
 
     /// A filesystem-safe folder name (drop path separators and colons).
