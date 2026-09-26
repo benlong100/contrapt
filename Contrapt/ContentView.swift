@@ -53,10 +53,6 @@ struct ContentView: View {
     @State private var scriptErrorText: String?
     @State private var undoFlushTask: Task<Void, Never>?
     @State private var isPhotoPickerPresented = false
-    #if os(iOS)
-    /// Export-as-website (iOS): the generated .zip to hand to the share sheet.
-    @State private var exportedWebsite: ExportedWebsite?
-    #endif
     @State private var selectedPhoto: PhotosPickerItem?
     #if !os(macOS)
     /// Keyboard focus for the card area, so the Delete key can remove the
@@ -225,9 +221,6 @@ struct ContentView: View {
             ) { finished in
                 savePaint(finished)
             }
-        }
-        .sheet(item: $exportedWebsite) { export in
-            ShareSheet(items: [export.url])
         }
         #endif
         .onChange(of: selectedPhoto) { _, item in
@@ -975,7 +968,10 @@ struct ContentView: View {
         stack.wrappedValue = updated
     }
 
-    /// Builds the static-website .zip and hands it to the share sheet.
+    /// Builds the static-website .zip and hands it to the system share sheet.
+    /// Presented directly through UIKit (not a SwiftUI `.sheet`) so it doesn't
+    /// stack another presentation onto the Home scene, which collides with the
+    /// Stacks toolbar menu's popover on iPad.
     private func exportWebsite(actualSize: Bool) {
         do {
             let data = try WebsiteExporter.zipData(stack: document.stack, assets: document.assets, actualSize: actualSize)
@@ -983,10 +979,28 @@ struct ContentView: View {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".zip")
             try? FileManager.default.removeItem(at: url)
             try data.write(to: url)
-            exportedWebsite = ExportedWebsite(url: url)
+            presentShareSheet(for: url)
         } catch {
             // Best-effort: a failed export simply presents nothing.
         }
+    }
+
+    /// Presents a `UIActivityViewController` for `url` from the topmost view
+    /// controller, anchoring the popover at screen center on iPad.
+    private func presentShareSheet(for url: URL) {
+        guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive })
+                ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first,
+              var top = window.rootViewController else { return }
+        while let presented = top.presentedViewController { top = presented }
+        let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let popover = activity.popoverPresentationController {
+            popover.sourceView = top.view
+            popover.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+            popover.permittedArrowDirections = []
+        }
+        top.present(activity, animated: true)
     }
     #endif
 
@@ -1514,24 +1528,6 @@ struct WebsiteExportKey: FocusedValueKey {
     typealias Value = WebsiteExport
 }
 
-#if os(iOS)
-/// A generated website .zip on disk, presented via the iOS share sheet.
-/// Identifiable so `.sheet(item:)` re-presents for each fresh export.
-struct ExportedWebsite: Identifiable {
-    let id = UUID()
-    let url: URL
-}
-
-/// Thin wrapper around `UIActivityViewController` so an exported .zip can be
-/// shared or saved to Files from the iOS toolbar.
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
-}
-#endif
 
 extension FocusedValues {
     var cardNavigation: CardNavigation? {
