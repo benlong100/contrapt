@@ -53,8 +53,11 @@ struct ObjectScriptsInspector: View {
             if scope == .stack {
                 Section {
                     TextField("Name", text: $stack.name)
-                    LabeledContent("Cards", value: "\(stack.cards.count)")
-                    LabeledContent("Backgrounds", value: "\(stack.backgrounds.count)")
+                    HStack {
+                        LabeledContent("Cards", value: "\(stack.cards.count)")
+                        Spacer()
+                        LabeledContent("Backgrounds", value: "\(stack.backgrounds.count)")
+                    }
                     Menu {
                         ForEach(CardSizePreset.all) { preset in
                             Button("\(preset.name)  ·  \(Int(preset.size.width)) × \(Int(preset.size.height))") {
