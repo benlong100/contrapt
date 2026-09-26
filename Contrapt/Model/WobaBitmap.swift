@@ -21,9 +21,12 @@ import ImageIO
 import UniformTypeIdentifiers
 
 enum WobaBitmap {
-    /// Decodes a BMAP block into a card-sized PNG (black paint on transparent),
-    /// or nil if there's no image data. `cardSize` is the whole card; the
-    /// bitmap is composited at its bounding-rect offset.
+    /// Decodes a BMAP block into a card-sized PNG. Paint is *opaque*, as in
+    /// HyperCard: within the painted region, an image bit sets black, a clear
+    /// bit sets white (a solid pixel that covers whatever's behind — that white
+    /// is how a card hides background parts). The painted region is the mask
+    /// plane when present, otherwise the whole image rect; outside it, the
+    /// pixel is transparent so the background shows.
     /// `headerDelta` shifts every header field: HyperCard 2.x (STAK format
     /// version ≥ 9) inserts 4 bytes into block headers, so the whole BMAP
     /// header — rects and data lengths alike — moves by +4. 1.x passes 0.
@@ -32,17 +35,25 @@ enum WobaBitmap {
         func i16(_ o: Int) -> Int { Int(Int16(bitPattern: UInt16((UInt16(block[o]) << 8) | UInt16(block[o+1])))) }
         let base = blockOffset + headerDelta
         guard base + 0x3C <= block.count else { return nil }
-        let imageLen = u32(base + 0x38)
-        guard imageLen > 0 else { return nil }
-        // Image bounding rect at +0x24; mask 0x1C; card rect 0x14.
-        let top = i16(base + 0x24), left = i16(base + 0x26)
-        let bottom = i16(base + 0x28), right = i16(base + 0x2A)
         let maskLen = u32(base + 0x34)
-        let dataStart = base + 0x3C + maskLen
-        guard dataStart + imageLen <= block.count else { return nil }
-        let plane = decode(Array(block[dataStart..<dataStart + imageLen]), top: top, left: left, bottom: bottom, right: right)
-        guard plane.rowBytes > 0, plane.height > 0 else { return nil }
-        return renderPNG(plane: plane, offsetX: left & ~31, offsetY: top, cardWidth: cardWidth, cardHeight: cardHeight)
+        let imageLen = u32(base + 0x38)
+        guard maskLen > 0 || imageLen > 0 else { return nil }
+        // Mask bounding rect at +0x1C, image bounding rect at +0x24.
+        let mTop = i16(base + 0x1C), mLeft = i16(base + 0x1E), mBottom = i16(base + 0x20), mRight = i16(base + 0x22)
+        let iTop = i16(base + 0x24), iLeft = i16(base + 0x26), iBottom = i16(base + 0x28), iRight = i16(base + 0x2A)
+        let maskStart = base + 0x3C
+        let imageStart = base + 0x3C + maskLen
+        guard imageStart + imageLen <= block.count else { return nil }
+        let image = imageLen > 0
+            ? decode(Array(block[imageStart..<imageStart + imageLen]), top: iTop, left: iLeft, bottom: iBottom, right: iRight)
+            : nil
+        let mask = maskLen > 0
+            ? decode(Array(block[maskStart..<maskStart + maskLen]), top: mTop, left: mLeft, bottom: mBottom, right: mRight)
+            : nil
+        return renderPNG(image: image, imageX: iLeft & ~31, imageY: iTop,
+                         imageRect: (top: iTop, left: iLeft, bottom: iBottom, right: iRight),
+                         mask: mask, maskX: mLeft & ~31, maskY: mTop,
+                         cardWidth: cardWidth, cardHeight: cardHeight)
     }
 
     struct Plane { var buffer: [UInt8]; var rowBytes: Int; var height: Int }
@@ -130,22 +141,39 @@ enum WobaBitmap {
         return Plane(buffer: buf, rowBytes: rowBytes, height: height)
     }
 
-    /// Composite a decoded plane into a card-sized RGBA PNG: black+opaque
-    /// where a bit is set, transparent elsewhere, at the given offset.
-    private static func renderPNG(plane: Plane, offsetX: Int, offsetY: Int, cardWidth: Int, cardHeight: Int) -> Data? {
+    /// Composite the image/mask planes into a card-sized RGBA PNG. A pixel is
+    /// opaque where the mask is set (or, with no mask, anywhere in the image
+    /// rect); opaque pixels are black where the image bit is set, white
+    /// otherwise; everything else is transparent.
+    private static func renderPNG(image: Plane?, imageX: Int, imageY: Int,
+                                  imageRect: (top: Int, left: Int, bottom: Int, right: Int),
+                                  mask: Plane?, maskX: Int, maskY: Int,
+                                  cardWidth: Int, cardHeight: Int) -> Data? {
         guard cardWidth > 0, cardHeight > 0 else { return nil }
         var pixels = [UInt8](repeating: 0, count: cardWidth * cardHeight * 4) // RGBA, all transparent
-        let planeWidth = plane.rowBytes * 8
-        for yy in 0..<plane.height {
-            let cardY = offsetY + yy
-            guard cardY >= 0, cardY < cardHeight else { continue }
-            for xx in 0..<planeWidth {
-                let bit = (plane.buffer[yy * plane.rowBytes + xx / 8] >> (7 - (xx & 7))) & 1
-                guard bit == 1 else { continue }
-                let cardX = offsetX + xx
-                guard cardX >= 0, cardX < cardWidth else { continue }
+
+        // A plane bit at card coordinates (its buffer starts at the aligned
+        // offset), false when outside the plane.
+        func bit(_ plane: Plane?, _ originX: Int, _ originY: Int, _ cardX: Int, _ cardY: Int) -> Bool {
+            guard let plane else { return false }
+            let px = cardX - originX, py = cardY - originY
+            guard px >= 0, py >= 0, py < plane.height, px / 8 < plane.rowBytes else { return false }
+            return (plane.buffer[py * plane.rowBytes + px / 8] >> (7 - (px & 7))) & 1 == 1
+        }
+
+        for cardY in 0..<cardHeight {
+            for cardX in 0..<cardWidth {
+                let opaque: Bool
+                if mask != nil {
+                    opaque = bit(mask, maskX, maskY, cardX, cardY)
+                } else {
+                    opaque = cardY >= imageRect.top && cardY < imageRect.bottom
+                        && cardX >= imageRect.left && cardX < imageRect.right
+                }
+                guard opaque else { continue }
+                let value: UInt8 = bit(image, imageX, imageY, cardX, cardY) ? 0 : 255
                 let p = (cardY * cardWidth + cardX) * 4
-                pixels[p] = 0; pixels[p+1] = 0; pixels[p+2] = 0; pixels[p+3] = 255
+                pixels[p] = value; pixels[p+1] = value; pixels[p+2] = value; pixels[p+3] = 255
             }
         }
         let colorSpace = CGColorSpaceCreateDeviceRGB()
