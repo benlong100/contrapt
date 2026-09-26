@@ -288,14 +288,22 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private func locateField(reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, cardIndex ci: Int) throws -> RemoteFieldLocation {
         let card = stack.cards[ci]
-        if domain != .background, let partIndex = index(ofKind: "field", matching: reference, in: card.parts) {
-            return .card(cardIndex: ci, partIndex: partIndex)
+        let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID })
+        func onCard() -> RemoteFieldLocation? {
+            index(ofKind: "field", matching: reference, in: card.parts).map { .card(cardIndex: ci, partIndex: $0) }
         }
-        if domain != .card,
-           let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
-           let partIndex = index(ofKind: "field", matching: reference, in: stack.backgrounds[backgroundIndex].parts) {
+        func onBackground() -> RemoteFieldLocation? {
+            guard let backgroundIndex,
+                  let partIndex = index(ofKind: "field", matching: reference, in: stack.backgrounds[backgroundIndex].parts) else { return nil }
             return .background(backgroundIndex: backgroundIndex, partIndex: partIndex)
         }
+        // Honor the requested layer first, then fall back to the other.
+        // HyperCard background fields import as per-card card parts, so a
+        // `background field "X"` reference actually lives on the card — the
+        // fallback finds it (and vice versa) rather than failing.
+        if domain != .background, let found = onCard() { return found }
+        if domain != .card, let found = onBackground() { return found }
+        if let found = onCard() ?? onBackground() { return found }
         switch reference {
         case .named(let name): throw HostError("There is no field named \"\(name)\" on that card.")
         case .number(let number): throw HostError("There is no field \(number) on that card.")
@@ -1032,15 +1040,21 @@ final class DocumentScriptHost: HyperTalkHost {
     /// background's; `card`/`background` qualifiers restrict the layer.
     private func locatePart(kind: String, domain: HyperTalkObject.PartDomain, reference: HyperTalkObject.Reference) throws -> FieldLocation {
         let card = stack.cards[cardIndex]
-        if domain != .background,
-           let partIndex = index(ofKind: kind, matching: reference, in: card.parts) {
-            return .card(partIndex: partIndex)
+        let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID })
+        func onCard() -> FieldLocation? {
+            index(ofKind: kind, matching: reference, in: card.parts).map { .card(partIndex: $0) }
         }
-        if domain != .card,
-           let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
-           let partIndex = index(ofKind: kind, matching: reference, in: stack.backgrounds[backgroundIndex].parts) {
+        func onBackground() -> FieldLocation? {
+            guard let backgroundIndex,
+                  let partIndex = index(ofKind: kind, matching: reference, in: stack.backgrounds[backgroundIndex].parts) else { return nil }
             return .background(backgroundIndex: backgroundIndex, partIndex: partIndex)
         }
+        // Honor the requested layer, then fall back to the other: importing
+        // moves buttons to the background and fields to the card, so a
+        // `background field` / `card button` may live on the opposite layer.
+        if domain != .background, let found = onCard() { return found }
+        if domain != .card, let found = onBackground() { return found }
+        if let found = onCard() ?? onBackground() { return found }
         let where_ = switch domain {
         case .any: "on this card"
         case .card: "on this card (card layer)"
