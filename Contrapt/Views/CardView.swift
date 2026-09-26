@@ -102,7 +102,12 @@ struct CardView: View {
         if isEditing {
             surface.onTapGesture { selectedPartID = nil }
         } else {
-            surface.gesture(cardPressGesture)
+            // .simultaneousGesture (not .gesture): a plain .gesture with a
+            // minimumDistance:0 DragGesture takes exclusive control of the
+            // gesture arena and starves toolbar Menus of their item taps
+            // (the whole menu highlights but nothing fires). Recognizing
+            // simultaneously leaves the menu's own gestures working.
+            surface.simultaneousGesture(cardPressGesture)
         }
     }
 
@@ -631,7 +636,7 @@ struct PartView: View {
                 .font(.title)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .gesture(labelPressGesture)
+                .simultaneousGesture(labelPressGesture)
         case .image(let properties):
             Group {
                 if let data = stackAssets[properties.assetName], let image = Image(assetData: data) {
@@ -646,7 +651,7 @@ struct PartView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .gesture(labelPressGesture)
+            .simultaneousGesture(labelPressGesture)
         }
     }
 
