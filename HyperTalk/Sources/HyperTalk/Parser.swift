@@ -880,7 +880,7 @@ struct Parser {
                 try expectNewline()
             } else {
                 advance() // "else"
-                elseBody = try parseElse(handlerName: handlerName, line: line, isBlock: true)
+                elseBody = try parseElse(handlerName: handlerName, line: line)
             }
             return Stmt(kind: .ifThen(condition: condition, then: thenBody, otherwise: elseBody), line: line)
         }
@@ -892,7 +892,7 @@ struct Parser {
         let saved = index
         skipNewlines()
         if consumeWord("else") {
-            elseBody = try parseElse(handlerName: handlerName, line: line, isBlock: false)
+            elseBody = try parseElse(handlerName: handlerName, line: line)
         } else {
             index = saved
         }
@@ -901,7 +901,7 @@ struct Parser {
 
     /// Parses what follows an already-consumed 'else': a chained 'if', a
     /// block terminated by 'end if', or a single statement.
-    private mutating func parseElse(handlerName: String, line: Int, isBlock: Bool) throws -> [Stmt] {
+    private mutating func parseElse(handlerName: String, line: Int) throws -> [Stmt] {
         if peekIdentifier() == "if" {
             let chainLine = current.line
             advance()
@@ -914,22 +914,17 @@ struct Parser {
             try expectNewline()
             return body
         }
-        let body = [try parseStatement(handlerName: handlerName)]
-        // When the `if` was block-form (`if C then` / newline), a single-line
-        // else closes it with an `end if`. But for a wholly single-line
-        // `if C then S1 else S2`, a following `end if` belongs to an *enclosing*
-        // block, so leave it for that block to consume.
-        if isBlock {
-            let saved = index
-            skipNewlines()
-            if peekWords(["end", "if"]) {
-                advance(); advance()
-                try expectNewline()
-            } else {
-                index = saved
-            }
-        }
-        return body
+        // An inline `else <statement>` closes the `if` by itself — whether the
+        // then-clause was single-line or a block. A following `end if` belongs
+        // to an *enclosing* block, so it's left for that block to consume. This
+        // is how Apple's stacks nest a block-then + inline-else inside an outer
+        // block-if that owns the sole `end if`:
+        //   if outer then
+        //     if inner then
+        //       …
+        //     else oneStatement      -- closes the inner if
+        //   end if                   -- closes the outer if
+        return [try parseStatement(handlerName: handlerName)]
     }
 
     private mutating func parseRepeat(handlerName: String, line: Int) throws -> Stmt {

@@ -567,6 +567,25 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
     #expect(host.fields["out"] == "big")
 }
 
+@Test func blockThenWithInlineElseLetsOuterIfOwnTheEndIf() async throws {
+    // Apple's Home stack newLink nests a block-then + inline-else inside an
+    // outer block-if that owns the sole `end if`. The inline `else` closes the
+    // inner if; `end if` closes the outer.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      put "File" into fileType
+      if fileType is "File" then
+        put "checking" into field "out"
+        if it is "Document" then
+          put "Document" into field "out"
+        else put "Application" into field "out"
+      end if
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "Application")
+}
+
 @Test func repeatWithCounter() async throws {
     let host = try await run("""
     on mouseUp
