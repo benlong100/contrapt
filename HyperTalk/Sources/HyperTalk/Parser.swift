@@ -1241,6 +1241,8 @@ struct Parser {
     ]
     static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg"]
     static let cardWords: Set<String> = ["card", "cd"]
+    /// Object-less global properties readable as `the <name>`.
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,
@@ -1379,10 +1381,12 @@ struct Parser {
             if let field = parseClockField() {
                 return .clock(field)
             }
-            // `the itemDelimiter` — an object-less property.
-            if peekIdentifier() == "itemdelimiter", peekIdentifier(1) != "of" {
+            // Object-less global properties Contrapt can read (`the
+            // itemDelimiter`, `the userLevel`).
+            if let word = peekIdentifier(), Self.readableGlobalProperties.contains(word),
+               peekIdentifier(1) != "of" {
                 advance()
-                return .globalProperty("itemdelimiter")
+                return .globalProperty(word)
             }
             // `the target` on its own → the target object's name.
             if peekIdentifier() == "target", peekIdentifier(1) != "of" {

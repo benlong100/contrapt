@@ -867,6 +867,11 @@ final class Runtime {
             switch property {
             case "itemdelimiter":
                 return itemDelimiter
+            case "userlevel":
+                // Contrapt imposes no access levels — everything is always
+                // available — so the userLevel reads as 5 (Scripting), the
+                // top. Guards like `if the userLevel < 3` then pass correctly.
+                return "5"
             default:
                 throw ScriptError(line: line, message: "Can't read the '\(property)'.")
             }

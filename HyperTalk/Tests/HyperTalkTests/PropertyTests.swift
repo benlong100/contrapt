@@ -144,6 +144,21 @@ import Testing
     #expect(host.fields["out"] == "999")
 }
 
+@Test func theUserLevelReadsAsScripting() async throws {
+    // Contrapt has no access levels, so `the userLevel` is 5 (top); level
+    // guards then pass, and setting it is a harmless no-op.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      put the userLevel into saveLevel
+      if the userLevel < 3 then set userLevel to 3
+      if the userLevel >= 5 then put "full" into field "out"
+      set userLevel to saveLevel
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "full")
+}
+
 @Test func getPutsIntoIt() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["this card.name"] = "Home"
