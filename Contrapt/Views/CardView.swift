@@ -432,30 +432,41 @@ private struct EditablePart: View {
 struct CardButtonStyle: ButtonStyle {
     var style: ButtonStyleKind
     var autoHilite: Bool
+    /// A persistent hilite (imported, or set by script) shows the classic
+    /// inverted look — a black fill with white content, like the Tour's
+    /// "BlackStripe" bar. Momentary press-highlight stays the accent color.
+    var hilite: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let lit = autoHilite && configuration.isPressed && !style.isToggle
+        let pressed = autoHilite && configuration.isPressed && !style.isToggle
+        let inverted = !style.isToggle && (hilite || pressed)
         return configuration.label
             .font(.body)
-            .foregroundStyle(lit ? Color.white : Color.accentColor)
+            .foregroundStyle(inverted ? Color.white : Color.accentColor)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, style == .transparent ? 0 : 8)
-            .background(background(lit: lit))
+            .background(background(pressed: pressed))
             .overlay(border)
             .compositingGroup()
             .shadow(color: style == .shadow ? .black.opacity(0.45) : .clear, radius: 0, x: 3, y: 3)
             .contentShape(Rectangle())
     }
 
-    @ViewBuilder
-    private func background(lit: Bool) -> some View {
-        switch style {
-        case .transparent, .checkbox, .radio:
-            if lit { shape.fill(Color.accentColor.opacity(0.25)) } else { Color.clear }
-        case .roundRect:
-            shape.fill(lit ? Color.accentColor : Color.accentColor.opacity(0.12))
-        case .opaque, .rectangle, .shadow:
-            shape.fill(lit ? Color.accentColor : Color.cardSurface)
+    /// The fill when inverted: black for a persistent hilite (classic inverse
+    /// video), the accent color for a momentary press.
+    private func background(pressed: Bool) -> some View {
+        let invertFill: Color = hilite ? .black : .accentColor
+        return Group {
+            switch style {
+            case .transparent, .checkbox, .radio:
+                if hilite { shape.fill(Color.black) }
+                else if pressed { shape.fill(Color.accentColor.opacity(0.25)) }
+                else { Color.clear }
+            case .roundRect:
+                shape.fill(hilite || pressed ? invertFill : Color.accentColor.opacity(0.12))
+            case .opaque, .rectangle, .shadow:
+                shape.fill(hilite || pressed ? invertFill : Color.cardSurface)
+            }
         }
     }
 
@@ -597,7 +608,7 @@ struct PartView: View {
             } label: {
                 buttonLabel(properties)
             }
-            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite))
+            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite, hilite: properties.hilite))
             .simultaneousGesture(pressDetector)
         case .field(let properties):
             if properties.kind == .rich {

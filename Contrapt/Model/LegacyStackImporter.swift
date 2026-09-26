@@ -226,6 +226,8 @@ enum LegacyStackImporter {
             var button = ButtonPart(title: raw.name)
             button.style = raw.buttonStyle
             button.showName = raw.showName
+            button.autoHilite = raw.autoHilite
+            button.hilite = raw.hilite
             button.format = format
             button.iconAsset = iconAsset
             kind = .button(button)
@@ -294,6 +296,11 @@ private extension LegacyStackImporter {
         var showName: Bool
         /// Field "Show Lines" — baseline writing rules (flag byte +0x0E, 0x40).
         var showLines: Bool
+        /// Button hilite (+0x0E, 0x40 — same bit as a field's showLines) and
+        /// Auto Hilite (+0x0E, 0x20). A hilited opaque button is the classic
+        /// inverted (black) bar, e.g. the Tour's "BlackStripe".
+        var hilite: Bool
+        var autoHilite: Bool
         /// Field "Lock Text" — display-only, dispatches clicks (flag +0x05, 0x01).
         var lockText: Bool
         /// Field "Shared Text" — the same text on every card, stored once in
@@ -602,6 +609,8 @@ private extension LegacyStackImporter {
                            styleByte: Int(d[o + 0x0F]) & 0x0F,
                            showName: (d[o + 0x0E] & 0x80) != 0,
                            showLines: (d[o + 0x0E] & 0x40) != 0,
+                           hilite: (d[o + 0x0E] & 0x40) != 0,
+                           autoHilite: (d[o + 0x0E] & 0x20) != 0,
                            lockText: (d[o + 5] & 0x01) != 0,
                            sharedText: (d[o + 5] & 0x08) != 0,
                            iconID: i16(o + 0x12),
