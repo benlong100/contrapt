@@ -249,6 +249,19 @@ indirect enum ObjectExpr {
     /// `visible` property, so `visible of msg box` reads false and setting it
     /// is a no-op — enough for stacks that save/restore it around a task.
     case messageBox
+    /// `last cd btn`, `middle field`, `any button` — a part by a positional
+    /// keyword (`first`…`tenth` are exact and parse to `.part` with a numeric
+    /// index instead). Resolved against the live count when evaluated.
+    case partByOrdinal(kind: String, domain: HyperTalkObject.PartDomain, ordinal: Ordinal)
+    /// `last card`, `middle cd` — a card by a positional keyword.
+    case cardByOrdinal(Ordinal)
+}
+
+/// A positional keyword that resolves against a live count: `last`, `middle`,
+/// `any`. Exact positions (`first`…`tenth`) don't need this — they parse to a
+/// plain numeric index.
+enum Ordinal: Equatable {
+    case last, middle, any
 }
 
 enum BinaryOp {

@@ -1144,6 +1144,22 @@ final class Runtime {
             // Reached only if the message box is used somewhere other than a
             // property get/set (both short-circuit) — Contrapt doesn't model it.
             throw ScriptError(line: line, message: "Contrapt doesn't model the message box as an object.")
+        case .partByOrdinal(let kind, let domain, let ordinal):
+            let total = try hostCall(line: line) { try host.count(.parts(kind: kind, domain: domain)) }
+            return .part(kind: kind, domain: domain, reference: .number(Self.resolveOrdinal(ordinal, count: total)))
+        case .cardByOrdinal(let ordinal):
+            let total = try hostCall(line: line) { try host.count(.cards) }
+            return .card(.number(Self.resolveOrdinal(ordinal, count: total)))
+        }
+    }
+
+    /// Turns a positional keyword into a 1-based index against a live count.
+    /// `middle` is HyperCard's `(count + 1) div 2`; `any` is random.
+    private static func resolveOrdinal(_ ordinal: Ordinal, count: Int) -> Int {
+        switch ordinal {
+        case .last: return max(1, count)
+        case .middle: return max(1, (count + 1) / 2)
+        case .any: return count > 0 ? Int.random(in: 1...count) : 1
         }
     }
 

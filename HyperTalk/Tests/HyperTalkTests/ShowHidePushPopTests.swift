@@ -126,6 +126,24 @@ import Testing
     #expect(host.fields["out"] == "false")
 }
 
+@Test func lastAndFirstPartOrdinalsResolve() async throws {
+    // The Home stack's makeNewHCButton addresses the just-created button as
+    // `last cd btn`: `set script of last cd btn to …`, `id of last cd btn`.
+    let host = MockHost(fields: ["out": ""])
+    host.buttonCount = 3
+    host.properties["card button 3.name"] = "New"
+    _ = try await run("""
+    on mouseUp
+      set name of last cd btn to "Renamed"
+      set name of first cd btn to "Top"
+      put name of last cd btn into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.properties["card button 3.name"] == "Renamed")
+    #expect(host.properties["card button 1.name"] == "Top")
+    #expect(host.fields["out"] == "Renamed")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""

@@ -1217,6 +1217,42 @@ struct Parser {
             return Self.partKindSynonyms[word] != nil
         }
 
+        // A leading ordinal: `last cd btn`, `first card`, `middle field`,
+        // `any button`. `first`…`tenth` are exact positions; `last`/`middle`/
+        // `any` resolve against the live count when evaluated.
+        if let w = peekIdentifier(), Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil,
+           let next = peekIdentifier(1),
+           isPartKind(next) || Self.cardWords.contains(next) || Self.backgroundWords.contains(next) {
+            let numeric = Self.ordinals[w]
+            let keyword = Self.ordinalKeyword(w)
+            advance() // the ordinal word
+            // Optional domain qualifier before a part kind (`last cd btn`).
+            var ordDomain = HyperTalkObject.PartDomain.any
+            if let q = peekIdentifier(), Self.cardWords.contains(q), isPartKind(peekIdentifier(1)) {
+                advance(); ordDomain = .card
+            } else if let q = peekIdentifier(), Self.backgroundWords.contains(q), isPartKind(peekIdentifier(1)) {
+                advance(); ordDomain = .background
+            }
+            if let k = peekIdentifier(), let kind = Self.partKindSynonyms[k] {
+                advance()
+                if let n = numeric {
+                    return .part(kind: kind, domain: ordDomain, name: .numberLiteral(Double(n)))
+                }
+                return .partByOrdinal(kind: kind, domain: ordDomain, ordinal: keyword!)
+            }
+            if let c = peekIdentifier(), Self.cardWords.contains(c) {
+                advance()
+                if let n = numeric { return .card(.numberLiteral(Double(n))) }
+                return .cardByOrdinal(keyword!)
+            }
+            // `first bg` / `last bg` — background-by-ordinal isn't modeled;
+            // resolve to the current background (best effort).
+            if let b = peekIdentifier(), Self.backgroundWords.contains(b) {
+                advance()
+                return .thisBackground
+            }
+        }
+
         // Domain qualifier: `card field 1` / `bkgnd button "OK"`.
         var domain = HyperTalkObject.PartDomain.any
         if let w = peekIdentifier(), Self.cardWords.contains(w), isPartKind(peekIdentifier(1)) {
@@ -1321,6 +1357,16 @@ struct Parser {
         "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
         "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
     ]
+
+    /// The positional keywords that resolve against a live count.
+    static func ordinalKeyword(_ word: String) -> Ordinal? {
+        switch word {
+        case "last": return .last
+        case "middle", "mid": return .middle
+        case "any": return .any
+        default: return nil
+        }
+    }
 
     /// Parses a clock field if one begins here (after `the`), else nil
     /// without consuming: `date`, `long date`, `time`, `seconds`, `ticks`.
