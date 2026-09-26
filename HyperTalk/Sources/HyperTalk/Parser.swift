@@ -1323,6 +1323,14 @@ struct Parser {
             }
             return .card(try parsePrimary())
         }
+        // `stack "X"` / `stack <expr>` — a named stack (`this stack` is handled
+        // above). A bare `stack` with nothing after is the current stack.
+        if consumeWord("stack") {
+            if current.kind == .newline || current.kind == .endOfScript {
+                return .thisStack
+            }
+            return .stackNamed(try parsePrimary())
+        }
         // `msg` / `message [box|window]` — HyperCard's message box.
         if let w = peekIdentifier(), w == "msg" || w == "message" {
             advance()

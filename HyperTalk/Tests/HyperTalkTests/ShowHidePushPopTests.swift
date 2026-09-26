@@ -171,6 +171,20 @@ import Testing
     #expect(host.destinations.last == .stack(name: "Home", card: .inBackground(.named("Stacks"), background: "Paths")))
 }
 
+@Test func namedStackIsAbsentAndNameEchoes() async throws {
+    // The Home stack's startUp: `if there is a stack "Audio Help" then …`.
+    // Absent, so the guarded audio-palette block is skipped; a named stack's
+    // short name echoes back (menuReset compares long names).
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      if there is a stack "Audio Help" then put "has audio" into field "out"
+      if there is not a stack "Audio Help" then put the short name of stack "Phone" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "Phone")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""

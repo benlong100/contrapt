@@ -857,6 +857,12 @@ final class Runtime {
                 // visibility reads false (hidden until a `put` shows it).
                 return property == "visible" ? "false" : ""
             }
+            if case .stackNamed(let nameExpression) = objectExpression {
+                // Contrapt doesn't model other stacks as property-bearing
+                // objects; name properties echo the referenced name so string
+                // comparisons degrade safely.
+                return try await evaluate(nameExpression, line: line)
+            }
             let object = try await resolveObject(objectExpression, line: line)
             return try hostCall(line: line) { try host.propertyValue(property, of: object) }
 
@@ -913,6 +919,11 @@ final class Runtime {
             if case .menu = objectExpression {
                 // Contrapt has no HyperCard menus, so `there is a menu …` is
                 // always false (and `there is not a menu …` always true).
+                return negated ? "true" : "false"
+            }
+            if case .stackNamed = objectExpression {
+                // Contrapt doesn't resolve arbitrary stacks by existence (helper
+                // stacks like "Audio Help" aren't present), so it's false.
                 return negated ? "true" : "false"
             }
             let object = try await resolveObject(objectExpression, line: line)
@@ -1176,6 +1187,10 @@ final class Runtime {
                 throw ScriptError(line: line, message: "Can't understand \"\(descriptor)\" as an object.")
             }
             return try await resolveObject(parsed, line: line)
+        case .stackNamed:
+            // Reached only outside exists/property (both short-circuit) — e.g.
+            // `send … to stack "X"`, which Contrapt can't dispatch to.
+            throw ScriptError(line: line, message: "Contrapt can't address another stack as an object here.")
         }
     }
 

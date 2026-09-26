@@ -263,6 +263,10 @@ indirect enum ObjectExpr {
     /// where `theButton` holds "cd btn id 34". The value is re-parsed as an
     /// object descriptor when evaluated (HyperCard's indirect reference).
     case indirect(Expr)
+    /// `stack "Audio Help"` / `stack Home` — a stack other than the current
+    /// one. Contrapt doesn't resolve arbitrary stacks as objects, so it reads
+    /// as absent (`there is a stack X` → false) with name-echoing properties.
+    case stackNamed(Expr)
 }
 
 /// A positional keyword that resolves against a live count: `last`, `middle`,
