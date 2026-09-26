@@ -112,6 +112,18 @@ import Testing
     #expect(host.destinations.last == .stack(name: "DateBook", card: .number(3)))
 }
 
+@Test func goAcceptsCdAbbreviation() async throws {
+    let host = MockHost()
+    host.currentCardID = "1"
+    _ = try await run("""
+    on mouseUp
+      put 2 into n
+      go cd n
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .number(2))
+}
+
 @Test func goToStackByName() async throws {
     let host = MockHost()
     _ = try await run("""

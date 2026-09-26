@@ -800,22 +800,22 @@ struct Parser {
         _ = consumeWord("the")
         var target: GoTarget
         if consumeWord("next") {
-            _ = consumeWord("card")
+            _ = consumeCardWord()
             target = .next
         } else if consumeWord("previous") || consumeWord("prev") {
-            _ = consumeWord("card")
+            _ = consumeCardWord()
             target = .previous
         } else if consumeWord("first") {
-            _ = consumeWord("card")
+            _ = consumeCardWord()
             target = .first
         } else if consumeWord("last") {
-            _ = consumeWord("card")
+            _ = consumeCardWord()
             target = .last
         } else if consumeWord("home") {
             target = .home
         } else if consumeWord("back") {
             target = .back
-        } else if consumeWord("card") {
+        } else if consumeCardWord() {
             if consumeWord("id") {
                 target = .idExpression(try parseExpression())
             } else {
@@ -1176,7 +1176,7 @@ struct Parser {
     }
 
     private mutating func consumeCardWord() -> Bool {
-        consumeWord("card") || consumeWord("cd")
+        consumeWord("card") || consumeWord("cd") || consumeWord("cards") || consumeWord("cds")
     }
 
     /// An object reference: typed part (`button "OK"`), `card 3`, or
