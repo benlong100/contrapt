@@ -88,10 +88,27 @@ struct Tokenizer {
         return try symbol(character)
     }
 
-    /// Straight or curly double quotes both delimit strings — iPad smart
+    /// Any straight or curly double quote can *open* a string — iPad smart
     /// quotes (and scripts pasted from anywhere) must not break scripts.
     static func isQuote(_ character: Character) -> Bool {
         character == "\"" || character == "\u{201C}" || character == "\u{201D}"
+    }
+
+    /// Which quote *closes* a string depends on how it opened. A straight
+    /// `"…"` closes only on another straight quote, so classic scripts can
+    /// carry literal curly quotes as content (`"“"`, `"”"` — the ldquo/rdquo
+    /// characters typed with option-[ / option-shift-[). A curly-open `“…`
+    /// closes on its `”` mate, or tolerantly on a straight quote (iPad may
+    /// convert only one of a pair).
+    static func closesString(opener: Character, _ character: Character) -> Bool {
+        switch opener {
+        case "\"":
+            return character == "\""
+        case "\u{201C}":
+            return character == "\u{201D}" || character == "\""
+        default:
+            return isQuote(character)
+        }
     }
 
     /// `--` starts a comment; so do en/em dashes, which is what iOS smart
@@ -114,10 +131,11 @@ struct Tokenizer {
 
     private mutating func stringLiteral() throws -> Token {
         let startLine = line
+        let opener = current ?? "\""
         advance() // opening quote
         var text = ""
         while let character = current {
-            if Self.isQuote(character) {
+            if Self.closesString(opener: opener, character) {
                 advance()
                 return Token(kind: .string(text), line: startLine)
             }

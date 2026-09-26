@@ -86,9 +86,10 @@ enum SyntaxScanner {
                 while index < source.endIndex, source[index] != "\n" { advance() }
                 spans.append(SyntaxSpan(kind: .comment, range: start..<index))
             } else if Tokenizer.isQuote(character) {
+                let opener = character
                 advance()
-                while index < source.endIndex, !Tokenizer.isQuote(source[index]), source[index] != "\n" { advance() }
-                if index < source.endIndex, Tokenizer.isQuote(source[index]) { advance() }
+                while index < source.endIndex, !Tokenizer.closesString(opener: opener, source[index]), source[index] != "\n" { advance() }
+                if index < source.endIndex, Tokenizer.closesString(opener: opener, source[index]) { advance() }
                 spans.append(SyntaxSpan(kind: .string, range: start..<index))
             } else if character.isNumber {
                 while index < source.endIndex, source[index].isNumber { advance() }

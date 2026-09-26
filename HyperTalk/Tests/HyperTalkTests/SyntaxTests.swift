@@ -157,14 +157,28 @@ import Testing
     #expect(host.fields["out"] == "Hello")
 }
 
-@Test func mismatchedCurlyAndStraightQuotesStillDelimit() async throws {
+@Test func curlyOpenStringToleratesStraightClose() async throws {
+    // iOS may convert only the opening quote of a pair; a curly-open string
+    // still closes on a straight quote.
     let host = MockHost(fields: ["out": ""])
     try await HyperTalk.run(handler: "mouseUp", in: """
     on mouseUp
-      put \u{201C}mixed" into field "out\u{201D}
+      put \u{201C}mixed" into field "out"
     end mouseUp
     """, host: host)
     #expect(host.fields["out"] == "mixed")
+}
+
+@Test func straightQuotesKeepLiteralCurlyQuotesAsContent() async throws {
+    // Apple's Home stack: `ask "“" & the short name of this cd & "”"`. Straight
+    // quotes are the delimiters; the curly ldquo/rdquo inside are literal text.
+    let host = MockHost(fields: ["out": ""])
+    try await HyperTalk.run(handler: "mouseUp", in: """
+    on mouseUp
+      put "\u{201C}" & "x" & "\u{201D}" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "\u{201C}x\u{201D}")
 }
 
 @Test func smartDashesStartComments() async throws {
