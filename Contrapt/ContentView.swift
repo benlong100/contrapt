@@ -35,6 +35,8 @@ struct ContentView: View {
     /// so transparent or hidden parts are findable. Remembered across sessions.
     @AppStorage("revealButtons") private var revealButtons = false
     @AppStorage("revealFields") private var revealFields = false
+    /// Which layer newly-added parts (buttons, fields, images…) go onto.
+    @AppStorage("addPartsToBackground") private var addPartsToBackground = false
     @State private var messageBoxText: String?
     @State private var isMessageBoxVisible = false
     @State private var scriptErrorText: String?
@@ -514,6 +516,16 @@ struct ContentView: View {
                 #endif
             }
         }
+        // Which layer new parts (images included) land on — the card, or the
+        // shared background.
+        Menu(addPartsToBackground ? "New Parts: Background" : "New Parts: Card",
+             systemImage: addPartsToBackground ? "square.on.square" : "square") {
+            Picker("New Parts Layer", selection: $addPartsToBackground) {
+                Label("Card", systemImage: "square").tag(false)
+                Label("Background", systemImage: "square.on.square").tag(true)
+            }
+            .pickerStyle(.inline)
+        }
         // On macOS these live in the Edit menu (see CardCommands) to keep the
         // toolbar uncluttered; iOS has no menu bar, so the toolbar menu stays.
         #if !os(macOS)
@@ -747,7 +759,7 @@ struct ContentView: View {
         } else {
             ""
         }
-        var part = Part(
+        let part = Part(
             id: UUID(),
             name: defaultName(for: kind),
             frame: PartFrame(
@@ -759,9 +771,22 @@ struct ContentView: View {
             script: script,
             kind: kind
         )
+        appendNewPart(part)
+    }
+
+    /// Appends a newly-created part to the card or the current card's shared
+    /// background, per the New Parts layer selector, and selects it.
+    private func appendNewPart(_ part: Part) {
+        var part = part
         var updated = document.stack
         part.scriptID = updated.claimScriptID()
-        updated.cards[cardIndex].parts.append(part)
+        let card = updated.cards[cardIndex]
+        if addPartsToBackground,
+           let backgroundIndex = updated.backgrounds.firstIndex(where: { $0.id == card.backgroundID }) {
+            updated.backgrounds[backgroundIndex].parts.append(part)
+        } else {
+            updated.cards[cardIndex].parts.append(part)
+        }
         stack.wrappedValue = updated
         selectedPartID = part.id
     }
@@ -834,7 +859,7 @@ struct ContentView: View {
         let scale = min(1, min(cardSize.width / imageSize.width, cardSize.height / imageSize.height))
         let width = imageSize.width * scale
         let height = imageSize.height * scale
-        var part = Part(
+        let part = Part(
             id: UUID(),
             name: defaultName(for: .image(ImagePart(assetName: assetName))),
             frame: PartFrame(
@@ -846,11 +871,7 @@ struct ContentView: View {
             script: "",
             kind: .image(ImagePart(assetName: assetName))
         )
-        var updated = document.stack
-        part.scriptID = updated.claimScriptID()
-        updated.cards[cardIndex].parts.append(part)
-        stack.wrappedValue = updated
-        selectedPartID = part.id
+        appendNewPart(part)
     }
 
     private func defaultName(for kind: PartKind) -> String {
