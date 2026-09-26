@@ -511,6 +511,21 @@ final class Runtime {
             try hostCall(line: statement.line) { try host.reorderCards(keyed.map(\.index)) }
             return .normal
 
+        case .clickAt(let hExpression, let vExpression):
+            let x: Int, y: Int
+            if let vExpression {
+                x = Int(try Value.number(from: try await evaluate(hExpression, line: statement.line), line: statement.line))
+                y = Int(try Value.number(from: try await evaluate(vExpression, line: statement.line), line: statement.line))
+            } else {
+                // A single `"h,v"` value (e.g. `click at loc of button "X"`).
+                let point = try await evaluate(hExpression, line: statement.line)
+                    .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                x = Int(Double(point.first ?? "") ?? 0)
+                y = Int(Double(point.count > 1 ? point[1] : "") ?? 0)
+            }
+            host.click(x: x, y: y)
+            return .normal
+
         case .doMenu(let itemExpression):
             let item = try await evaluate(itemExpression, line: statement.line)
             // Send a `doMenu` message so a handler can trap the command; if

@@ -246,6 +246,10 @@ final class MockHost: HyperTalkHost {
     var performedMenu: [String] = []
     func performMenu(_ item: String) throws { performedMenu.append(item) }
 
+    /// The last `click at` coordinates.
+    var clickedAt: (x: Int, y: Int)?
+    func click(x: Int, y: Int) { clickedAt = (x, y) }
+
     /// A field exists if it's in `fields`; any other part/card exists if a
     /// property was preset for it. `this …` objects always exist.
     func exists(_ object: HyperTalkObject) -> Bool {

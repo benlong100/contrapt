@@ -64,6 +64,41 @@ import Testing
     #expect(host.destinations.last == .inBackground(.number(1), background: "Weekly"))
 }
 
+@Test func clickAtTwoNumbers() async throws {
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      click at 100,120
+    end mouseUp
+    """, host: host)
+    #expect(host.clickedAt?.x == 100)
+    #expect(host.clickedAt?.y == 120)
+}
+
+@Test func clickAtSinglePointValue() async throws {
+    // `click at loc of ...` — a single "h,v" value.
+    let host = MockHost()
+    host.properties["button OK.loc"] = "40,55"
+    _ = try await run("""
+    on mouseUp
+      click at the loc of button "OK"
+    end mouseUp
+    """, host: host)
+    #expect(host.clickedAt?.x == 40)
+    #expect(host.clickedAt?.y == 55)
+}
+
+@Test func chooseToolIsIgnored() async throws {
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      choose browse tool
+      put "ok" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ok")
+}
+
 @Test func goCardByVariableWithStackQualifier() async throws {
     // `go card whichSix of stack "X"` — the variable card number mustn't be
     // read as a bare property; the trailing `of stack …` is ignored.

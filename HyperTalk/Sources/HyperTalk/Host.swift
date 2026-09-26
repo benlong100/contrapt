@@ -199,6 +199,9 @@ public protocol HyperTalkHost: AnyObject {
     /// `doMenu <item>` that no handler trapped — perform the built-in menu
     /// action (e.g. New Card, Delete Card). Unknown items are ignored.
     func performMenu(_ item: String) throws
+    /// `click at h,v` — a synthetic click at a card location (in card
+    /// coordinates); the host routes a mouseUp to whatever part is there.
+    func click(x: Int, y: Int)
     /// `push [this] card` — remember the current card on a session stack.
     func pushCard()
     /// `pop card` — remove and return the most recently pushed card's id (nil

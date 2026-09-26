@@ -68,6 +68,7 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onNavigate: (Int, [ScreenEffect]) -> Void
     private let onFind: (FindHighlight?) -> Void
     private let onGoHome: () -> Void
+    private let onClickPart: (Part) -> Void
 
     init(
         stack: Binding<Stack>,
@@ -77,7 +78,8 @@ final class DocumentScriptHost: HyperTalkHost {
         onAsk: @escaping (String, String) async -> String?,
         onNavigate: @escaping (Int, [ScreenEffect]) -> Void,
         onFind: @escaping (FindHighlight?) -> Void = { _ in },
-        onGoHome: @escaping () -> Void = {}
+        onGoHome: @escaping () -> Void = {},
+        onClickPart: @escaping (Part) -> Void = { _ in }
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
@@ -87,6 +89,7 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onNavigate = onNavigate
         self.onFind = onFind
         self.onGoHome = onGoHome
+        self.onClickPart = onClickPart
     }
 
     private var stack: Stack { stackBinding.wrappedValue }
@@ -136,6 +139,23 @@ final class DocumentScriptHost: HyperTalkHost {
         default:
             return // menu items Contrapt doesn't model — ignore, as a no-op
         }
+    }
+
+    func click(x: Int, y: Int) {
+        let px = Double(x), py = Double(y)
+        func hit(_ parts: [Part]) -> Part? {
+            // Topmost first (last in z-order).
+            for part in parts.reversed() where part.isVisible {
+                let f = part.frame
+                if px >= f.x, px <= f.x + f.width, py >= f.y, py <= f.y + f.height { return part }
+            }
+            return nil
+        }
+        let card = stack.cards[cardIndex]
+        if let part = hit(card.parts) { onClickPart(part); return }
+        if let bgIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+           let part = hit(stack.backgrounds[bgIndex].parts) { onClickPart(part) }
+        // Nothing under the point — a click on empty card is a no-op here.
     }
 
     func reorderCards(_ order: [Int]) throws {

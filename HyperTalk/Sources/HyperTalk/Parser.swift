@@ -389,6 +389,22 @@ struct Parser {
             let object = try parseObjectExpr()
             try expectNewline()
             return Stmt(kind: .sendMessage(message, to: object), line: line)
+        case "choose":
+            // `choose <tool> tool` — Contrapt has a single (browse) tool, so
+            // tool selection is accepted and ignored.
+            advance()
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        case "click":
+            advance()
+            _ = consumeWord("at")
+            let h = try parseExpression()
+            let v = consumeSymbol(",") ? try parseExpression() : nil
+            // Ignore any trailing modifiers (`with shiftKey`, etc.).
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .clickAt(h, v), line: line)
         case "domenu":
             advance()
             let item = try parseExpression()

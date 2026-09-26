@@ -88,6 +88,9 @@ indirect enum StmtKind {
     /// `doMenu <item>` — send a `doMenu` message (so handlers can trap it),
     /// then perform the built-in menu action if nothing traps it.
     case doMenu(Expr)
+    /// `click at <h>,<v>` — a synthetic click at a card location. The second
+    /// expression is nil when the point arrives as one `"h,v"` value.
+    case clickAt(Expr, Expr?)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])

@@ -609,7 +609,9 @@ struct ContentView: View {
                 findHighlight = highlight
             },
             // `go home` opens the Home stack (macOS; iOS front door is Home).
-            onGoHome: { openHome() }
+            onGoHome: { openHome() },
+            // `click at h,v` routes a mouseUp to the part under the point.
+            onClickPart: { part in sendMouseMessage("mouseUp", to: part) }
         )
     }
 
