@@ -512,10 +512,13 @@ private extension LegacyStackImporter {
         /// HyperCard 2.x part-content section: a run of entries, each
         /// `[s16 partID][u16 length][length bytes]`, padded to an even total.
         /// A positive partID is a background field, negative a card field
-        /// (keyed here by absolute id, matching how parts are filled). The
-        /// content bytes start with a style flag / style-run prefix that
-        /// `contentText` skips. Entries run until the next word isn't a known
-        /// field id — that's where the object's name and script C-strings begin.
+        /// (keyed here by absolute id, matching how parts are filled). Each
+        /// content begins with a style header: a `0x00` byte (plain text
+        /// follows) or a `u16` with the high bit set (`0x8000 | styleRunBytes`,
+        /// then that many style-run bytes, then the text). Skipping it exactly
+        /// avoids leaking a style byte into the text as a stray leading return.
+        /// Entries run until the next word isn't a known field id — that's
+        /// where the object's name and script C-strings begin.
         private func parseContentsV2(from start: Int, end: Int, knownIDs: Set<Int>) -> (contents: [Int: String], sectionEnd: Int) {
             var result: [Int: String] = [:]
             var o = start
@@ -524,7 +527,15 @@ private extension LegacyStackImporter {
                 guard absID != 0, knownIDs.contains(absID) else { break }
                 let length = u16(o + 2)
                 guard length >= 1, o + 4 + length <= end else { break }
-                let text = contentText(from: o + 4, to: o + 4 + length)
+                let contentStart = o + 4, contentEnd = o + 4 + length
+                var textStart = contentStart
+                if length >= 2, d[contentStart] & 0x80 != 0 {
+                    let styleBytes = u16(contentStart) & 0x7FFF
+                    textStart = min(contentStart + 2 + styleBytes, contentEnd)
+                } else if d[contentStart] == 0 {
+                    textStart = contentStart + 1 // a lone 0 style flag
+                }
+                let text = contentText(from: textStart, to: contentEnd)
                 if result[absID] == nil, !text.isEmpty { result[absID] = text }
                 o += 4 + length
                 if o & 1 != 0 { o += 1 } // entries pad to an even boundary
