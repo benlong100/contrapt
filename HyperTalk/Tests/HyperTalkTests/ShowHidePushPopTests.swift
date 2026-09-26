@@ -158,6 +158,19 @@ import Testing
     #expect(host.properties["card button id 34.hilite"] == "true")
 }
 
+@Test func goCardOfBackgroundOfStackChains() async throws {
+    // The Home stack's updateHCPaths:
+    // `go cd fileType of bkgnd "Paths" of stack "Home"`.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      put "Stacks" into fileType
+      go cd fileType of bkgnd "Paths" of stack "Home"
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .stack(name: "Home", card: .inBackground(.named("Stacks"), background: "Paths")))
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""

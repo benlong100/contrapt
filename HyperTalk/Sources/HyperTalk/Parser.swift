@@ -871,15 +871,17 @@ struct Parser {
         } else {
             throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
         }
-        // `… of stack "X"` — a card within another stack (`go card N of
-        // stack "X"`). Checked before the background/lenient handling.
+        // Trailing qualifiers compose innermost-first, as HyperCard writes them:
+        // `go cd X of bkgnd "Paths" of stack "Home"` = (card X in background
+        // "Paths") in stack "Home".
+        if let background = try parseOfBackground() {
+            target = .inBackground(target, background: background)
+        }
         if peekIdentifier() == "of", peekIdentifier(1) == "stack" {
             advance(); advance() // of stack
             target = .inStack(name: try parseExpression(), card: target)
-        } else if let background = try parseOfBackground() {
-            // `go <first|last|N> card of background "X"` — scope to a background.
-            target = .inBackground(target, background: background)
-        } else if peekIdentifier() == "of" {
+        }
+        if peekIdentifier() == "of" {
             // Some other trailing `of …` qualifier we don't model — ignore it.
             while current.kind != .newline, current.kind != .endOfScript { advance() }
         }
