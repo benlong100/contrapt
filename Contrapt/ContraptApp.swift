@@ -259,7 +259,8 @@ private struct RootView: View {
     var body: some View {
         ZStack {
             NavigationStack {
-                ContentView(document: home, fileURL: HomeStack.workingURL)
+                ContentView(document: home, fileURL: HomeStack.workingURL,
+                            onOpenStackFile: { url, _ in openExternal(url) })
                     // The Stacks menu replaces the document browser: new
                     // stacks and the tutorial are saved into Files (via the
                     // exporter), and Open browses for an existing one.
@@ -290,7 +291,8 @@ private struct RootView: View {
             // a sliding sheet), so it feels like being on that stack rather
             // than a temporary modal.
             if let opened {
-                OpenedStackView(stack: opened, onClose: closeOpened)
+                OpenedStackView(stack: opened, onClose: closeOpened,
+                                onOpenStack: { url in openExternal(url) })
             }
         }
         .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.contraptStack]) { result in
@@ -365,6 +367,11 @@ private struct RootView: View {
     }
 
     private func openExternal(_ url: URL) {
+        // Replacing one opened stack with another (`go stack "X"`): release the
+        // previous stack's security scope first.
+        if let previous = opened, previous.securityScoped {
+            previous.url.stopAccessingSecurityScopedResource()
+        }
         let scoped = url.startAccessingSecurityScopedResource()
         guard let document = StackDocument.load(from: url) else {
             if scoped { url.stopAccessingSecurityScopedResource() }
@@ -387,11 +394,14 @@ private struct OpenedStack: Identifiable {
 private struct OpenedStackView: View {
     let stack: OpenedStack
     var onClose: () -> Void
+    /// Opening another stack from within this one (`go stack "X"`).
+    var onOpenStack: (URL) -> Void = { _ in }
     @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
-            ContentView(document: stack.document, fileURL: stack.url)
+            ContentView(document: stack.document, fileURL: stack.url,
+                        onOpenStackFile: { url, _ in onOpenStack(url) })
         }
         .overlay(alignment: .topLeading) {
             Button {

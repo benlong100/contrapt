@@ -17,6 +17,10 @@ struct ContentView: View {
     @ObservedObject var document: StackDocument
     /// The document's location on disk, for sharing. Nil until first save.
     var fileURL: URL?
+    /// iOS opens another stack (from `go stack "X"`) by layering it over Home;
+    /// that's a RootView concern, so it's injected. nil on macOS, which opens
+    /// a document window directly.
+    var onOpenStackFile: ((URL, GoDestination?) -> Void)? = nil
     @Environment(\.undoManager) private var undoManager
     @Environment(\.openURL) private var openURL
     #if os(macOS)
@@ -61,6 +65,10 @@ struct ContentView: View {
     #endif
     /// The button being linked, while the Link To panel floats over the card.
     @State private var linkingPartID: UUID?
+    /// A `go stack "X"` whose stack isn't in the library yet — remembered
+    /// while the locate picker is shown, so the pick can open it.
+    @State private var pendingGoStack: PendingGoStack?
+    @State private var isStackLocatorPresented = false
     @State private var isGuidePresented = false
     /// A pending `answer` / `ask` dialog and its text field's contents.
     @State private var scriptDialog: ScriptDialog?
@@ -288,8 +296,19 @@ struct ContentView: View {
             sendSystemMessage("openCard", toCardAt: newIndex)
         }
         .task {
+            // Remember this stack so other stacks' `go stack "<name>"` can
+            // find it later.
+            if let fileURL { StackLibrary.shared.register(url: fileURL) }
             sendSystemMessage("openStack", toCardAt: cardIndex)
             sendSystemMessage("openCard", toCardAt: cardIndex)
+        }
+        // A `go stack "X"` whose stack isn't in the library yet: locate it once.
+        .fileImporter(isPresented: $isStackLocatorPresented, allowedContentTypes: [.contraptStack]) { result in
+            guard case .success(let url) = result, let pending = pendingGoStack else { return }
+            pendingGoStack = nil
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            openResolvedStack(url, card: pending.card)
         }
         .toolbar { mainToolbar }
         .focusedValue(\.cardNavigation, cardNavigation)
@@ -638,8 +657,37 @@ struct ContentView: View {
             // `go home` opens the Home stack (macOS; iOS front door is Home).
             onGoHome: { openHome() },
             // `click at h,v` routes a mouseUp to the part under the point.
-            onClickPart: { part in sendMouseMessage("mouseUp", to: part) }
+            onClickPart: { part in sendMouseMessage("mouseUp", to: part) },
+            // `go stack "X"` resolves via the Stack Library and opens it.
+            onGoStack: { name, card in goToStack(named: name, card: card) }
         )
+    }
+
+    /// Resolves `go stack "<name>"` through the Stack Library and opens it;
+    /// if the name isn't known yet, prompts the user to locate it once.
+    private func goToStack(named name: String, card: GoDestination?) {
+        if let url = StackLibrary.shared.url(forName: name) {
+            openResolvedStack(url, card: card)
+        } else {
+            pendingGoStack = PendingGoStack(name: name, card: card)
+            isStackLocatorPresented = true
+        }
+    }
+
+    /// Opens a resolved stack file, remembering it in the library. macOS opens
+    /// a document window; iOS layers it over Home via the injected handler.
+    private func openResolvedStack(_ url: URL, card: GoDestination?) {
+        StackLibrary.shared.register(url: url)
+        #if os(macOS)
+        Task { try? await openDocument(at: url) }
+        #else
+        onOpenStackFile?(url, card)
+        #endif
+    }
+
+    struct PendingGoStack {
+        let name: String
+        let card: GoDestination?
     }
 
     /// Runs a line typed into the message box in the current card's
