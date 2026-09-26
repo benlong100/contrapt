@@ -229,14 +229,20 @@ extension Image {
 
 extension ScreenEffect {
     /// The SwiftUI transition that renders this effect on a card swap.
-    /// Effects without a native SwiftUI analogue (barn door, checkerboard,
-    /// venetian blinds) fall back to a dissolve for now.
     var transition: AnyTransition {
         switch kind {
         case .plain:
             return .identity
-        case .dissolve, .barnDoor, .checkerboard, .venetianBlinds:
+        case .dissolve:
             return .opacity
+        case .iris, .barnDoor, .checkerboard, .venetianBlinds:
+            // A growing shape mask reveals the incoming card layer (and masks
+            // the outgoing one out) over the static background. Symmetric, so
+            // it reads the same as the built-in dissolve does in this setup.
+            return .modifier(
+                active: EffectRevealModifier(progress: 0, kind: kind),
+                identity: EffectRevealModifier(progress: 1, kind: kind)
+            )
         case .wipe:
             switch direction {
             case .right: return .push(from: .leading)
@@ -251,7 +257,7 @@ extension ScreenEffect {
             case .down: return .move(edge: .top)
             default: return .move(edge: .trailing)
             }
-        case .zoom, .iris:
+        case .zoom:
             return .scale.combined(with: .opacity)
         }
     }
@@ -265,6 +271,68 @@ extension ScreenEffect {
         case .fast: .easeInOut(duration: 0.28)
         case .veryFast: .easeInOut(duration: 0.12)
         }
+    }
+}
+
+/// Applies an effect's reveal mask at a given progress (0 hidden → 1 shown).
+/// Animatable, so the transition system tweens `progress`.
+private struct EffectRevealModifier: ViewModifier, Animatable {
+    var progress: CGFloat
+    let kind: ScreenEffect.Kind
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.mask(EffectRevealShape(kind: kind, progress: progress).fill(style: FillStyle(eoFill: false)))
+    }
+}
+
+/// The revealed region for a masked effect at `progress`: an iris circle, the
+/// widening barn-door band, opening venetian slats, or growing checkerboard
+/// tiles. progress 0 → empty (nothing shown), 1 → the full card.
+private struct EffectRevealShape: Shape {
+    let kind: ScreenEffect.Kind
+    var progress: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let p = max(0, min(1, progress))
+        var path = Path()
+        switch kind {
+        case .iris:
+            let radius = (hypot(rect.width, rect.height) / 2) * p
+            path.addEllipse(in: CGRect(x: rect.midX - radius, y: rect.midY - radius,
+                                       width: radius * 2, height: radius * 2))
+        case .barnDoor:
+            // A central vertical band widening to full width — doors opening.
+            let width = rect.width * p
+            path.addRect(CGRect(x: rect.midX - width / 2, y: rect.minY,
+                                width: width, height: rect.height))
+        case .venetianBlinds:
+            let slats = 12
+            let band = rect.height / CGFloat(slats)
+            for i in 0..<slats {
+                let y = rect.minY + CGFloat(i) * band
+                path.addRect(CGRect(x: rect.minX, y: y, width: rect.width, height: band * p))
+            }
+        case .checkerboard:
+            let columns = 8, rows = 6
+            let cellW = rect.width / CGFloat(columns)
+            let cellH = rect.height / CGFloat(rows)
+            for row in 0..<rows {
+                for column in 0..<columns {
+                    let cx = rect.minX + (CGFloat(column) + 0.5) * cellW
+                    let cy = rect.minY + (CGFloat(row) + 0.5) * cellH
+                    path.addRect(CGRect(x: cx - cellW * p / 2, y: cy - cellH * p / 2,
+                                        width: cellW * p, height: cellH * p))
+                }
+            }
+        default:
+            path.addRect(rect)
+        }
+        return path
     }
 }
 
