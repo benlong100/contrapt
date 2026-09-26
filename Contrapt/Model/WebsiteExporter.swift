@@ -147,7 +147,11 @@ extension WebsiteExporter {
       const W = stack.cardSize.width, H = stack.cardSize.height;
       const root = document.getElementById('card');
       const label = document.getElementById('cardLabel');
+      const note = document.getElementById('note');
       let idx = 0;
+      // scriptID -> element for the current card, rebuilt by render(); the
+      // engine's CardState is overlaid onto these after each event.
+      let partEls = {};
 
       function fontFamily(d) {
         if (d === 'serif') return 'Georgia, "Times New Roman", serif';
@@ -174,6 +178,7 @@ extension WebsiteExporter {
       function renderPart(p) {
         const d = document.createElement('div');
         d.className = 'part';
+        if (p.scriptID != null) { d.dataset.scriptId = p.scriptID; partEls[p.scriptID] = d; }
         d.style.left = p.frame.x + 'px'; d.style.top = p.frame.y + 'px';
         d.style.width = p.frame.width + 'px'; d.style.height = p.frame.height + 'px';
         if (p.visible === false) { d.style.display = 'none'; return d; }
@@ -216,6 +221,7 @@ extension WebsiteExporter {
         const card = stack.cards[idx];
         const bg = bgById[card.backgroundID];
         root.innerHTML = '';
+        partEls = {};
         root.style.width = W + 'px'; root.style.height = H + 'px';
         if (bg) {
           const bp = paint(bg.paintImageAsset); if (bp) root.appendChild(bp);
@@ -227,11 +233,81 @@ extension WebsiteExporter {
           (card.name ? ' — ' + card.name : '');
         fit();
       }
-      document.getElementById('prev').onclick = () => { idx = (idx - 1 + stack.cards.length) % stack.cards.length; render(); };
-      document.getElementById('next').onclick = () => { idx = (idx + 1) % stack.cards.length; render(); };
+      // --- Interactive layer -------------------------------------------------
+      // A Wasm runtime, when bundled, installs `window.ContraptEngine`: async
+      // methods returning the JSON envelopes HyperTalkEngine emits
+      //   start()            -> { effects, state }
+      //   mouseUp(scriptID)  -> { effects, state }   (or { error })
+      //   openCard(index)    -> { effects, state }
+      // Absent (a plain static export), the player just pages through cards and
+      // scripts don't run — the fallback below.
+      const engine = window.ContraptEngine;
+
+      function beep() {
+        try {
+          const ac = new (window.AudioContext || window.webkitAudioContext)();
+          const o = ac.createOscillator();
+          o.frequency.value = 800; o.connect(ac.destination);
+          o.start(); o.stop(ac.currentTime + 0.1);
+        } catch (e) {}
+      }
+
+      // Overlay the script-visible bits (text, hilite, visibility) from the
+      // engine's CardState onto the statically-rendered card.
+      function applyState(state) {
+        if (!state) return;
+        (state.backgroundParts || []).concat(state.cardParts || []).forEach(rp => {
+          const el = partEls[rp.scriptID];
+          if (!el) return;
+          el.style.display = rp.visible === false ? 'none' : '';
+          if (rp.kind === 'field' || rp.kind === 'label') {
+            el.textContent = rp.text || '';
+          } else if (rp.kind === 'button') {
+            el.classList.toggle('hilite', !!rp.hilite);
+            const span = el.querySelector('span');
+            if (span) span.textContent = rp.text || '';
+          }
+        });
+      }
+
+      function applyEffects(effects) {
+        (effects || []).forEach(e => {
+          if (e.type === 'message') note.textContent = e.text;
+          else if (e.type === 'beep') beep();
+          // 'navigate' is reflected by the returned state's cardIndex below.
+        });
+      }
+
+      async function handle(pending) {
+        let res;
+        try { res = JSON.parse(await pending); } catch (e) { note.textContent = 'Engine error.'; return; }
+        if (res.error) { note.textContent = 'Error: ' + res.error; return; }
+        if (res.state && res.state.cardIndex !== idx) { idx = res.state.cardIndex; render(); }
+        applyState(res.state);
+        applyEffects(res.effects);
+        if (res.result != null) note.textContent = res.result;
+      }
+
+      function go(n) {
+        const wrapped = (n + stack.cards.length) % stack.cards.length;
+        if (engine) { handle(engine.openCard(wrapped)); } else { idx = wrapped; render(); }
+      }
+      document.getElementById('prev').onclick = () => go(idx - 1);
+      document.getElementById('next').onclick = () => go(idx + 1);
       window.addEventListener('resize', fit);
       document.title = stack.name || 'Contrapt Stack';
       render();
+
+      if (engine) {
+        note.textContent = '';
+        // A click on any part sends mouseUp along its message path.
+        root.addEventListener('click', ev => {
+          const partEl = ev.target.closest('.part');
+          if (!partEl || partEl.dataset.scriptId == null) return;
+          handle(engine.mouseUp(Number(partEl.dataset.scriptId)));
+        });
+        handle(engine.start());
+      }
     })();
     """
 }
