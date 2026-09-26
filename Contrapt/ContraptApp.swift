@@ -302,10 +302,13 @@ private enum ImportKind {
 private struct RootView: View {
     @StateObject private var home = StackDocument.loadHome()
     @State private var opened: OpenedStack?
-    /// Which file picker is open. A single `.fileImporter` is driven by this —
-    /// stacking multiple `.fileImporter` modifiers on one view is a SwiftUI bug
-    /// where the earlier ones silently never present (which broke Import).
-    @State private var activeImport: ImportKind?
+    /// One `.fileImporter` serves all three pickers (stacking multiple importers
+    /// on one view is a SwiftUI bug — only the last presents). `isPickerPresented`
+    /// drives presentation; `importKind` records which picker it is and is kept
+    /// SEPARATE so the isPresented binding's reset-on-dismiss can't clear it
+    /// before the completion reads it.
+    @State private var isPickerPresented = false
+    @State private var importKind: ImportKind = .contraptStack
     @State private var isExporterPresented = false
     @State private var pendingNew: StackDocument?
     @State private var pendingFilename = "Untitled"
@@ -324,9 +327,9 @@ private struct RootView: View {
                             homeStackActions: HomeStackActions(
                                 newStack: { startNew(.makeNew(), filename: "Untitled") },
                                 learnHyperTalk: { startNew(.tutorial(), filename: "Learn HyperTalk") },
-                                open: { activeImport = .contraptStack },
-                                importLegacy: { activeImport = .legacyStack },
-                                setIconApp: { activeImport = .iconApp }))
+                                open: { importKind = .contraptStack; isPickerPresented = true },
+                                importLegacy: { importKind = .legacyStack; isPickerPresented = true },
+                                setIconApp: { importKind = .iconApp; isPickerPresented = true }))
             }
             // An opened stack simply appears over Home (an opaque layer, not
             // a sliding sheet), so it feels like being on that stack rather
@@ -341,13 +344,11 @@ private struct RootView: View {
         // validates the STAK header. (Multiple .fileImporter modifiers on one
         // view don't work — only the last presents — so they're unified here.)
         .fileImporter(
-            isPresented: Binding(get: { activeImport != nil }, set: { if !$0 { activeImport = nil } }),
-            allowedContentTypes: activeImport == .contraptStack ? [.contraptStack] : [.data, .item]
+            isPresented: $isPickerPresented,
+            allowedContentTypes: importKind == .contraptStack ? [.contraptStack] : [.data, .item]
         ) { result in
-            let kind = activeImport
-            activeImport = nil
             guard case .success(let url) = result else { return }
-            switch kind {
+            switch importKind {
             case .contraptStack: openExternal(url)
             case .legacyStack:
                 // Let the picker finish dismissing, then ask the size via a
@@ -358,7 +359,6 @@ private struct RootView: View {
                     chooseImportSize(for: url)
                 }
             case .iconApp: HyperCardAppReference.save(url)
-            case .none: break
             }
         }
         // New stacks and the tutorial are created in Files, then opened.
