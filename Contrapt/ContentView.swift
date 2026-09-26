@@ -681,14 +681,22 @@ struct ContentView: View {
         switch link {
         case .card(let reference):
             let cards = document.stack.cards
+            let target: Int?
             if let number = Int(reference), (1...cards.count).contains(number) {
-                currentCardIndex = number - 1
+                target = number - 1
             } else if let index = cards.firstIndex(where: {
                 $0.name.caseInsensitiveCompare(reference) == .orderedSame
             }) {
-                currentCardIndex = index
+                target = index
+            } else {
+                target = nil // an unknown reference is ignored (no navigation)
             }
-            // An unknown reference is ignored (no navigation).
+            if let target, target != cardIndex {
+                // Following a card link pushes the source card, so a script
+                // can `pop card` back to it (as an automatic `push card`).
+                CardBackStack.shared.ids.append(String(cards[cardIndex].scriptID))
+                currentCardIndex = target
+            }
         case .external(let url):
             openURL(url)
         }
