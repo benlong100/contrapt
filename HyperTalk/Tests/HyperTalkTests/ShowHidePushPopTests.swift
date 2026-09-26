@@ -143,6 +143,25 @@ import Testing
     #expect(host.destinations.last == .named("Phone"))
 }
 
+@Test func paintToolCommandsAndGlobalsAreNoOps() async throws {
+    // A paint-tool script must parse and run without erroring, even though
+    // Contrapt doesn't script painting.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      choose oval tool
+      set filled to false
+      set centered to false
+      set lineSize to 1
+      drag from 160,140 to 210,90
+      type "hello"
+      choose browse tool
+      put "ok" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ok")
+}
+
 @Test func settingEnvironmentGlobalsIsAcceptedAsNoOp() async throws {
     // `set cursor to 4`, `set lockScreen to true`, etc. must not error.
     let host = MockHost(fields: ["out": ""])

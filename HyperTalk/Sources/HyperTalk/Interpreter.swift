@@ -170,6 +170,11 @@ final class Runtime {
         "cursor", "lockscreen", "lockmessages", "lockrecent", "lockerrordialogs",
         "userlevel", "dragspeed", "numberformat", "powerkeys", "blindtyping",
         "textarrows", "editbkgnd", "filter", "cantabort", "cantpeek",
+        // Paint-tool globals — scripted painting isn't modeled, so `set the
+        // <these> to …` is accepted and ignored.
+        "filled", "centered", "linesize", "pensize", "penpattern", "pattern",
+        "multiple", "multispace", "polysides", "grid", "brush",
+        "textfont", "textsize", "textstyle", "textheight", "textalign",
     ]
     private static let constants: [String: String] = [
         "empty": "",
