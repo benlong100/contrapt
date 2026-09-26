@@ -35,8 +35,9 @@ struct ContentView: View {
     /// so transparent or hidden parts are findable. Remembered across sessions.
     @AppStorage("revealButtons") private var revealButtons = false
     @AppStorage("revealFields") private var revealFields = false
-    /// Which layer newly-added parts (buttons, fields, images…) go onto.
-    @AppStorage("addPartsToBackground") private var addPartsToBackground = false
+    /// The inspector's Card/Background/Stack selection — also the layer that
+    /// newly-added parts (buttons, fields, images…) go onto.
+    @State private var objectScope: ObjectScriptsInspector.Scope = .card
     @State private var messageBoxText: String?
     @State private var isMessageBoxVisible = false
     @State private var scriptErrorText: String?
@@ -269,7 +270,7 @@ struct ContentView: View {
                         deletePart(id: selectedPartID)
                     }
                 } else {
-                    ObjectScriptsInspector(stack: stack, cardIndex: cardIndex)
+                    ObjectScriptsInspector(stack: stack, cardIndex: cardIndex, scope: $objectScope)
                 }
             }
             .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
@@ -499,32 +500,25 @@ struct ContentView: View {
     /// where the Cards menu is inline).
     @ViewBuilder private var editingToolbarTools: some View {
         Menu("Add Part", systemImage: "plus") {
-            Button("Button", systemImage: "hand.tap") {
-                addPart(.button(ButtonPart(title: "New Button")))
+            // The target layer follows the inspector's Card/Background tab.
+            Section("Adding to \(newPartLayerName)") {
+                Button("Button", systemImage: "hand.tap") {
+                    addPart(.button(ButtonPart(title: "New Button")))
+                }
+                Button("Field", systemImage: "character.textbox") {
+                    addPart(.field(FieldPart(text: "", placeholder: "")))
+                }
+                Button("Label", systemImage: "textformat") {
+                    addPart(.label(LabelPart(text: "New Label")))
+                }
+                Button("Image…", systemImage: "photo") {
+                    #if os(macOS)
+                    isImageImporterPresented = true
+                    #else
+                    isPhotoPickerPresented = true
+                    #endif
+                }
             }
-            Button("Field", systemImage: "character.textbox") {
-                addPart(.field(FieldPart(text: "", placeholder: "")))
-            }
-            Button("Label", systemImage: "textformat") {
-                addPart(.label(LabelPart(text: "New Label")))
-            }
-            Button("Image…", systemImage: "photo") {
-                #if os(macOS)
-                isImageImporterPresented = true
-                #else
-                isPhotoPickerPresented = true
-                #endif
-            }
-        }
-        // Which layer new parts (images included) land on — the card, or the
-        // shared background.
-        Menu(addPartsToBackground ? "New Parts: Background" : "New Parts: Card",
-             systemImage: addPartsToBackground ? "square.on.square" : "square") {
-            Picker("New Parts Layer", selection: $addPartsToBackground) {
-                Label("Card", systemImage: "square").tag(false)
-                Label("Background", systemImage: "square.on.square").tag(true)
-            }
-            .pickerStyle(.inline)
         }
         // On macOS these live in the Edit menu (see CardCommands) to keep the
         // toolbar uncluttered; iOS has no menu bar, so the toolbar menu stays.
@@ -781,7 +775,7 @@ struct ContentView: View {
         var updated = document.stack
         part.scriptID = updated.claimScriptID()
         let card = updated.cards[cardIndex]
-        if addPartsToBackground,
+        if objectScope == .background,
            let backgroundIndex = updated.backgrounds.firstIndex(where: { $0.id == card.backgroundID }) {
             updated.backgrounds[backgroundIndex].parts.append(part)
         } else {
@@ -789,6 +783,12 @@ struct ContentView: View {
         }
         stack.wrappedValue = updated
         selectedPartID = part.id
+    }
+
+    /// The layer new parts land on, per the inspector's tab (Stack acts as
+    /// Card, since parts can't live on the stack).
+    private var newPartLayerName: String {
+        objectScope == .background ? "Background" : "Card"
     }
 
     /// Which paint layer is being edited: the current card's own, or the

@@ -12,14 +12,15 @@ import SwiftUI
 struct ObjectScriptsInspector: View {
     @Binding var stack: Stack
     let cardIndex: Int
+    /// Shared with the container so "Add Part" targets the selected layer.
+    @Binding var scope: Scope
 
-    private enum Scope: String, CaseIterable {
+    enum Scope: String, CaseIterable {
         case card = "Card"
         case background = "Background"
         case stack = "Stack"
     }
 
-    @State private var scope: Scope = .card
     @State private var isEditorExpanded = false
 
     var body: some View {
@@ -151,5 +152,6 @@ struct ObjectScriptsInspector: View {
 
 #Preview {
     @Previewable @State var stack = Stack.makeNew()
-    ObjectScriptsInspector(stack: $stack, cardIndex: 0)
+    @Previewable @State var scope: ObjectScriptsInspector.Scope = .card
+    ObjectScriptsInspector(stack: $stack, cardIndex: 0, scope: $scope)
 }
