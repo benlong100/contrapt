@@ -244,6 +244,11 @@ indirect enum ObjectExpr {
     /// doesn't model. Parses so `there is a menu …` (false) and `delete menu …`
     /// (no-op) don't break old stacks that manage their own menus.
     case menu(Expr)
+    /// `the message box` / `msg` / `message window` — HyperCard's message box.
+    /// Contrapt shows it via `put` with no destination but doesn't model its
+    /// `visible` property, so `visible of msg box` reads false and setting it
+    /// is a no-op — enough for stacks that save/restore it around a task.
+    case messageBox
 }
 
 enum BinaryOp {

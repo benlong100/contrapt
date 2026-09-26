@@ -112,6 +112,20 @@ import Testing
     #expect(host.properties["background button 2.hilite"] == "true")
 }
 
+@Test func messageBoxVisibleReadsFalseAndSetIsNoOp() async throws {
+    // The Home stack's newLink saves/restores the message box:
+    // `put visible of msg box into saveVisMsgBox` … `set visible of msg box to …`.
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      put visible of msg box into saveVis
+      set visible of message box to true
+      put saveVis into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "false")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""

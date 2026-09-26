@@ -408,6 +408,13 @@ final class Runtime {
             return .normal
 
         case .set(let property, let objectExpression, let valueExpression):
+            if case .messageBox = objectExpression {
+                // Setting the message box's visibility (etc.) is a no-op —
+                // Contrapt doesn't model it. Evaluate the value for side
+                // effects and errors, then ignore it.
+                _ = try await evaluate(valueExpression, line: statement.line)
+                return .normal
+            }
             let object = try await resolveObject(objectExpression, line: statement.line)
             let value = try await evaluate(valueExpression, line: statement.line)
             try hostCall(line: statement.line) { try host.setProperty(property, of: object, to: value) }
@@ -834,6 +841,11 @@ final class Runtime {
             return try hostCall(line: line) { try host.fieldText(reference, domain: domain, onCard: onCard) }
 
         case .property(let property, let objectExpression):
+            if case .messageBox = objectExpression {
+                // Contrapt doesn't model the message box's properties; its
+                // visibility reads false (hidden until a `put` shows it).
+                return property == "visible" ? "false" : ""
+            }
             let object = try await resolveObject(objectExpression, line: line)
             return try hostCall(line: line) { try host.propertyValue(property, of: object) }
 
@@ -1128,6 +1140,10 @@ final class Runtime {
             // Reached only if a menu is used somewhere other than `there is a
             // menu …` (which short-circuits) — Contrapt has no menus.
             throw ScriptError(line: line, message: "Contrapt doesn't have HyperCard menus.")
+        case .messageBox:
+            // Reached only if the message box is used somewhere other than a
+            // property get/set (both short-circuit) — Contrapt doesn't model it.
+            throw ScriptError(line: line, message: "Contrapt doesn't model the message box as an object.")
         }
     }
 

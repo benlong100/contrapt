@@ -1254,6 +1254,12 @@ struct Parser {
             }
             return .card(try parsePrimary())
         }
+        // `msg` / `message [box|window]` — HyperCard's message box.
+        if let w = peekIdentifier(), w == "msg" || w == "message" {
+            advance()
+            _ = consumeWord("box") || consumeWord("window")
+            return .messageBox
+        }
         // Menus aren't modeled in Contrapt; `menu "X"`, `menuItem N of menu
         // "X"`, and `menuBar` still parse so old stacks that test for or delete
         // their own menus don't break. They resolve to an absent object.
