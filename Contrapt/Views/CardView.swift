@@ -17,6 +17,9 @@ struct CardView: View {
     @Binding var selectedPartID: UUID?
     /// The field `find` last matched, boxed on the card (browse mode).
     var findHighlightPartID: UUID? = nil
+    /// The matched character range within that field, so a locked plain field
+    /// can box the exact word rather than the whole field.
+    var findHighlightRange: Range<Int>? = nil
     /// Edit-mode reveal overlays (HyperCard's button/field tool highlighting).
     var revealButtons = false
     var revealFields = false
@@ -155,15 +158,17 @@ struct CardView: View {
                 } else if part.isVisible {
                     PartView(
                         part: $part,
+                        highlightRange: substringHighlight(for: part) ? findHighlightRange : nil,
                         onTap: { onMouseMessage("mouseUp", part) },
                         onMouseDown: { onMouseMessage("mouseDown", part) },
                         onFollowLink: onFollowLink
                     )
                 }
             }
-            // The `find` box: a highlight around the field holding the match.
+            // The `find` box. When the match is boxed inside the field text
+            // (a locked plain field), skip the whole-field outline.
             .overlay {
-                if findHighlightPartID == part.id {
+                if findHighlightPartID == part.id, !substringHighlight(for: part) {
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.accentColor, lineWidth: 2)
                         .padding(-2)
@@ -176,6 +181,14 @@ struct CardView: View {
                 y: part.frame.y + part.frame.height / 2
             )
         }
+    }
+
+    /// Whether `find`'s match should be boxed inside this part's text (only a
+    /// locked plain field renders as static Text we can highlight per-range).
+    private func substringHighlight(for part: Part) -> Bool {
+        guard part.id == findHighlightPartID, findHighlightRange != nil else { return false }
+        guard case .field(let field) = part.kind else { return false }
+        return field.lockText && field.kind == .plain
     }
 
     @ViewBuilder
@@ -564,6 +577,8 @@ private struct FieldBaselineLines: View {
 /// keep the native look; per-kind style properties come later.
 struct PartView: View {
     @Binding var part: Part
+    /// `find`'s matched character range to box within a locked plain field.
+    var highlightRange: Range<Int>? = nil
     var onTap: () -> Void
     var onMouseDown: () -> Void = {}
     var onFollowLink: (FieldLink) -> Void = { _ in }
@@ -598,6 +613,7 @@ struct PartView: View {
             } else {
                 plainField(properties, fieldHeight: part.frame.height)
             }
+            // (highlightRange is consumed by the locked branch of plainField)
         case .label(let properties):
             // Labels take presses too, like HyperCard's locked text:
             // mouseDown at touch-down, mouseUp on release inside.
@@ -651,7 +667,7 @@ struct PartView: View {
                 // label, so a field can drive a script. It renders ALL its
                 // text (no tail-truncation "…"); overflow is clipped by the
                 // field's clipShape, as a HyperCard field clips silently.
-                Text(properties.text)
+                Text(highlightedText(properties.text))
                     .font(properties.format.font)
                     .underline(properties.format.isUnderline)
                     .multilineTextAlignment(properties.format.align.swiftUI)
@@ -702,6 +718,24 @@ struct PartView: View {
     private func isPreformatted(_ text: String) -> Bool {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         return lines.allSatisfy { $0.count <= 40 }
+    }
+
+    /// The field text as an AttributedString, with `find`'s matched range
+    /// given a highlight background — HyperCard boxes the found text; we tint
+    /// the exact characters. The base font/style come from the `.font`/etc.
+    /// modifiers, so only the background is set here.
+    private func highlightedText(_ text: String) -> AttributedString {
+        var attributed = AttributedString(text)
+        guard let range = highlightRange else { return attributed }
+        let characters = attributed.characters
+        let count = characters.count
+        let lower = max(0, min(range.lowerBound, count))
+        let upper = max(lower, min(range.upperBound, count))
+        guard lower < upper else { return attributed }
+        let start = characters.index(characters.startIndex, offsetBy: lower)
+        let end = characters.index(characters.startIndex, offsetBy: upper)
+        attributed[start..<end].backgroundColor = .accentColor.opacity(0.35)
+        return attributed
     }
 
     private func lockedAlignment(_ align: TextAlign) -> Alignment {

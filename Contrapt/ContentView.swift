@@ -112,6 +112,7 @@ struct ContentView: View {
             isSnappingEnabled: isSnappingEnabled,
             selectedPartID: $selectedPartID,
             findHighlightPartID: findHighlight?.partID,
+            findHighlightRange: findHighlight?.range,
             revealButtons: revealButtons,
             revealFields: revealFields,
             includeBackground: includeBackground,
