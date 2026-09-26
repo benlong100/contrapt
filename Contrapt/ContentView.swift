@@ -298,7 +298,15 @@ struct ContentView: View {
         .task {
             // Remember this stack so other stacks' `go stack "<name>"` can
             // find it later.
-            if let fileURL { StackLibrary.shared.register(url: fileURL) }
+            if let fileURL {
+                StackLibrary.shared.register(url: fileURL)
+                // If we were opened by `go card N of stack "<name>"`, land on
+                // that card before the openCard message fires.
+                if let card = PendingStackNavigation.shared.consume(name: StackLibrary.name(for: fileURL)),
+                   let index = cardIndexFor(card) {
+                    currentCardIndex = index
+                }
+            }
             sendSystemMessage("openStack", toCardAt: cardIndex)
             sendSystemMessage("openCard", toCardAt: cardIndex)
         }
@@ -678,6 +686,11 @@ struct ContentView: View {
     /// a document window; iOS layers it over Home via the injected handler.
     private func openResolvedStack(_ url: URL, card: GoDestination?) {
         StackLibrary.shared.register(url: url)
+        // Stash the target card so the opened stack lands on it (both the
+        // macOS window and the iOS layer start a fresh ContentView at card 0).
+        if let card {
+            PendingStackNavigation.shared.set(name: StackLibrary.name(for: url), card: card)
+        }
         #if os(macOS)
         Task { try? await openDocument(at: url) }
         #else
@@ -1236,6 +1249,40 @@ struct ContentView: View {
     /// Clamped so a shorter reopened stack can't strand the index.
     private var cardIndex: Int {
         min(currentCardIndex, document.stack.cards.count - 1)
+    }
+
+    /// Resolves a `go card N of stack "X"` destination to a card index in this
+    /// (the just-opened) stack, for the cases that name an initial card. Other
+    /// destinations (next/previous/home/back/another stack) yield nil.
+    private func cardIndexFor(_ destination: GoDestination) -> Int? {
+        let cards = document.stack.cards
+        guard !cards.isEmpty else { return nil }
+        switch destination {
+        case .first: return 0
+        case .last: return cards.count - 1
+        case .number(let n): return (1...cards.count).contains(n) ? n - 1 : nil
+        case .named(let name): return cards.firstIndex { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        case .id(let id):
+            let wanted = id.trimmingCharacters(in: .whitespaces)
+            return cards.firstIndex { String($0.scriptID) == wanted }
+        case .inBackground(let inner, let background):
+            let indices = cards.indices.filter {
+                backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
+            }
+            guard !indices.isEmpty else { return nil }
+            switch inner {
+            case .first: return indices.first
+            case .last: return indices.last
+            case .number(let n): return (1...indices.count).contains(n) ? indices[n - 1] : nil
+            default: return indices.first
+            }
+        default: return nil
+        }
+    }
+
+    private func backgroundName(ofCardAt index: Int) -> String? {
+        let backgroundID = document.stack.cards[index].backgroundID
+        return document.stack.backgrounds.first { $0.id == backgroundID }?.name
     }
 
     private func goToNextCard() {

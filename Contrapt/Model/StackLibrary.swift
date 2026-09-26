@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import HyperTalk
 
 @MainActor
 final class StackLibrary {
@@ -64,5 +65,24 @@ final class StackLibrary {
     /// The lookup key for a file: its base name without extension, lowercased.
     static func name(for url: URL) -> String {
         url.deletingPathExtension().lastPathComponent.lowercased()
+    }
+}
+
+/// Bridges `go card N of stack "X"` across the open: the target card is
+/// stashed by stack name here, then the opened stack's ContentView consumes
+/// it on appear and navigates there. Works the same for a new macOS window
+/// or the iOS layer, which both start a fresh ContentView at card 0.
+@MainActor
+final class PendingStackNavigation {
+    static let shared = PendingStackNavigation()
+    private var targets: [String: GoDestination] = [:]
+
+    func set(name: String, card: GoDestination) {
+        targets[name.lowercased()] = card
+    }
+
+    /// The pending card for a stack name, removing it (one-shot).
+    func consume(name: String) -> GoDestination? {
+        targets.removeValue(forKey: name.lowercased())
     }
 }
