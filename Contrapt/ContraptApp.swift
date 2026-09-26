@@ -226,6 +226,37 @@ private struct GuideCommand: View {
     }
 }
 
+#if os(macOS)
+/// The File menu's "Export as Website…" item — writes the focused stack as a
+/// static site into a chosen folder, then reveals it in the Finder.
+private struct ExportWebsiteCommand: View {
+    @FocusedValue(\.websiteExport) private var export
+
+    var body: some View {
+        Button("Export as Website…") { run() }
+            .disabled(export == nil)
+    }
+
+    private func run() {
+        guard let export else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a folder to write the exported website into."
+        panel.prompt = "Export"
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+        do {
+            let site = try export.export(directory)
+            NSWorkspace.shared.activateFileViewerSelecting([site])
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+}
+#endif
+
 /// The View menu's Full Screen toggle, enabled when a stack is focused.
 private struct FullScreenCommand: View {
     @FocusedBinding(\.stackFullScreen) private var isFullScreen: Bool?
@@ -539,6 +570,8 @@ struct ContraptApp: App {
             Button("Set HyperCard App for Icons…") {
                 setHyperCardApp()
             }
+            Divider()
+            ExportWebsiteCommand()
         }
         // Cut/Copy/Paste/Delete act on the selected part in edit mode, else
         // on text (Select All stays text-only).

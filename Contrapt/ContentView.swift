@@ -331,6 +331,9 @@ struct ContentView: View {
         .focusedSceneValue(\.partActions, partActions)
         .focusedSceneValue(\.stackFullScreen, fullScreenBinding)
         .focusedSceneValue(\.guidePresented, $isGuidePresented)
+        .focusedSceneValue(\.websiteExport, WebsiteExport { directory in
+            try WebsiteExporter.export(stack: document.stack, assets: document.assets, into: directory)
+        })
         // Full-screen (presentation) mode: hide the app chrome and let the
         // padding color own the space around the card.
         .toolbar(isPresentingFullScreen ? .hidden : .automatic)
@@ -1463,6 +1466,18 @@ struct GuidePresentedKey: FocusedValueKey {
     typealias Value = Binding<Bool>
 }
 
+/// Exports the focused stack as a static website into a chosen directory.
+/// Carried as a focused value so the File menu can drive it for whichever
+/// stack window is frontmost.
+struct WebsiteExport {
+    /// Writes the site into the given directory; returns the created folder.
+    let export: (URL) throws -> URL
+}
+
+struct WebsiteExportKey: FocusedValueKey {
+    typealias Value = WebsiteExport
+}
+
 extension FocusedValues {
     var cardNavigation: CardNavigation? {
         get { self[CardNavigationKey.self] }
@@ -1487,6 +1502,11 @@ extension FocusedValues {
     var guidePresented: Binding<Bool>? {
         get { self[GuidePresentedKey.self] }
         set { self[GuidePresentedKey.self] = newValue }
+    }
+
+    var websiteExport: WebsiteExport? {
+        get { self[WebsiteExportKey.self] }
+        set { self[WebsiteExportKey.self] = newValue }
     }
 }
 
