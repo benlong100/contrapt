@@ -56,6 +56,18 @@ import Testing
     #expect(host.fields["out"] == "no menu")
 }
 
+@Test func thisAcceptsCdAndBgAbbreviations() async throws {
+    // The Home stack writes `short name of this cd` and `this bg` throughout.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["this card.name"] = "Welcome"
+    _ = try await run("""
+    on mouseUp
+      put short name of this cd into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "Welcome")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""

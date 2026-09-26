@@ -1188,13 +1188,20 @@ struct Parser {
         consumeWord("card") || consumeWord("cd") || consumeWord("cards") || consumeWord("cds")
     }
 
+    /// Consume any background synonym (`background`/`bkgnd`/`bkgd`/`bg`).
+    private mutating func consumeBackgroundWord() -> Bool {
+        guard let w = peekIdentifier(), Self.backgroundWords.contains(w) else { return false }
+        advance()
+        return true
+    }
+
     /// An object reference: typed part (`button "OK"`), `card 3`, or
     /// `this card` / `this background` / `this stack`.
     private mutating func parseObjectExpr() throws -> ObjectExpr {
         let line = current.line
         if consumeWord("this") {
-            if consumeWord("card") { return .thisCard }
-            if consumeWord("background") { return .thisBackground }
+            if consumeCardWord() { return .thisCard }
+            if consumeBackgroundWord() { return .thisBackground }
             if consumeWord("stack") { return .thisStack }
             throw ScriptError(line: line, message: "Expected 'card', 'background', or 'stack' after 'this'.")
         }
