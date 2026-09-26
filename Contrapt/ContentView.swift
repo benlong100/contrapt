@@ -54,9 +54,7 @@ struct ContentView: View {
     @State private var undoFlushTask: Task<Void, Never>?
     @State private var isPhotoPickerPresented = false
     #if os(iOS)
-    /// Export-as-website (iOS): the size prompt, then the generated .zip to
-    /// hand to the share sheet.
-    @State private var isExportSizeDialogPresented = false
+    /// Export-as-website (iOS): the generated .zip to hand to the share sheet.
     @State private var exportedWebsite: ExportedWebsite?
     #endif
     @State private var selectedPhoto: PhotosPickerItem?
@@ -227,13 +225,6 @@ struct ContentView: View {
             ) { finished in
                 savePaint(finished)
             }
-        }
-        .confirmationDialog("Website Size", isPresented: $isExportSizeDialogPresented, titleVisibility: .visible) {
-            Button("Original Size") { exportWebsite(actualSize: true) }
-            Button("Scaled to Fit") { exportWebsite(actualSize: false) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Show the card at its original size, or scaled to fill the browser window?")
         }
         .sheet(item: $exportedWebsite) { export in
             ShareSheet(items: [export.url])
@@ -521,9 +512,13 @@ struct ContentView: View {
             }
             #if os(iOS)
             // macOS exports from File ▸ Export as Website…; iOS has no menu bar,
-            // so it lives in the toolbar and shares the site as a .zip.
-            Button("Export as Website", systemImage: "globe") {
-                isExportSizeDialogPresented = true
+            // so it lives in the toolbar and shares the site as a .zip. The size
+            // choice is a submenu rather than a confirmationDialog — a second
+            // confirmationDialog in this scene collides with the Stacks menu's
+            // popover on iPad.
+            Menu("Export as Website", systemImage: "globe") {
+                Button("Original Size") { exportWebsite(actualSize: true) }
+                Button("Scaled to Fit") { exportWebsite(actualSize: false) }
             }
             #endif
             Button("Message Box", systemImage: "text.and.command.macwindow") {
