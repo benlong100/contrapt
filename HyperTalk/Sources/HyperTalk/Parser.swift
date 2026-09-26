@@ -514,9 +514,11 @@ struct Parser {
             advance()
             let savedSuppress = suppressBarePropertyOf
             suppressBarePropertyOf = true
-            let start = try parsePrimary()
+            // The index is an arithmetic expression (`item (x mod 12)+1 of …`)
+            // — parse at the additive level so it stops before `of`/`to`/`&`.
+            let start = try parseAdditive()
             let selector: ChunkSelector = consumeWord("to")
-                ? .range(start, try parsePrimary())
+                ? .range(start, try parseAdditive())
                 : .index(start)
             suppressBarePropertyOf = savedSuppress
             guard consumeWord("of") else {
@@ -1490,9 +1492,11 @@ struct Parser {
             advance()
             let savedSuppress = suppressBarePropertyOf
             suppressBarePropertyOf = true
-            let start = try parsePrimary()
+            // The index is an arithmetic expression (`item (x mod 12)+1 of …`)
+            // — parse at the additive level so it stops before `of`/`to`/`&`.
+            let start = try parseAdditive()
             let selector: ChunkSelector = consumeWord("to")
-                ? .range(start, try parsePrimary())
+                ? .range(start, try parseAdditive())
                 : .index(start)
             suppressBarePropertyOf = savedSuppress
             guard consumeWord("of") else {

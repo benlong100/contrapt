@@ -54,6 +54,30 @@ import Testing
     #expect(host.fields["out"] == "aZc")
 }
 
+@Test func chunkIndexIsAnArithmeticExpression() async throws {
+    // `item (x mod 3)+1 of "a,b,c"` — the index is a full arithmetic expr.
+    let host = try await run("""
+    on mouseUp
+      put 5 into x
+      put item (x mod 3)+1 of "a,b,c" into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    // (5 mod 3)+1 = 3 → item 3 = "c"
+    #expect(host.fields["out"] == "c")
+}
+
+@Test func chunkIndexDoesNotSwallowConcat() async throws {
+    // `char 1 of a & char 1 of b` — the index is just 1, the `&` joins chunks.
+    let host = try await run("""
+    on mouseUp
+      put "XY" into a
+      put "ab" into b
+      put char 1 of a & char 1 of b into field "out"
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "Xa")
+}
+
 @Test func theFirstAndLastWord() async throws {
     let host = try await run("""
     on mouseUp
