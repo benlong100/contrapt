@@ -288,12 +288,21 @@ private struct FullScreenCommand: View {
 /// The iOS root: Home in a plain window (the launch target), saved manually
 /// on a debounce since a WindowGroup has no autosave. Other stacks open from
 /// Files / the share sheet via `.onOpenURL`, presented full-screen over Home.
+/// The file picker RootView currently needs open. One `.fileImporter` handles
+/// all three, since multiple stacked importers don't work.
+private enum ImportKind {
+    case contraptStack   // open an existing .contrapt
+    case legacyStack     // import a classic HyperCard stack (any file)
+    case iconApp         // point at a HyperCard app for button icons
+}
+
 private struct RootView: View {
     @StateObject private var home = StackDocument.loadHome()
     @State private var opened: OpenedStack?
-    @State private var isImporterPresented = false
-    @State private var isLegacyImporterPresented = false
-    @State private var isHyperCardAppPickerPresented = false
+    /// Which file picker is open. A single `.fileImporter` is driven by this —
+    /// stacking multiple `.fileImporter` modifiers on one view is a SwiftUI bug
+    /// where the earlier ones silently never present (which broke Import).
+    @State private var activeImport: ImportKind?
     @State private var pendingLegacyStackURL: URL?
     @State private var isExporterPresented = false
     @State private var pendingNew: StackDocument?
@@ -313,9 +322,9 @@ private struct RootView: View {
                             homeStackActions: HomeStackActions(
                                 newStack: { startNew(.makeNew(), filename: "Untitled") },
                                 learnHyperTalk: { startNew(.tutorial(), filename: "Learn HyperTalk") },
-                                open: { isImporterPresented = true },
-                                importLegacy: { isLegacyImporterPresented = true },
-                                setIconApp: { isHyperCardAppPickerPresented = true }))
+                                open: { activeImport = .contraptStack },
+                                importLegacy: { activeImport = .legacyStack },
+                                setIconApp: { activeImport = .iconApp }))
             }
             // An opened stack simply appears over Home (an opaque layer, not
             // a sliding sheet), so it feels like being on that stack rather
@@ -325,15 +334,25 @@ private struct RootView: View {
                                 onOpenStack: { url in openExternal(url) })
             }
         }
-        .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.contraptStack]) { result in
-            if case .success(let url) = result { openExternal(url) }
+        // One importer for all three pickers. Classic HyperCard stacks and apps
+        // have no uniform type, so those accept any file and the importer
+        // validates the STAK header. (Multiple .fileImporter modifiers on one
+        // view don't work — only the last presents — so they're unified here.)
+        .fileImporter(
+            isPresented: Binding(get: { activeImport != nil }, set: { if !$0 { activeImport = nil } }),
+            allowedContentTypes: activeImport == .contraptStack ? [.contraptStack] : [.data, .item]
+        ) { result in
+            let kind = activeImport
+            activeImport = nil
+            guard case .success(let url) = result else { return }
+            switch kind {
+            case .contraptStack: openExternal(url)
+            case .legacyStack: pendingLegacyStackURL = url
+            case .iconApp: HyperCardAppReference.save(url)
+            case .none: break
+            }
         }
-        // Classic HyperCard stacks have no uniform type, so accept any file
-        // and let the importer validate the STAK header.
-        .fileImporter(isPresented: $isLegacyImporterPresented, allowedContentTypes: [.data, .item]) { result in
-            if case .success(let url) = result { pendingLegacyStackURL = url }
-        }
-        // After picking a stack, choose the import size.
+        // After picking a classic stack, choose the import size.
         .confirmationDialog("Import at what size?",
                             isPresented: Binding(get: { pendingLegacyStackURL != nil },
                                                  set: { if !$0 { pendingLegacyStackURL = nil } }),
@@ -341,10 +360,6 @@ private struct RootView: View {
             Button("Original Size") { importLegacy(url, presentAtActualSize: true) }
             Button("Fill Window") { importLegacy(url, presentAtActualSize: false) }
             Button("Cancel", role: .cancel) {}
-        }
-        // Point Contrapt at a HyperCard app so imported button icons resolve.
-        .fileImporter(isPresented: $isHyperCardAppPickerPresented, allowedContentTypes: [.data, .item]) { result in
-            if case .success(let url) = result { HyperCardAppReference.save(url) }
         }
         // New stacks and the tutorial are created in Files, then opened.
         .fileExporter(
