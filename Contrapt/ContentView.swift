@@ -24,6 +24,11 @@ struct ContentView: View {
     /// that's a RootView concern, so it's injected. nil on macOS, which opens
     /// a document window directly.
     var onOpenStackFile: ((URL, GoDestination?) -> Void)? = nil
+    /// A view (the iOS Home "Stacks" menu) hosted in this view's *own* toolbar's
+    /// leading slot. It must live here rather than in a second `.toolbar`
+    /// attached by the Home root: two `.toolbar` modifiers on one view break
+    /// `Menu` item selection on iPad (the whole menu highlights, nothing fires).
+    var leadingToolbarContent: AnyView? = nil
     @Environment(\.undoManager) private var undoManager
     @Environment(\.openURL) private var openURL
     #if os(macOS)
@@ -482,6 +487,13 @@ struct ContentView: View {
     /// small enough for the compiler to type-check quickly (especially on iOS,
     /// where the Cards menu keeps the editing group inline).
     @ToolbarContentBuilder private var mainToolbar: some ToolbarContent {
+        #if os(iOS)
+        if let leadingToolbarContent {
+            ToolbarItem(placement: .topBarLeading) {
+                leadingToolbarContent
+            }
+        }
+        #endif
         ToolbarItemGroup(placement: .primaryAction) {
             if isEditing {
                 editingToolbarTools

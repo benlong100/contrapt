@@ -304,33 +304,14 @@ private struct RootView: View {
     var body: some View {
         ZStack {
             NavigationStack {
+                // The Stacks menu replaces the document browser: new stacks and
+                // the tutorial are saved into Files (via the exporter), and Open
+                // browses for an existing one. It's handed to ContentView's own
+                // toolbar (not a second `.toolbar` here) — two `.toolbar`
+                // modifiers on one view break Menu selection on iPad.
                 ContentView(document: home, fileURL: HomeStack.workingURL,
-                            onOpenStackFile: { url, _ in openExternal(url) })
-                    // The Stacks menu replaces the document browser: new
-                    // stacks and the tutorial are saved into Files (via the
-                    // exporter), and Open browses for an existing one.
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Menu("Stacks", systemImage: "square.stack") {
-                                Button("New Stack", systemImage: "doc.badge.plus") {
-                                    startNew(.makeNew(), filename: "Untitled")
-                                }
-                                Button("Learn HyperTalk", systemImage: "graduationcap") {
-                                    startNew(.tutorial(), filename: "Learn HyperTalk")
-                                }
-                                Divider()
-                                Button("Open…", systemImage: "folder") {
-                                    isImporterPresented = true
-                                }
-                                Button("Import HyperCard Stack…", systemImage: "tray.and.arrow.down") {
-                                    isLegacyImporterPresented = true
-                                }
-                                Button("Set HyperCard App for Icons…", systemImage: "app.badge") {
-                                    isHyperCardAppPickerPresented = true
-                                }
-                            }
-                        }
-                    }
+                            onOpenStackFile: { url, _ in openExternal(url) },
+                            leadingToolbarContent: AnyView(stacksMenu))
             }
             // An opened stack simply appears over Home (an opaque layer, not
             // a sliding sheet), so it feels like being on that stack rather
@@ -376,6 +357,28 @@ private struct RootView: View {
             if phase != .active { saveTask?.cancel(); home.write(to: HomeStack.workingURL) }
         }
         .onOpenURL { openExternal($0) }
+    }
+
+    /// Home's leading toolbar menu, hosted inside ContentView's own toolbar.
+    private var stacksMenu: some View {
+        Menu("Stacks", systemImage: "square.stack") {
+            Button("New Stack", systemImage: "doc.badge.plus") {
+                startNew(.makeNew(), filename: "Untitled")
+            }
+            Button("Learn HyperTalk", systemImage: "graduationcap") {
+                startNew(.tutorial(), filename: "Learn HyperTalk")
+            }
+            Divider()
+            Button("Open…", systemImage: "folder") {
+                isImporterPresented = true
+            }
+            Button("Import HyperCard Stack…", systemImage: "tray.and.arrow.down") {
+                isLegacyImporterPresented = true
+            }
+            Button("Set HyperCard App for Icons…", systemImage: "app.badge") {
+                isHyperCardAppPickerPresented = true
+            }
+        }
     }
 
     /// Creates a stack in memory and presents the exporter to save it into
