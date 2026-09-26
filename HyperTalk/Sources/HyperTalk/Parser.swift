@@ -893,6 +893,11 @@ struct Parser {
             // Some other trailing `of …` qualifier we don't model — ignore it.
             while current.kind != .newline, current.kind != .endOfScript { advance() }
         }
+        // Window/dialog modifiers Contrapt doesn't model: `go stack "X" in a new
+        // window [without dialog]`, `go … without dialog`.
+        if peekIdentifier() == "in" || peekIdentifier() == "without" {
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+        }
         try expectNewline()
         return Stmt(kind: .go(target), line: line)
     }

@@ -198,6 +198,18 @@ import Testing
     #expect(host.fields["out"] == "ok")
 }
 
+@Test func goStackInANewWindowIgnoresTheModifier() async throws {
+    // The Home stack's help handler: `go to stack theStack in a new window`.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      put "HyperCard Help" into theStack
+      go to stack theStack in a new window
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .stack(name: "HyperCard Help", card: nil))
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""
