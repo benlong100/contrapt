@@ -425,16 +425,15 @@ private struct EditablePart: View {
     }
 }
 
-/// Renders a button in one of HyperCard's styles. Rectangular styles
-/// invert to the accent color while pressed when Auto Hilite is on;
-/// transparent has no chrome (a hot-zone); check-box and radio show their
-/// glyph and don't momentary-highlight.
+/// Renders a button in one of HyperCard's styles. Hilite — a momentary press
+/// (Auto Hilite) or a persistent hilite (imported/scripted, e.g. the Tour's
+/// "BlackStripe" bar) — is a true inverse-video flip of the button's whole
+/// rectangle, so it reads correctly over any background (including dark paint)
+/// and flashes black↔white on click, as in HyperCard. Transparent has no
+/// chrome (a hot-zone); check-box and radio show their glyph and don't flip.
 struct CardButtonStyle: ButtonStyle {
     var style: ButtonStyleKind
     var autoHilite: Bool
-    /// A persistent hilite (imported, or set by script) shows the classic
-    /// inverted look — a black fill with white content, like the Tour's
-    /// "BlackStripe" bar. Momentary press-highlight stays the accent color.
     var hilite: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -442,31 +441,31 @@ struct CardButtonStyle: ButtonStyle {
         let inverted = !style.isToggle && (hilite || pressed)
         return configuration.label
             .font(.body)
-            .foregroundStyle(inverted ? Color.white : Color.accentColor)
+            .foregroundStyle(Color.accentColor)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, style == .transparent ? 0 : 8)
-            .background(background(pressed: pressed))
+            .background(background)
             .overlay(border)
             .compositingGroup()
             .shadow(color: style == .shadow ? .black.opacity(0.45) : .clear, radius: 0, x: 3, y: 3)
+            // Inverse video: `.difference` against white flips every pixel in
+            // the button's rect — its chrome, its label, and whatever shows
+            // through behind it — the way a hilited HyperCard button inverts
+            // the screen region it covers.
+            .overlay { if inverted { shape.fill(.white).blendMode(.difference) } }
             .contentShape(Rectangle())
     }
 
-    /// The fill when inverted: black for a persistent hilite (classic inverse
-    /// video), the accent color for a momentary press.
-    private func background(pressed: Bool) -> some View {
-        let invertFill: Color = hilite ? .black : .accentColor
-        return Group {
-            switch style {
-            case .transparent, .checkbox, .radio:
-                if hilite { shape.fill(Color.black) }
-                else if pressed { shape.fill(Color.accentColor.opacity(0.25)) }
-                else { Color.clear }
-            case .roundRect:
-                shape.fill(hilite || pressed ? invertFill : Color.accentColor.opacity(0.12))
-            case .opaque, .rectangle, .shadow:
-                shape.fill(hilite || pressed ? invertFill : Color.cardSurface)
-            }
+    /// The un-inverted fill; the `.difference` overlay flips it when hilited.
+    @ViewBuilder
+    private var background: some View {
+        switch style {
+        case .transparent, .checkbox, .radio:
+            Color.clear
+        case .roundRect:
+            shape.fill(Color.accentColor.opacity(0.12))
+        case .opaque, .rectangle, .shadow:
+            shape.fill(Color.cardSurface)
         }
     }
 
