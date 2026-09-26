@@ -54,9 +54,11 @@ struct ContentView: View {
     /// through Photos.
     @State private var isImageImporterPresented = false
     #endif
+    #if os(iOS)
     @State private var isPaintingPresented = false
     @State private var paintDrawingToEdit = PKDrawing()
     @State private var paintTarget: PaintTarget = .card
+    #endif
     /// The button being linked, while the Link To panel floats over the card.
     @State private var linkingPartID: UUID?
     @State private var isGuidePresented = false
@@ -191,6 +193,8 @@ struct ContentView: View {
         .sheet(isPresented: $isGuidePresented) {
             HyperTalkGuideView()
         }
+        #if os(iOS)
+        // Painting is iPad-only (finger/Pencil); macOS imports art as images.
         .platformFullScreenCover(isPresented: $isPaintingPresented) {
             PaintEditor(
                 title: paintTarget == .card ? "Paint on Card" : "Paint on Background",
@@ -200,6 +204,7 @@ struct ContentView: View {
                 savePaint(finished)
             }
         }
+        #endif
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             selectedPhoto = nil
@@ -562,6 +567,9 @@ struct ContentView: View {
             Toggle("Show Buttons", isOn: $revealButtons)
             Toggle("Show Fields", isOn: $revealFields)
         }
+        // Painting is an iPad capability (finger/Pencil); the Mac imports
+        // finished art as images instead. See PaintEditor.
+        #if os(iOS)
         Menu("Paint", systemImage: "paintbrush") {
             Button("Paint on Card", systemImage: "rectangle") {
                 openPaintEditor(target: .card)
@@ -570,6 +578,7 @@ struct ContentView: View {
                 openPaintEditor(target: .background)
             }
         }
+        #endif
         Toggle(isOn: $isSnappingEnabled) {
             Label("Snap to Guides", systemImage: "grid")
         }
@@ -799,6 +808,7 @@ struct ContentView: View {
         objectScope == .background ? "Background" : "Card"
     }
 
+    #if os(iOS)
     /// Which paint layer is being edited: the current card's own, or the
     /// shared background's (visible on every card using that background).
     enum PaintTarget {
@@ -856,6 +866,7 @@ struct ContentView: View {
         }
         stack.wrappedValue = updated
     }
+    #endif
 
     /// Imports picked image data as an asset and places an image part
     /// sized to fit, centered on the current card.
