@@ -91,6 +91,19 @@ import Testing
     """)
 }
 
+@Test func abbreviatedFieldReferencesParse() throws {
+    // The Home stack's getHomeInfo reads card/background fields by abbreviation,
+    // inside parens and with card/background scopes:
+    //   put (cd fld "User Name" of cd "User Preferences") into UserName
+    //   put bg fld "Paths" of cd "Stacks" of bg "Paths" into Stacks
+    try HyperTalk.check("""
+    on mouseUp
+      put (cd fld "User Name" of cd "User Preferences") into UserName
+      put bg fld "Paths" of cd "Stacks" of bg "Paths" into Stacks
+    end mouseUp
+    """)
+}
+
 @Test func checkReportsProblemsWithLineNumbers() async {
     do {
         try HyperTalk.check("""

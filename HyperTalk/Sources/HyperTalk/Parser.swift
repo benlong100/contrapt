@@ -1557,7 +1557,9 @@ struct Parser {
                 throw ScriptError(line: line, message: "This '(' is missing its closing ')'.")
             }
             return inner
-        case .identifier("field"), .identifier("card"), .identifier("background"), .identifier("bg"):
+        case .identifier("field"), .identifier("fld"),
+             .identifier("card"), .identifier("cd"),
+             .identifier("background"), .identifier("bkgnd"), .identifier("bkgd"), .identifier("bg"):
             if let fieldRef = try parseFieldRefIfPresent() {
                 return .field(fieldRef)
             }
