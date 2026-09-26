@@ -1383,6 +1383,26 @@ struct Parser {
         return nil
     }
 
+    /// After a `number of <plural>` count, swallows an optional
+    /// `[of|in] [this|<ordinal>] card/background [name|number]` scope — e.g.
+    /// `number of cds in this bg`, `number of cds of first bg`. Contrapt counts
+    /// within the current stack, so the scope is parsed and ignored; it just
+    /// needs consuming so the surrounding statement parses. Restores the cursor
+    /// if what follows isn't actually a card/background scope.
+    private mutating func skipCountScopeIfPresent() {
+        let saved = index
+        guard consumeWord("of") || consumeWord("in") else { return }
+        _ = consumeWord("this")
+        if let w = peekIdentifier(),
+           w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil {
+            advance()
+        }
+        guard consumeCardWord() || consumeBackgroundWord() else { index = saved; return }
+        _ = consumeWord("id")
+        if case .number = current.kind { advance() }
+        else if case .string = current.kind { advance() }
+    }
+
     /// Maps an ordinal word (or last/middle) to a chunk selector.
     static func ordinalSelector(_ word: String) -> ChunkSelector? {
         if let n = ordinals[word] { return .index(.numberLiteral(Double(n))) }
@@ -1486,6 +1506,7 @@ struct Parser {
                 advance() // number
                 advance() // of
                 if let countable = parseCountable() {
+                    skipCountScopeIfPresent()
                     return .count(countable)
                 }
                 index = saved // not a count noun — let a property handle it
@@ -1549,6 +1570,18 @@ struct Parser {
             // reserves both words for dispatch identity).
             if word == "me" { return .property("name", .me) }
             if word == "target" { return .property("name", .target) }
+            // Bare `number of cards/backgrounds/buttons/fields [scope]` — a
+            // count (HyperTalk's `the` is optional). `number of this card`
+            // (an ordinal property) isn't countable, so it falls through.
+            if word == "number", peekIdentifier() == "of" {
+                let saved = index
+                advance() // of
+                if let countable = parseCountable() {
+                    skipCountScopeIfPresent()
+                    return .count(countable)
+                }
+                index = saved // e.g. `number of this cd` → the ordinal property
+            }
             // Bare ordinal chunk: `last char of X`, `first word of X`,
             // `middle line of X` — HyperTalk's `the` is optional.
             if !suppressBarePropertyOf, let selector = Self.ordinalSelector(word),

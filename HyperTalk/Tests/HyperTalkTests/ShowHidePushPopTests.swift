@@ -68,6 +68,32 @@ import Testing
     #expect(host.fields["out"] == "Welcome")
 }
 
+@Test func bareNumberOfCardsInBackgroundCounts() async throws {
+    // The Home stack: `put number of cds in this bg into numBgCards`. Bare
+    // `number of <plural>` is a count; the `in this bg` scope is consumed.
+    let host = MockHost(fields: ["out": ""])
+    host.cardCount = 7
+    _ = try await run("""
+    on mouseUp
+      put number of cds in this bg into field "out"
+      put number of cds of first bg into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "7")
+}
+
+@Test func bareNumberOfThisCardIsOrdinalProperty() async throws {
+    // `number of this cd` (singular) is the card's position, not a count.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["this card.number"] = "3"
+    _ = try await run("""
+    on mouseUp
+      put number of this cd into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "3")
+}
+
 @Test func goHomeAsksToOpenHome() async throws {
     let host = MockHost()
     _ = try await run("""
