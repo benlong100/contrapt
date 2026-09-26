@@ -654,13 +654,18 @@ struct PartView: View {
         // by a fraction of the field height — enough for a tall multi-row grid
         // to clear the rule above it, but capped so a short one-line field
         // (e.g. a 17pt-tall day-number box) isn't shoved out of view.
-        let topPadding: CGFloat = properties.lockText ? min(16, max(2, fieldHeight * 0.2)) : 8
-        let bottomPadding: CGFloat = properties.lockText ? 2 : 8
+        let topPadding: CGFloat = properties.lockText ? min(16, max(2, fieldHeight * 0.2)) : min(8, max(2, fieldHeight * 0.18))
+        let bottomPadding: CGFloat = properties.lockText ? 2 : min(8, max(2, fieldHeight * 0.18))
         // Pre-formatted tabular text (several short, hard-broken lines, like a
         // calendar grid) should never soft-wrap — a row that's a hair too wide
         // must stay one line and clip, not reflow its last columns. Flowing
         // prose (a quote with no/long lines) still word-wraps.
         let preformatted = isPreformatted(properties.text)
+        // A field only ~one line tall renders as a compact single-line control
+        // even if flagged multi-line, so a short title/label (e.g. the 22pt
+        // "Title" field) isn't clipped by a TextEditor's height/insets.
+        let lineHeight = CGFloat(properties.format.size) * 1.3
+        let effectivelyMultiline = properties.isMultiline && fieldHeight > lineHeight * 2
         Group {
             if properties.lockText {
                 // Locked text is display-only and dispatches presses like a
@@ -676,7 +681,7 @@ struct PartView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
                     .contentShape(Rectangle())
                     .gesture(labelPressGesture)
-            } else if properties.isMultiline {
+            } else if effectivelyMultiline {
                 TextEditor(text: fieldText)
                     .font(properties.format.font)
                     .underline(properties.format.isUnderline)
