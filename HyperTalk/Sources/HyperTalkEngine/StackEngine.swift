@@ -174,7 +174,7 @@ public final class StackEngine {
 
 // MARK: - Renderable snapshot (Encodable for the JS bridge)
 
-public struct CardState: Encodable, Equatable, Sendable {
+public struct CardState: Codable, Equatable, Sendable {
     public let cardIndex: Int
     public let cardScriptID: Int
     public let cardName: String
@@ -185,7 +185,7 @@ public struct CardState: Encodable, Equatable, Sendable {
 /// The mutable, script-visible bits of a part the page re-reads after each
 /// event (text, hilite, visibility, geometry). Static layout/style stays in
 /// the exported `stack.json`; this carries what scripts can change.
-public struct RenderPart: Encodable, Equatable, Sendable {
+public struct RenderPart: Codable, Equatable, Sendable {
     public let scriptID: Int
     public let kind: String
     public let name: String

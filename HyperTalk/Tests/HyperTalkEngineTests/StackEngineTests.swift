@@ -10,7 +10,7 @@ import Testing
 /// A small two-card stack exercised by the tests. Card 1 carries four parts:
 /// a button that writes a field, the field itself, a button that navigates, a
 /// button that posts to the message box, and a button reading a property.
-private let sampleJSON = """
+let sampleJSON = """
 {
   "formatVersion": 1,
   "id": "00000000-0000-0000-0000-0000000000AA",
