@@ -171,6 +171,7 @@ import Testing
       set lineSize to 1
       drag from 160,140 to 210,90
       type "hello"
+      reset paint
       choose browse tool
       put "ok" into field "out"
     end mouseUp

@@ -389,10 +389,10 @@ struct Parser {
             let object = try parseObjectExpr()
             try expectNewline()
             return Stmt(kind: .sendMessage(message, to: object), line: line)
-        case "choose", "drag", "type":
+        case "choose", "drag", "type", "reset":
             // Paint/tool automation Contrapt doesn't model: `choose <tool>
-            // tool`, `drag from a to b`, `type "…"`. Accepted and ignored so
-            // old paint scripts don't error.
+            // tool`, `drag from a to b`, `type "…"`, `reset paint`. Accepted
+            // and ignored so old paint scripts don't error.
             advance()
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
