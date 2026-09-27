@@ -314,7 +314,8 @@ struct ContentView: View {
                 if let selectedPartID, let partBinding = partBinding(for: selectedPartID) {
                     PartInspector(
                         part: partBinding,
-                        onLinkTo: { linkingPartID = selectedPartID }
+                        onLinkTo: { linkingPartID = selectedPartID },
+                        onDeselect: { self.selectedPartID = nil }
                     ) {
                         deletePart(id: selectedPartID)
                     }

@@ -13,6 +13,9 @@ struct PartInspector: View {
     /// Begins Link To… — the owner shows a floating panel over the card so
     /// the user can navigate to a destination before capturing it.
     var onLinkTo: () -> Void = {}
+    /// Deselects the part, returning the inspector to the Card/Background/
+    /// Stack view — the way back without hunting for empty card to click.
+    var onDeselect: () -> Void = {}
     var onDelete: () -> Void
 
     @State private var isEditorExpanded = false
@@ -21,6 +24,14 @@ struct PartInspector: View {
 
     var body: some View {
         Form {
+            Section {
+                Button {
+                    onDeselect()
+                } label: {
+                    Label("Card, Background & Stack", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+            }
             Section("Part") {
                 HStack(spacing: 8) {
                     Text("Name")
