@@ -238,12 +238,15 @@ private struct GuideCommand: View {
 }
 
 #if os(macOS)
-/// Help ▸ What's New in HyperTalk? — opens a fresh throwaway copy of the
-/// bundled help stack (help-as-stacks; see HelpStacks).
-private struct WhatsNewCommand: View {
+/// A Help-menu item opening a bundled help stack — a fresh throwaway copy
+/// each time (help-as-stacks; see HelpStacks).
+private struct HelpStackCommand: View {
+    let title: String
+    let resource: String
+
     var body: some View {
-        Button("What's New in HyperTalk?") {
-            guard let url = HelpStacks.freshCopy(of: HelpStacks.whatsNew) else { return }
+        Button(title) {
+            guard let url = HelpStacks.freshCopy(of: resource) else { return }
             NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
         }
     }
@@ -652,7 +655,8 @@ struct ContraptApp: App {
         // The HyperTalk Guide and the help stacks, in the Help menu.
         CommandGroup(replacing: .help) {
             GuideCommand()
-            WhatsNewCommand()
+            HelpStackCommand(title: "What's New in HyperTalk?", resource: HelpStacks.whatsNew)
+            HelpStackCommand(title: "How to Import HyperCard Stacks", resource: HelpStacks.importing)
         }
         #endif
         CommandMenu("Go") {

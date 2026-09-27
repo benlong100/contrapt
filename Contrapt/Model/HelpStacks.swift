@@ -14,8 +14,9 @@
 import Foundation
 
 nonisolated enum HelpStacks {
-    /// The bundled "What's New in HyperTalk" stack's resource name.
+    /// The bundled help stacks' resource names.
     static let whatsNew = "Whats New in HyperTalk"
+    static let importing = "How to Import HyperCard Stacks"
 
     /// A fresh, disposable copy of a bundled help stack, ready to open like
     /// any document. Nil when the resource is missing from the bundle.
