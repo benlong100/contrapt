@@ -58,6 +58,9 @@ struct ContentView: View {
     /// so transparent or hidden parts are findable. Remembered across sessions.
     @AppStorage("revealButtons") private var revealButtons = false
     @AppStorage("revealFields") private var revealFields = false
+    /// Temporarily lets locked parts be selected, so a locked one can be
+    /// picked and unlocked. Transient per session.
+    @State private var selectLocked = false
     /// HyperCard's background mode (Cmd-B): show only the background layer,
     /// hiding card-layer parts and paint. Transient per session.
     @State private var backgroundOnly = false
@@ -137,6 +140,7 @@ struct ContentView: View {
             findHighlightRange: findHighlight?.range,
             revealButtons: revealButtons,
             revealFields: revealFields,
+            selectLocked: selectLocked,
             includeBackground: includeBackground,
             includeCard: includeCard,
             onMouseMessage: sendMouseMessage,
@@ -660,6 +664,8 @@ struct ContentView: View {
         Menu("Reveal", systemImage: "eye") {
             Toggle("Show Buttons", isOn: $revealButtons)
             Toggle("Show Fields", isOn: $revealFields)
+            // Escape hatch: pick a locked part (to unlock it in the inspector).
+            Toggle("Select Locked Objects", isOn: $selectLocked)
             Divider()
             // HyperCard's background mode (Cmd-B): see the background alone.
             Toggle("Background Only", isOn: $backgroundOnly)

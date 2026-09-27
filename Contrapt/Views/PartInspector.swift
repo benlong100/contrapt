@@ -60,6 +60,9 @@ struct PartInspector: View {
                     Toggle("Visible", isOn: $part.isVisible)
                         .labelsHidden()
                 }
+                Toggle(isOn: $part.isLocked) {
+                    Text("Locked (protect from selection in edit mode)")
+                }
             }
             kindSection
             Section("Position and Size") {

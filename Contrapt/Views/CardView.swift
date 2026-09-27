@@ -23,6 +23,8 @@ struct CardView: View {
     /// Edit-mode reveal overlays (HyperCard's button/field tool highlighting).
     var revealButtons = false
     var revealFields = false
+    /// When true, locked parts can still be selected (to unlock them).
+    var selectLocked = false
     /// Which layers to draw. Splitting them lets a card-transition animate the
     /// card layer over a static background (default: both, the whole card).
     var includeBackground = true
@@ -173,6 +175,8 @@ struct CardView: View {
                         guides: $guides,
                         revealButtons: revealButtons,
                         revealFields: revealFields,
+                        locksSelection: part.isLocked && !selectLocked,
+                        showsLockBadge: part.isLocked,
                         highlight: cardHighlight,
                         linkColorHex: cardLinkColorHex,
                         onSelect: { selectedPartID = part.id },
@@ -335,6 +339,10 @@ private struct EditablePart: View {
     @Binding var guides: AlignmentGuides
     var revealButtons = false
     var revealFields = false
+    /// Locked and not currently overridden — ignore all selection/move/resize.
+    var locksSelection = false
+    /// Show the lock badge (locked, regardless of the override).
+    var showsLockBadge = false
     var highlight: Color = .accentColor
     var linkColorHex: String? = nil
     var onSelect: () -> Void
@@ -367,17 +375,35 @@ private struct EditablePart: View {
             .opacity(part.isVisible ? 1 : 0.35)
             .allowsHitTesting(false)
             .contentShape(Rectangle())
+            // A locked part ignores selection and drags; the click falls
+            // through to whatever's beneath (or the card). Enable "Select
+            // Locked Objects" in the Reveal menu to pick one and unlock it.
             .onTapGesture(count: 2) {
+                guard !locksSelection else { return }
                 onSelect()
                 onOpenInspector()
             }
-            .onTapGesture { onSelect() }
-            .gesture(moveGesture)
+            .onTapGesture {
+                guard !locksSelection else { return }
+                onSelect()
+            }
+            .gesture(moveGesture, including: locksSelection ? .subviews : .all)
             .background {
                 // Reveal fill behind the part, so a transparent/empty one
                 // still shows where it is.
                 if isRevealed {
                     revealColor.opacity(0.12)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if showsLockBadge {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(3)
+                        .background(Color.black.opacity(0.55), in: Circle())
+                        .padding(2)
+                        .allowsHitTesting(false)
                 }
             }
             .overlay {

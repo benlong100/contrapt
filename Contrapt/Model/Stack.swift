@@ -206,6 +206,11 @@ nonisolated struct Part: Identifiable, Hashable {
     /// Permanent short ID for scripts (`button id 6`); assigned by the
     /// stack's allocator, stable across renames, never reused.
     var scriptID: Int = 0
+    /// Locked parts can't be selected, moved, or resized in edit mode — a
+    /// guard against nudging finished art. It only affects editing (browse
+    /// mode is unchanged); the Reveal menu's "Select Locked Objects" lets you
+    /// pick one to unlock.
+    var isLocked: Bool = false
 }
 
 nonisolated enum PartKind: Hashable {
@@ -452,7 +457,7 @@ nonisolated struct ImagePart: Codable, Hashable {
 /// so older builds refuse newer stacks instead of failing mid-decode.
 extension Part: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, name, frame, script, type, button, field, label, image, visible, scriptID
+        case id, name, frame, script, type, button, field, label, image, visible, scriptID, locked
     }
 
     init(from decoder: Decoder) throws {
@@ -463,6 +468,7 @@ extension Part: Codable {
         script = try container.decode(String.self, forKey: .script)
         isVisible = try container.decodeIfPresent(Bool.self, forKey: .visible) ?? true
         scriptID = try container.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
+        isLocked = try container.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         let type = try container.decode(String.self, forKey: .type)
         switch type {
         case "button":
@@ -490,6 +496,7 @@ extension Part: Codable {
         try container.encode(script, forKey: .script)
         try container.encode(isVisible, forKey: .visible)
         try container.encode(scriptID, forKey: .scriptID)
+        if isLocked { try container.encode(true, forKey: .locked) }
         switch kind {
         case .button(let properties):
             try container.encode("button", forKey: .type)
