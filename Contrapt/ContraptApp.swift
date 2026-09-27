@@ -24,6 +24,9 @@ import UIKit
 /// dock reopen with no windows. Opening a specific stack from Finder still
 /// works normally (this hook isn't called in that case).
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Drives frequent in-place autosaves (below).
+    private var autosaveTimer: Timer?
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Suppress AppKit's automatic "Enter Full Screen" View-menu item —
         // Contrapt's full-screen is its own presentation mode. Set before the
@@ -61,6 +64,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
         ) { _ in
             Self.pruneUnwantedMenuItems()
+        }
+
+        // Autosave in place frequently. DocumentGroup already saves on window
+        // close and when the app deactivates, but its idle autosave is on a
+        // ~30s cadence — a crash while the app stays frontmost could lose the
+        // last edits. This flushes any dirty document every few seconds using
+        // NSDocument's own autosave (safe: no writing behind its back), so
+        // testers rarely lose more than a few seconds of work.
+        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
+            for document in NSDocumentController.shared.documents where document.hasUnautosavedChanges {
+                document.autosave(withImplicitCancellability: true) { _ in }
+            }
         }
     }
 
