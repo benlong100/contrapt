@@ -47,6 +47,13 @@ struct ObjectScriptsInspector: View {
                     Toggle("Don't Search Card", isOn: $stack.cards[cardIndex].dontSearch)
                     Toggle("Can't Delete Card", isOn: $stack.cards[cardIndex].cantDelete)
                 }
+                Section {
+                    ColorPicker("Highlight Color", selection: cardHighlightBinding, supportsOpacity: false)
+                    Button("Use Default Highlight") { stack.cards[cardIndex].highlightColor = nil }
+                        .disabled(stack.cards[cardIndex].highlightColor == nil)
+                } footer: {
+                    Text("Colors this card's rich-text links and button icons. Default follows the app's accent color.")
+                }
             }
             if scope == .background, let backgroundIndex {
                 Section("Background") {
@@ -113,6 +120,15 @@ struct ObjectScriptsInspector: View {
     private var backgroundIndex: Int? {
         let backgroundID = stack.cards[cardIndex].backgroundID
         return stack.backgrounds.firstIndex { $0.id == backgroundID }
+    }
+
+    /// The current card's highlight color; unset (nil) shows the app accent
+    /// and writes as a #RRGGBB hex once chosen.
+    private var cardHighlightBinding: Binding<Color> {
+        Binding(
+            get: { stack.cards[cardIndex].highlightColor.map(Color.init(stackColor:)) ?? .accentColor },
+            set: { stack.cards[cardIndex].highlightColor = $0.stackHexString }
+        )
     }
 
     /// Reassigns the current card to another existing background. The card

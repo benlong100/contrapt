@@ -17,12 +17,14 @@ enum MarkdownHTML {
     /// A full HTML document (styling inlined) rendering `markdown`, using the
     /// field's base font design and size. Headings and other elements scale
     /// relative to that base.
-    static func document(from markdown: String, fontDesign: FontDesign = .standard, size: Double = 17) -> String {
+    /// `linkColor` is a CSS color (a #RRGGBB hex or a name) for `<a>` links —
+    /// the card's highlight; nil keeps the system link blue.
+    static func document(from markdown: String, fontDesign: FontDesign = .standard, size: Double = 17, linkColor: String? = nil) -> String {
         let body = renderBlocks(markdown)
         return """
         <!DOCTYPE html>
         <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>\(css(fontFamily: fontFamily(fontDesign), size: size))</style></head>
+        <style>\(css(fontFamily: fontFamily(fontDesign), size: size, linkColor: linkColor))</style></head>
         <body>\(body)</body></html>
         """
     }
@@ -221,8 +223,9 @@ enum MarkdownHTML {
             .replacingOccurrences(of: ">", with: "&gt;")
     }
 
-    private static func css(fontFamily: String, size: Double) -> String {
-        """
+    private static func css(fontFamily: String, size: Double, linkColor: String? = nil) -> String {
+        let link = linkColor ?? "-apple-system-blue"
+        return """
     :root { color-scheme: light dark; }
     body {
         font-family: \(fontFamily);
@@ -233,7 +236,7 @@ enum MarkdownHTML {
     h1, h2, h3, h4, h5, h6 { line-height: 1.2; margin: 0.6em 0 0.3em; }
     h1 { font-size: 1.7em; } h2 { font-size: 1.4em; } h3 { font-size: 1.2em; }
     p { margin: 0.5em 0; }
-    a { color: -apple-system-blue; }
+    a { color: \(link); }
     code { font-family: ui-monospace, monospace; font-size: 0.9em; background: rgba(127,127,127,0.15); padding: 0.1em 0.3em; border-radius: 4px; }
     pre { background: rgba(127,127,127,0.12); padding: 10px; border-radius: 8px; overflow-x: auto; }
     pre code { background: none; padding: 0; }

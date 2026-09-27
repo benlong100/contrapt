@@ -284,6 +284,7 @@ extension WebHost {
         switch property {
         case "name": return card.name
         case "longname": return "card \"\(card.name)\""
+        case "highlightcolor": return card.highlightColor ?? ""
         case "number": return String(index + 1)
         case "id": return String(card.scriptID)
         case "marked": return card.isMarked ? "true" : "false"
@@ -299,6 +300,7 @@ extension WebHost {
         case "marked": stack.cards[index].isMarked = try boolean(value, for: property)
         case "cantdelete": stack.cards[index].cantDelete = try boolean(value, for: property)
         case "dontsearch": stack.cards[index].dontSearch = try boolean(value, for: property)
+        case "highlightcolor": stack.cards[index].highlightColor = value.isEmpty ? nil : value
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }

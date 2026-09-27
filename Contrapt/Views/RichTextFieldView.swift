@@ -25,12 +25,14 @@ struct RichFieldView: View {
     var fontDesign: FontDesign = .standard
     var size: Double = 17
     var style: FieldStyle = .rectangle
+    /// The card's highlight as a CSS link color, or nil for the default.
+    var linkColorHex: String? = nil
     var onFollowLink: (FieldLink) -> Void
 
     var body: some View {
         // The web view is transparent; the chrome supplies the fill/border so
         // a transparent field lets the card show through the rendered text.
-        RichTextWebView(markdown: markdown, fontDesign: fontDesign, size: size, onFollowLink: onFollowLink)
+        RichTextWebView(markdown: markdown, fontDesign: fontDesign, size: size, linkColorHex: linkColorHex, onFollowLink: onFollowLink)
             .fieldChrome(style: style)
     }
 }
@@ -81,6 +83,7 @@ private struct RichTextWebView {
     let markdown: String
     var fontDesign: FontDesign
     var size: Double
+    var linkColorHex: String? = nil
     var onFollowLink: (FieldLink) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onFollowLink: onFollowLink) }
@@ -113,12 +116,12 @@ private struct RichTextWebView {
     }
 
     /// Reload only when what affects the rendered HTML changes.
-    private var renderKey: String { "\(fontDesign.rawValue)|\(size)|\(markdown)" }
+    private var renderKey: String { "\(fontDesign.rawValue)|\(size)|\(linkColorHex ?? "")|\(markdown)" }
 
     private func load(into webView: WKWebView, coordinator: Coordinator) {
         coordinator.lastRenderKey = renderKey
         webView.loadHTMLString(
-            MarkdownHTML.document(from: markdown, fontDesign: fontDesign, size: size),
+            MarkdownHTML.document(from: markdown, fontDesign: fontDesign, size: size, linkColor: linkColorHex),
             baseURL: nil
         )
     }

@@ -160,12 +160,16 @@ nonisolated struct Card: Identifiable, Hashable {
     var isMarked: Bool = false
     var cantDelete: Bool = false
     var dontSearch: Bool = false
+    /// A per-card accent: the color of rich-field links and button icon/label
+    /// text on this card. A color name or #RRGGBB hex; nil follows the app
+    /// accent. Scriptable as `the highlightColor of this card`.
+    var highlightColor: String? = nil
 }
 
 extension Card: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, backgroundID, script, parts, paintDrawingAsset, paintImageAsset, scriptID
-        case isMarked, cantDelete, dontSearch
+        case isMarked, cantDelete, dontSearch, highlightColor
     }
 
     init(from decoder: Decoder) throws {
@@ -181,6 +185,7 @@ extension Card: Codable {
         isMarked = try container.decodeIfPresent(Bool.self, forKey: .isMarked) ?? false
         cantDelete = try container.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try container.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
+        highlightColor = try container.decodeIfPresent(String.self, forKey: .highlightColor)
     }
 }
 

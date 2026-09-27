@@ -965,6 +965,7 @@ final class DocumentScriptHost: HyperTalkHost {
         switch property {
         case "name": return card.name
         case "longname": return "card \"\(card.name)\""
+        case "highlightcolor": return card.highlightColor ?? ""
         case "number": return String(index + 1)
         case "id": return String(card.scriptID)
         case "marked": return card.isMarked ? "true" : "false"
@@ -987,6 +988,9 @@ final class DocumentScriptHost: HyperTalkHost {
         case "marked": stackBinding.wrappedValue.cards[index].isMarked = try flag()
         case "cantdelete": stackBinding.wrappedValue.cards[index].cantDelete = try flag()
         case "dontsearch": stackBinding.wrappedValue.cards[index].dontSearch = try flag()
+        case "highlightcolor":
+            // Empty clears it back to the app accent.
+            stackBinding.wrappedValue.cards[index].highlightColor = value.isEmpty ? nil : value
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }

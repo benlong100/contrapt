@@ -243,6 +243,7 @@ struct Card: Codable, Hashable {
     var isMarked: Bool = false
     var cantDelete: Bool = false
     var dontSearch: Bool = false
+    var highlightColor: String? = nil
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -255,10 +256,11 @@ struct Card: Codable, Hashable {
         isMarked = try c.decodeIfPresent(Bool.self, forKey: .isMarked) ?? false
         cantDelete = try c.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try c.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
+        highlightColor = try c.decodeIfPresent(String.self, forKey: .highlightColor)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, backgroundID, script, parts, scriptID, isMarked, cantDelete, dontSearch
+        case id, name, backgroundID, script, parts, scriptID, isMarked, cantDelete, dontSearch, highlightColor
     }
     func encode(to encoder: Encoder) throws { throw EngineError("read-only") }
 

@@ -134,6 +134,20 @@ struct CardView: View {
         stack.backgrounds.firstIndex { $0.id == stack.cards[cardIndex].backgroundID }
     }
 
+    /// The current card's accent for button icons/labels — its highlightColor,
+    /// or the app accent when unset.
+    private var cardHighlight: Color {
+        guard stack.cards.indices.contains(cardIndex),
+              let hex = stack.cards[cardIndex].highlightColor else { return .accentColor }
+        return Color(stackColor: hex)
+    }
+
+    /// The current card's highlightColor as a CSS color for rich-field links,
+    /// or nil to keep the default link color.
+    private var cardLinkColorHex: String? {
+        stack.cards.indices.contains(cardIndex) ? stack.cards[cardIndex].highlightColor : nil
+    }
+
     /// Everything a drag can snap against on this card.
     private var snapContext: SnapContext {
         var parts: [(id: UUID, frame: PartFrame)] = []
@@ -159,6 +173,8 @@ struct CardView: View {
                         guides: $guides,
                         revealButtons: revealButtons,
                         revealFields: revealFields,
+                        highlight: cardHighlight,
+                        linkColorHex: cardLinkColorHex,
                         onSelect: { selectedPartID = part.id },
                         onOpenInspector: onOpenInspector
                     )
@@ -166,6 +182,8 @@ struct CardView: View {
                     PartView(
                         part: $part,
                         highlightRange: substringHighlight(for: part) ? findHighlightRange : nil,
+                        highlight: cardHighlight,
+                        linkColorHex: cardLinkColorHex,
                         onTap: { onMouseMessage("mouseUp", part) },
                         onMouseDown: { onMouseMessage("mouseDown", part) },
                         onFollowLink: onFollowLink
@@ -317,6 +335,8 @@ private struct EditablePart: View {
     @Binding var guides: AlignmentGuides
     var revealButtons = false
     var revealFields = false
+    var highlight: Color = .accentColor
+    var linkColorHex: String? = nil
     var onSelect: () -> Void
     var onOpenInspector: () -> Void
 
@@ -341,7 +361,7 @@ private struct EditablePart: View {
     private static let minSize: Double = 32
 
     var body: some View {
-        PartView(part: $part, onTap: {})
+        PartView(part: $part, highlight: highlight, linkColorHex: linkColorHex, onTap: {})
             // Ghost a hidden part's visual only — the contentShape and
             // gestures below stay fully hittable so it can be selected.
             .opacity(part.isVisible ? 1 : 0.35)
@@ -445,13 +465,15 @@ struct CardButtonStyle: ButtonStyle {
     var style: ButtonStyleKind
     var autoHilite: Bool
     var hilite: Bool = false
+    /// The button's icon/label color — the card's highlight (app accent default).
+    var tint: Color = .accentColor
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = autoHilite && configuration.isPressed && !style.isToggle
         let inverted = !style.isToggle && (hilite || pressed)
         return configuration.label
             .font(.body)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(tint)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, style == .transparent ? 0 : 8)
             .background(background)
@@ -599,6 +621,10 @@ struct PartView: View {
     @Binding var part: Part
     /// `find`'s matched character range to box within a locked plain field.
     var highlightRange: Range<Int>? = nil
+    /// The card's accent — button icon/label tint and (as `linkColorHex`)
+    /// rich-field link color.
+    var highlight: Color = .accentColor
+    var linkColorHex: String? = nil
     var onTap: () -> Void
     var onMouseDown: () -> Void = {}
     var onFollowLink: (FieldLink) -> Void = { _ in }
@@ -617,7 +643,7 @@ struct PartView: View {
             } label: {
                 buttonLabel(properties)
             }
-            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite, hilite: properties.hilite))
+            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite, hilite: properties.hilite, tint: highlight))
             .simultaneousGesture(pressDetector)
         case .field(let properties):
             if properties.kind == .rich {
@@ -628,6 +654,7 @@ struct PartView: View {
                     fontDesign: properties.format.fontDesign,
                     size: properties.format.size,
                     style: properties.style,
+                    linkColorHex: linkColorHex,
                     onFollowLink: onFollowLink
                 )
             } else {
