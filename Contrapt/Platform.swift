@@ -47,28 +47,33 @@ extension PlatformImage {
     }
 }
 
-// MARK: - Delete key (macOS)
+// MARK: - Edit-mode key handling (macOS)
 
 #if os(macOS)
-/// A local key-down monitor for the Delete key. SwiftUI's focus-scoped
-/// `onKeyPress` never receives the key here (the card's part gestures own
-/// focus), so we watch the event stream directly — while deferring to text
-/// editing so Delete still erases characters in a focused field.
-struct DeleteKeyCatcher: NSViewRepresentable {
+/// A local key-down monitor for the selected part's editing keys: Delete
+/// removes it; the arrow keys nudge it (1px, or 10px with Shift). SwiftUI's
+/// focus-scoped `onKeyPress` never receives these here (the card's part
+/// gestures own focus), so we watch the event stream directly — while
+/// deferring to text editing so the keys work normally in a focused field.
+struct EditKeyCatcher: NSViewRepresentable {
     var isEnabled: Bool
     var onDelete: () -> Void
+    /// Move the selected part by (dx, dy) in card points.
+    var onNudge: (CGFloat, CGFloat) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
-        context.coordinator.onDelete = onDelete
-        context.coordinator.isEnabled = isEnabled
+        update(context)
         context.coordinator.install()
         return NSView()
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ nsView: NSView, context: Context) { update(context) }
+
+    private func update(_ context: Context) {
         context.coordinator.onDelete = onDelete
+        context.coordinator.onNudge = onNudge
         context.coordinator.isEnabled = isEnabled
     }
 
@@ -78,21 +83,35 @@ struct DeleteKeyCatcher: NSViewRepresentable {
 
     final class Coordinator {
         var onDelete: (() -> Void)?
+        var onNudge: ((CGFloat, CGFloat) -> Void)?
         var isEnabled = false
         private var monitor: Any?
 
         func install() {
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self, self.isEnabled else { return event }
-                // 51 = Delete (backspace), 117 = forward delete.
-                guard event.keyCode == 51 || event.keyCode == 117 else { return event }
                 // Leave text editing alone: a focused field editor keeps the key.
                 if let responder = event.window?.firstResponder,
                    responder is NSText || responder is NSTextView {
                     return event
                 }
-                self.onDelete?()
-                return nil
+                switch event.keyCode {
+                case 51, 117: // Delete (backspace), forward delete
+                    self.onDelete?()
+                    return nil
+                case 123, 124, 125, 126: // ← → ↓ ↑
+                    let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
+                    let (dx, dy): (CGFloat, CGFloat) = switch event.keyCode {
+                    case 123: (-step, 0)
+                    case 124: (step, 0)
+                    case 125: (0, step)   // down = +y in card coordinates
+                    default: (0, -step)   // 126 up = -y
+                    }
+                    self.onNudge?(dx, dy)
+                    return nil
+                default:
+                    return event
+                }
             }
         }
 

@@ -186,24 +186,37 @@ struct ContentView: View {
         .environment(\.stackAssets, document.assets)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(backdropColor)
-        // In edit mode, the Delete key removes the selected part. A local
-        // key monitor handles it (SwiftUI's onKeyPress never gets the key
-        // while the card's part gestures own focus); it defers to any field
-        // being edited so Delete still erases text there.
+        // In edit mode, Delete removes the selected part and the arrow keys
+        // nudge it (1px, or 10px with Shift). A local key monitor handles it on
+        // macOS (SwiftUI's onKeyPress never gets the key while the card's part
+        // gestures own focus); it defers to any field being edited so the keys
+        // work normally in text there.
         #if os(macOS)
         .background(
-            DeleteKeyCatcher(isEnabled: isEditing && selectedPartID != nil) {
-                if let selectedPartID { deletePart(id: selectedPartID) }
-            }
+            EditKeyCatcher(
+                isEnabled: isEditing && selectedPartID != nil,
+                onDelete: { if let selectedPartID { deletePart(id: selectedPartID) } },
+                onNudge: { dx, dy in moveSelectedPart(dx: dx, dy: dy) }
+            )
         )
         #else
         .focusable(isEditing)
         .focusEffectDisabled()
         .focused($isCardFocused)
         .onKeyPress { press in
-            guard isEditing, let selectedPartID,
-                  press.key == .delete || press.key == .deleteForward else { return .ignored }
-            deletePart(id: selectedPartID)
+            guard isEditing, selectedPartID != nil else { return .ignored }
+            if press.key == .delete || press.key == .deleteForward {
+                if let selectedPartID { deletePart(id: selectedPartID) }
+                return .handled
+            }
+            let step: CGFloat = press.modifiers.contains(.shift) ? 10 : 1
+            switch press.key {
+            case .leftArrow: moveSelectedPart(dx: -step, dy: 0)
+            case .rightArrow: moveSelectedPart(dx: step, dy: 0)
+            case .upArrow: moveSelectedPart(dx: 0, dy: -step)
+            case .downArrow: moveSelectedPart(dx: 0, dy: step)
+            default: return .ignored
+            }
             return .handled
         }
         .onChange(of: selectedPartID) { _, newValue in
@@ -906,6 +919,19 @@ struct ContentView: View {
             return stack.backgrounds[backgroundIndex].parts[partIndex]
         }
         return nil
+    }
+
+    /// Nudges the selected part by (dx, dy) card points, clamping its origin to
+    /// the card the way loading does (a sliver always stays reachable). Routes
+    /// through the stack binding, so a run of arrow presses coalesces into one
+    /// undo step like a drag.
+    private func moveSelectedPart(dx: CGFloat, dy: CGFloat) {
+        guard let id = selectedPartID, let binding = partBinding(for: id) else { return }
+        let size = document.stack.cardSize
+        var frame = binding.wrappedValue.frame
+        frame.x = min(max(frame.x + dx, 0), max(0, size.width - 16))
+        frame.y = min(max(frame.y + dy, 0), max(0, size.height - 16))
+        binding.wrappedValue.frame = frame
     }
 
     private func addPart(_ kind: PartKind) {
