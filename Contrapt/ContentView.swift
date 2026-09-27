@@ -923,6 +923,16 @@ struct ContentView: View {
         var part = part
         var updated = document.stack
         part.scriptID = updated.claimScriptID()
+        appendPartToActiveLayer(part, in: &updated)
+        stack.wrappedValue = updated
+        selectedPartID = part.id
+    }
+
+    /// Appends an already-prepared part to the layer the inspector targets —
+    /// the current card's shared background when the Background tab is active,
+    /// otherwise the current card. Shared by New Part and Paste so both follow
+    /// the selected layer.
+    private func appendPartToActiveLayer(_ part: Part, in updated: inout Stack) {
         let card = updated.cards[cardIndex]
         if objectScope == .background,
            let backgroundIndex = updated.backgrounds.firstIndex(where: { $0.id == card.backgroundID }) {
@@ -930,8 +940,6 @@ struct ContentView: View {
         } else {
             updated.cards[cardIndex].parts.append(part)
         }
-        stack.wrappedValue = updated
-        selectedPartID = part.id
     }
 
     /// The layer new parts land on, per the inspector's tab (Stack acts as
@@ -1162,7 +1170,7 @@ struct ContentView: View {
         part.scriptID = updated.claimScriptID()
         part.frame.x += 20
         part.frame.y += 20
-        updated.cards[cardIndex].parts.append(part)
+        appendPartToActiveLayer(part, in: &updated)
         stack.wrappedValue = updated
         selectedPartID = part.id
     }
