@@ -360,6 +360,7 @@ struct ContentView: View {
         .focusedSceneValue(\.partActions, partActions)
         .focusedSceneValue(\.stackFullScreen, fullScreenBinding)
         .focusedSceneValue(\.guidePresented, $isGuidePresented)
+        .focusedSceneValue(\.messageBoxVisible, $isMessageBoxVisible)
         .focusedSceneValue(\.websiteExport, WebsiteExport { directory, actualSize in
             try WebsiteExporter.export(stack: document.stack, assets: document.assets, into: directory, actualSize: actualSize)
         })
@@ -1564,6 +1565,12 @@ struct GuidePresentedKey: FocusedValueKey {
     typealias Value = Binding<Bool>
 }
 
+/// Carries a binding to the focused stack's message-box visibility, so the Go
+/// menu's Message Box item (⌘M) can toggle it.
+struct MessageBoxVisibleKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
 /// Exports the focused stack as a static website into a chosen directory.
 /// Carried as a focused value so the File menu can drive it for whichever
 /// stack window is frontmost.
@@ -1602,6 +1609,11 @@ extension FocusedValues {
     var guidePresented: Binding<Bool>? {
         get { self[GuidePresentedKey.self] }
         set { self[GuidePresentedKey.self] = newValue }
+    }
+
+    var messageBoxVisible: Binding<Bool>? {
+        get { self[MessageBoxVisibleKey.self] }
+        set { self[MessageBoxVisibleKey.self] = newValue }
     }
 
     var websiteExport: WebsiteExport? {

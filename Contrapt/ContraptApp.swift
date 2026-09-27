@@ -97,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// The Go menu's items, enabled only when a stack window is focused.
 private struct GoCommands: View {
     @FocusedValue(\.cardNavigation) private var navigation
+    @FocusedBinding(\.messageBoxVisible) private var isMessageBoxVisible: Bool?
     #if os(macOS)
     @Environment(\.openDocument) private var openDocument
     #endif
@@ -120,6 +121,13 @@ private struct GoCommands: View {
                 .keyboardShortcut(.downArrow, modifiers: .command)
         }
         .disabled(navigation == nil)
+        // HyperCard's Message Box (⌘M), toggled from anywhere in a stack.
+        Divider()
+        Button(isMessageBoxVisible == true ? "Hide Message Box" : "Message Box") {
+            isMessageBoxVisible?.toggle()
+        }
+        .keyboardShortcut("m", modifiers: .command)
+        .disabled(isMessageBoxVisible == nil)
         #if os(macOS)
         Divider()
         Button("Reset Home to Default…") {
