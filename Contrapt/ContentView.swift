@@ -1210,10 +1210,16 @@ struct ContentView: View {
         }
         var updated = document.stack
         var part = payload.part
+        // Pasting onto the source card would land exactly on the original and
+        // hide it, so offset there; pasting onto a different card keeps the
+        // source position (as in HyperCard). The source part still carries its
+        // id, so its presence on this card means we're on the source card.
+        if partBinding(for: payload.part.id) != nil {
+            part.frame.x += 20
+            part.frame.y += 20
+        }
         part.id = UUID()
         part.scriptID = updated.claimScriptID()
-        part.frame.x += 20
-        part.frame.y += 20
         appendPartToActiveLayer(part, in: &updated)
         stack.wrappedValue = updated
         selectedPartID = part.id
