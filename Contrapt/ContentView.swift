@@ -248,20 +248,30 @@ struct ContentView: View {
                 addImagePart(data: data, imageSize: image.pixelSize)
             }
         }
+        // The overlay animations are scoped to their own containers, NOT the
+        // whole stage: a broad `.animation(value: isMessageBoxVisible)` here
+        // would also animate a card `.id` swap happening in the same
+        // transaction (openCard's `put … into message` opens the box just as a
+        // navigation changes the card), cross-fading the card and flashing the
+        // other one through it.
         .overlay(alignment: .bottom) {
-            if isMessageBoxVisible {
-                MessageBoxView(output: messageBoxText, onCommand: runMessageBoxCommand)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            ZStack {
+                if isMessageBoxVisible {
+                    MessageBoxView(output: messageBoxText, onCommand: runMessageBoxCommand)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.default, value: isMessageBoxVisible)
         }
         .overlay(alignment: .top) {
-            if linkingPartID != nil {
-                linkToPanel
-                    .transition(.move(edge: .top).combined(with: .opacity))
+            ZStack {
+                if linkingPartID != nil {
+                    linkToPanel
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
+            .animation(.default, value: linkingPartID)
         }
-        .animation(.default, value: isMessageBoxVisible)
-        .animation(.default, value: linkingPartID)
         .alert(
             "Script Error",
             isPresented: Binding(
