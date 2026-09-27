@@ -148,7 +148,10 @@ struct CardView: View {
         ForEach(parts) { $part in
             Group {
                 if isEditing {
-                    // Hidden parts stay editable, shown ghosted.
+                    // Hidden parts stay editable, shown ghosted. (The ghosting
+                    // lives inside EditablePart, on the visual only — dimming
+                    // the whole EditablePart here kept its tap/drag gestures
+                    // from receiving clicks, making hidden parts unselectable.)
                     EditablePart(
                         part: $part,
                         isSelected: selectedPartID == part.id,
@@ -159,7 +162,6 @@ struct CardView: View {
                         onSelect: { selectedPartID = part.id },
                         onOpenInspector: onOpenInspector
                     )
-                    .opacity(part.isVisible ? 1 : 0.35)
                 } else if part.isVisible {
                     PartView(
                         part: $part,
@@ -340,6 +342,9 @@ private struct EditablePart: View {
 
     var body: some View {
         PartView(part: $part, onTap: {})
+            // Ghost a hidden part's visual only — the contentShape and
+            // gestures below stay fully hittable so it can be selected.
+            .opacity(part.isVisible ? 1 : 0.35)
             .allowsHitTesting(false)
             .contentShape(Rectangle())
             .onTapGesture(count: 2) {
