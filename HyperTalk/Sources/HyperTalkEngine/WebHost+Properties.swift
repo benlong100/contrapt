@@ -30,6 +30,7 @@ extension WebHost {
             }
             switch property {
             case "name": return bg.name
+            case "longname": return "bkgnd \"\(bg.name)\""
             case "id": return String(bg.scriptID)
             case "cantdelete": return bg.cantDelete ? "true" : "false"
             case "dontsearch": return bg.dontSearch ? "true" : "false"
@@ -38,6 +39,7 @@ extension WebHost {
         case .thisStack:
             switch property {
             case "name": return stack.name
+            case "longname": return "stack \"\(stack.name)\""
             case "cards": return String(stack.cards.count)
             case "width": return numberText(stack.cardSize.width)
             case "height": return numberText(stack.cardSize.height)
@@ -86,6 +88,7 @@ extension WebHost {
     private func partProperty(_ property: String, of part: Part, kind: String) throws -> String {
         switch property {
         case "name": return part.name
+        case "longname": return "\(kind) \"\(part.name)\""
         case "id": return String(part.scriptID)
         case "visible": return part.isVisible ? "true" : "false"
         case "width": return numberText(part.frame.width)
@@ -94,6 +97,12 @@ extension WebHost {
         case "top": return numberText(part.frame.y)
         case "right": return numberText(part.frame.x + part.frame.width)
         case "bottom": return numberText(part.frame.y + part.frame.height)
+        case "rect", "rectangle":
+            return [part.frame.x, part.frame.y, part.frame.x + part.frame.width, part.frame.y + part.frame.height]
+                .map(numberText).joined(separator: ",")
+        case "loc", "location":
+            return [part.frame.x + part.frame.width / 2, part.frame.y + part.frame.height / 2]
+                .map(numberText).joined(separator: ",")
         case "title":
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.title
@@ -157,6 +166,13 @@ extension WebHost {
         case "top": part.frame.y = try number(value, for: property)
         case "right": part.frame.x = try number(value, for: property) - part.frame.width
         case "bottom": part.frame.y = try number(value, for: property) - part.frame.height
+        case "rect", "rectangle":
+            let n = try numberList(value, count: 4, for: property)
+            part.frame = PartFrame(x: n[0], y: n[1], width: max(16, n[2] - n[0]), height: max(16, n[3] - n[1]))
+        case "loc", "location":
+            let n = try numberList(value, count: 2, for: property)
+            part.frame.x = n[0] - part.frame.width / 2
+            part.frame.y = n[1] - part.frame.height / 2
         case "title":
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             p.title = value; part.kind = .button(p)
@@ -267,6 +283,7 @@ extension WebHost {
         let card = stack.cards[index]
         switch property {
         case "name": return card.name
+        case "longname": return "card \"\(card.name)\""
         case "number": return String(index + 1)
         case "id": return String(card.scriptID)
         case "marked": return card.isMarked ? "true" : "false"
@@ -320,6 +337,15 @@ extension WebHost {
             throw HostError("The \(property) property needs a number, not \"\(value)\".")
         }
         return n
+    }
+
+    /// A comma-separated list of exactly `count` numbers ("10,20,110,70").
+    private func numberList(_ value: String, count: Int, for property: String) throws -> [Double] {
+        let numbers = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard numbers.count == count, numbers.allSatisfy(\.isFinite) else {
+            throw HostError("The \(property) property needs \(count) numbers separated by commas, not \"\(value)\".")
+        }
+        return numbers
     }
 
     private func numberText(_ value: Double) -> String {

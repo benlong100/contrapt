@@ -39,17 +39,19 @@ import Testing
     #expect(host.fields["out"] == "40,60")
 }
 
-@Test func shortAndLongNameResolveToTheName() async throws {
-    // `short name of X` / `the long name of X` → the `name` property.
+@Test func shortAndLongNameResolveToTheirProperties() async throws {
+    // `short name of X` → the bare `name`; `the long name of X` → the
+    // HyperCard-style descriptor (the `longname` property).
     let host = MockHost(fields: ["out": ""])
     host.properties["button OK.name"] = "OK"
+    host.properties["button OK.longname"] = "button \"OK\""
     try await run("""
     on mouseUp
       put short name of button "OK" into field "out"
       put char 1 of the long name of button "OK" after field "out"
     end mouseUp
     """, host: host)
-    #expect(host.fields["out"] == "OKO")
+    #expect(host.fields["out"] == "OKb")
 }
 
 @Test func theNumberOfCountsPartsAndCards() async throws {

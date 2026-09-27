@@ -82,8 +82,10 @@ enum ChunkResolver {
         case .character:
             return source.map(String.init)
         case .word:
-            // Runs of whitespace separate words; empties dropped.
-            return source.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init)
+            // Runs of whitespace separate words; empties dropped. As in
+            // HyperCard, a double-quoted span is a single word (quotes kept):
+            // word 2 of «stack "Graph Maker"» is «"Graph Maker"».
+            return wordSplit(source)
         case .item:
             // Delimited by the itemDelimiter (comma by default); empties kept
             // (item 2 of "a,,c" is empty). An empty delimiter yields one item.
@@ -92,6 +94,26 @@ enum ChunkResolver {
         case .line:
             return source.components(separatedBy: "\n")
         }
+    }
+
+    /// Whitespace-separated words, where a double-quoted span (quotes
+    /// included) is one word — HyperCard's word chunking.
+    private static func wordSplit(_ source: String) -> [String] {
+        var words: [String] = []
+        var current = ""
+        var inQuotes = false
+        for character in source {
+            if character == "\"" {
+                inQuotes.toggle()
+                current.append(character)
+            } else if !inQuotes, character == " " || character == "\t" || character == "\n" {
+                if !current.isEmpty { words.append(current); current = "" }
+            } else {
+                current.append(character)
+            }
+        }
+        if !current.isEmpty { words.append(current) }
+        return words
     }
 
     private static func delimiter(_ kind: ChunkKind, itemDelimiter: String) -> String {

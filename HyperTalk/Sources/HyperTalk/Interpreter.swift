@@ -911,6 +911,16 @@ final class Runtime {
                 // available — so the userLevel reads as 5 (Scripting), the
                 // top. Guards like `if the userLevel < 3` then pass correctly.
                 return "5"
+            case "stacks":
+                // HyperCard: the open stacks' paths, one per line, frontmost
+                // first. Contrapt shows one stack per window: its name. Pairs
+                // with `the long name of <stack>` (`stack "<name>"`) so the
+                // classic am-I-the-right-stack guard compares equal.
+                return try hostCall(line: line) { try host.propertyValue("name", of: .thisStack) }
+            case "mouseclick":
+                // No queued clicks in Contrapt — `wait while the mouseClick`
+                // proceeds immediately.
+                return "false"
             default:
                 throw ScriptError(line: line, message: "Can't read the '\(property)'.")
             }

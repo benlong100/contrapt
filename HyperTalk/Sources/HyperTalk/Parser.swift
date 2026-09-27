@@ -705,6 +705,14 @@ struct Parser {
                 throw ScriptError(line: line, message: "Expected 'blinds' after 'venetian'.")
             }
             kind = .venetianBlinds
+        case "shrink", "stretch":
+            // HyperCard's `shrink to top/center/bottom` and `stretch from …` —
+            // rendered as the closest modeled effect (a zoom close/open); the
+            // position word is consumed and ignored.
+            _ = consumeWord("to") || consumeWord("from")
+            if let w = peekIdentifier(), w == "top" || w == "center" || w == "bottom" { advance() }
+            kind = .zoom
+            return try finishVisualEffect(kind: kind, direction: first == "shrink" ? .close : .open)
         default:
             throw ScriptError(line: line, message: "Unknown visual effect '\(first)'.")
         }
@@ -714,7 +722,12 @@ struct Parser {
             advance()
             direction = parsed
         }
+        return try finishVisualEffect(kind: kind, direction: direction)
+    }
 
+    /// The `[[very] fast/slow]` tail and optional `to <image>` clause shared by
+    /// every effect form.
+    private mutating func finishVisualEffect(kind: ScreenEffect.Kind, direction: ScreenEffect.Direction?) throws -> ScreenEffect {
         var speed: ScreenEffect.Speed = .normal
         if consumeWord("very") {
             if consumeWord("fast") { speed = .veryFast }
@@ -1420,8 +1433,10 @@ struct Parser {
     ]
     static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg"]
     static let cardWords: Set<String> = ["card", "cd"]
-    /// Object-less global properties readable as `the <name>`.
-    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel"]
+    /// Object-less global properties readable as `the <name>`. `stacks` (the
+    /// open-stack list) and `mouseclick` (a pending click) are functions in
+    /// HyperCard; they read the same way here.
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,
@@ -1543,19 +1558,24 @@ struct Parser {
     /// surrounding `set … to …` (or property read) sees what follows. Restores
     /// the cursor if the `of …` isn't actually a card/background scope.
     private mutating func skipPartScopeIfPresent() {
-        let saved = index
-        guard consumeWord("of") else { return }
-        _ = consumeWord("this")
-        if let w = peekIdentifier(),
-           w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil {
-            advance()
-        }
-        guard consumeCardWord() || consumeBackgroundWord() else { index = saved; return }
-        _ = consumeWord("id")
-        // An optional identifier/number/string naming the card (`of cd curCard`,
-        // `of card 5`, `of bg "X"`) — but not a following statement keyword.
-        if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
-            _ = try? parsePrimary()
+        // Scopes chain: `bg btn id 68 of cd 1 of bg "Graphs"` — consume each
+        // `of <card|bg> …` segment in turn.
+        while true {
+            let saved = index
+            guard consumeWord("of") else { return }
+            _ = consumeWord("this")
+            if let w = peekIdentifier(),
+               w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil {
+                advance()
+            }
+            guard consumeCardWord() || consumeBackgroundWord() else { index = saved; return }
+            _ = consumeWord("id")
+            // An optional identifier/number/string naming the card (`of cd
+            // curCard`, `of card 5`, `of bg "X"`) — but not a following
+            // statement keyword.
+            if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
+                _ = try? parsePrimary()
+            }
         }
     }
 
@@ -1680,14 +1700,14 @@ struct Parser {
                 }
                 return .chunk(kind, selector, try parsePrimary())
             }
-            // `the short name of X`, `the long name of X` → the `name`
-            // property (Contrapt already returns the bare name).
+            // `the short name of X` → the bare `name`; `the long name of X` →
+            // the HyperCard-style descriptor (`stack "Graph Maker"`).
             if let adjective = peekIdentifier(), Self.nameAdjectives.contains(adjective),
                peekIdentifier(1) == "name", peekIdentifier(2) == "of" {
                 advance() // adjective
                 advance() // name
                 advance() // of
-                return .property("name", try parseObjectExpr())
+                return .property(adjective == "long" ? "longname" : "name", try parseObjectExpr())
             }
             // `the <property> of <object>`; otherwise "the" is a noise
             // word before a value ("the date" → the unquoted literal).
@@ -1754,12 +1774,12 @@ struct Parser {
             // leading `the`, e.g. `loc of field "x"`, `rect of card field 2`.
             // A plain variable is never legitimately followed by `of`, so
             // treating `<ident> of …` as a property access is safe.
-            // `short name of X`, `long name of X` → the `name` property.
+            // `short name of X` → `name`; `long name of X` → the descriptor.
             if !suppressBarePropertyOf, Self.nameAdjectives.contains(word),
                peekIdentifier() == "name", peekIdentifier(1) == "of" {
                 advance() // name
                 advance() // of
-                return .property("name", try parseObjectExpr())
+                return .property(word == "long" ? "longname" : "name", try parseObjectExpr())
             }
             if !suppressBarePropertyOf, peekIdentifier() == "of" {
                 advance() // of
