@@ -66,13 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.pruneUnwantedMenuItems()
         }
 
-        // Autosave in place frequently. DocumentGroup already saves on window
+        // Autosave in place every second. DocumentGroup already saves on window
         // close and when the app deactivates, but its idle autosave is on a
-        // ~30s cadence — a crash while the app stays frontmost could lose the
-        // last edits. This flushes any dirty document every few seconds using
-        // NSDocument's own autosave (safe: no writing behind its back), so
-        // testers rarely lose more than a few seconds of work.
-        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
+        // ~30s cadence, and neither of those fires when the app is force-killed
+        // (e.g. Xcode's Stop button sends SIGKILL) — so edits since the last
+        // save are lost and the file reverts to that earlier copy. Flushing any
+        // dirty document once a second via NSDocument's own autosave (safe: no
+        // writing behind its back) keeps that loss window under ~1s.
+        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             for document in NSDocumentController.shared.documents where document.hasUnautosavedChanges {
                 document.autosave(withImplicitCancellability: true) { _ in }
             }
