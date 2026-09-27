@@ -591,6 +591,16 @@ struct Parser {
             }
             return .chunk(kind, selector, try parseContainer(line: line))
         }
+        // `msg` / `message [box|window]` / `the message box` — the message box
+        // as a destination (`put x into message`). Without this it would fall
+        // through to a variable named "message" and silently write nothing.
+        let messageOffset = peekIdentifier() == "the" ? 1 : 0
+        if let word = peekIdentifier(messageOffset), word == "msg" || word == "message" {
+            if messageOffset == 1 { advance() } // the
+            advance() // msg / message
+            if let next = peekIdentifier(), next == "box" || next == "window" { advance() }
+            return .messageBox
+        }
         if let fieldRef = try parseFieldRefIfPresent() {
             return .field(fieldRef)
         }

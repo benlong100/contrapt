@@ -135,6 +135,8 @@ indirect enum CardRef {
 indirect enum Container {
     case variable(String)
     case field(FieldRef)
+    /// The message box: `put x into message` / `msg`. Writing shows it.
+    case messageBox
     /// A chunk of another container: `word 2 of field "X"`.
     case chunk(ChunkKind, ChunkSelector, Container)
 }

@@ -157,6 +157,10 @@ final class Runtime {
     /// The delimiter `item` chunks split on. HyperTalk's `itemDelimiter`
     /// property — a comma by default, changeable at run time.
     private var itemDelimiter = ","
+    /// The message box's current text, so `put x into message`, `put after
+    /// message`, and reading `message` as a container are consistent. The host
+    /// owns display; this mirrors the content for the interpreter's own reads.
+    private var messageBoxText = ""
 
     /// Effects queued by `visual effect`, played (and cleared) by the next
     /// `go`, as in HyperCard.
@@ -656,6 +660,7 @@ final class Runtime {
     private func executePut(_ expression: Expr, _ mode: PutMode, _ container: Container?, line: Int) async throws {
         let value = try await evaluate(expression, line: line)
         guard let container else {
+            messageBoxText = value
             host.showMessage(value)
             return
         }
@@ -679,6 +684,8 @@ final class Runtime {
         case .field(let fieldRef):
             let (reference, domain, onCard) = try await resolveFieldRef(fieldRef, line: line)
             return try hostCall(line: line) { try host.fieldText(reference, domain: domain, onCard: onCard) }
+        case .messageBox:
+            return messageBoxText
         case .chunk(let kind, let selector, let base):
             let source = try await containerValue(base, line: line)
             return try await ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
@@ -695,6 +702,9 @@ final class Runtime {
         case .field(let fieldRef):
             let (reference, domain, onCard) = try await resolveFieldRef(fieldRef, line: line)
             try hostCall(line: line) { try host.setFieldText(reference, domain: domain, onCard: onCard, to: value) }
+        case .messageBox:
+            messageBoxText = value
+            host.showMessage(value)
         case .chunk(let kind, let selector, let base):
             let source = try await containerValue(base, line: line)
             let updated = try await ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value, itemDelimiter: itemDelimiter) {
