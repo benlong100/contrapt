@@ -789,6 +789,11 @@ struct PartView: View {
                    let image = Image(assetData: data) {
                     // 1-bit icons stay crisp with nearest-neighbor scaling.
                     image.resizable().interpolation(.none).aspectRatio(contentMode: .fit)
+                } else if let symbol = properties.iconSymbol, !symbol.isEmpty {
+                    // SF Symbol icon (the authoring library) — vector, scales to fit.
+                    Image(systemName: symbol)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
                 }
                 if properties.showName {
                     Text(properties.title)

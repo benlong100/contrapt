@@ -17,6 +17,7 @@ struct PartInspector: View {
 
     @State private var isEditorExpanded = false
     @State private var isMarkdownEditorExpanded = false
+    @State private var isIconPickerPresented = false
 
     var body: some View {
         Form {
@@ -81,6 +82,30 @@ struct PartInspector: View {
                 size: fieldTextSize.wrappedValue
             )
         }
+        .sheet(isPresented: $isIconPickerPresented) {
+            IconPickerView(current: currentButtonIconSymbol) { setButtonIcon($0) }
+        }
+    }
+
+    /// The button's current SF Symbol icon name, if any.
+    private var currentButtonIconSymbol: String? {
+        if case .button(let properties) = part.kind { return properties.iconSymbol }
+        return nil
+    }
+
+    /// Whether the button carries an imported (PNG asset) icon.
+    private var buttonHasImportedIcon: Bool {
+        if case .button(let properties) = part.kind { return properties.iconAsset != nil }
+        return false
+    }
+
+    /// Sets (or clears) the button's icon. A chosen symbol replaces any
+    /// imported PNG icon; Remove (nil) clears both.
+    private func setButtonIcon(_ symbol: String?) {
+        guard case .button(var properties) = part.kind else { return }
+        properties.iconSymbol = symbol
+        properties.iconAsset = nil
+        part.kind = .button(properties)
     }
 
     private var kindName: String {
@@ -112,6 +137,19 @@ struct PartInspector: View {
                     }
                 }
                 fontAndSizeRow
+                HStack(spacing: 8) {
+                    Text("Icon").foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    if let symbol = currentButtonIconSymbol, !symbol.isEmpty {
+                        Image(systemName: symbol).imageScale(.large)
+                    } else if buttonHasImportedIcon {
+                        Text("Imported").foregroundStyle(.secondary)
+                    } else {
+                        Text("None").foregroundStyle(.secondary)
+                    }
+                    Button("Choose…") { isIconPickerPresented = true }
+                        .buttonStyle(.borderless)
+                }
                 Button("Link To…", systemImage: "link") {
                     onLinkTo()
                 }

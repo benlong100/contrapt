@@ -272,10 +272,14 @@ nonisolated struct ButtonPart: Hashable {
     /// An icon image drawn on the button (asset name), e.g. an imported
     /// HyperCard button icon. Nil for a plain text button.
     var iconAsset: String?
+    /// An SF Symbol name drawn on the button — the authoring icon library, an
+    /// alternative to a bundled bitmap. `iconAsset` (an imported PNG) wins when
+    /// both are set. Nil for no symbol.
+    var iconSymbol: String?
 
     init(title: String, showName: Bool = true, autoHilite: Bool = true,
          style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat(),
-         iconAsset: String? = nil) {
+         iconAsset: String? = nil, iconSymbol: String? = nil) {
         self.title = title
         self.showName = showName
         self.autoHilite = autoHilite
@@ -283,12 +287,13 @@ nonisolated struct ButtonPart: Hashable {
         self.hilite = hilite
         self.format = format
         self.iconAsset = iconAsset
+        self.iconSymbol = iconSymbol
     }
 }
 
 /// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -299,6 +304,7 @@ extension ButtonPart: Codable {
         hilite = try container.decodeIfPresent(Bool.self, forKey: .hilite) ?? false
         format = try container.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
         iconAsset = try container.decodeIfPresent(String.self, forKey: .iconAsset)
+        iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol)
     }
 }
 
