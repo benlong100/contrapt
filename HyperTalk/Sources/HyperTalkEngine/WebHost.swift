@@ -442,16 +442,10 @@ final class WebHost: HyperTalkHost {
     func performMenu(_ item: String) throws {
         switch item.lowercased() {
         case "new card":
+            // Shares the background, empty card layer — mirrors the app host.
             let source = stack.cards[cardIndex]
             var card = Card(id: UUID(), name: "", backgroundID: source.backgroundID, script: "", parts: [])
             card.scriptID = stack.claimScriptID()
-            card.parts = source.parts.map { part in
-                var copy = part
-                copy.id = UUID()
-                copy.scriptID = stack.claimScriptID()
-                if case .field(var f) = copy.kind { f.text = ""; copy.kind = .field(f) }
-                return copy
-            }
             let at = cardIndex + 1
             stack.cards.insert(card, at: at)
             currentIndex = at

@@ -113,21 +113,12 @@ final class DocumentScriptHost: HyperTalkHost {
     func performMenu(_ item: String) throws {
         switch item.lowercased() {
         case "new card":
-            // A new card shares the current card's background and field
-            // layout (cleared), inserted just after it — as in HyperCard.
+            // A new card shares the current card's background but starts with
+            // an empty card layer, inserted just after it — as in HyperCard.
+            // (Shared parts belong on the background; card parts are per-card.)
             let source = stack.cards[cardIndex]
             var card = Card(id: UUID(), name: "", backgroundID: source.backgroundID, script: "", parts: [])
             card.scriptID = stackBinding.wrappedValue.claimScriptID()
-            card.parts = source.parts.map { part in
-                var copy = part
-                copy.id = UUID()
-                copy.scriptID = stackBinding.wrappedValue.claimScriptID()
-                if case .field(var field) = copy.kind {
-                    field.text = ""
-                    copy.kind = .field(field)
-                }
-                return copy
-            }
             let at = cardIndex + 1
             stackBinding.wrappedValue.cards.insert(card, at: at)
             onNavigate(at, [])
