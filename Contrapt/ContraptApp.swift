@@ -131,7 +131,7 @@ private struct GoCommands: View {
             Button("Forward") { navigation?.goNext() }
                 .keyboardShortcut("]", modifiers: .command)
             Button("First Card") { navigation?.goFirst() }
-                .keyboardShortcut(.upArrow, modifiers: .command)
+                .keyboardShortcut("1", modifiers: .command)
             Button("Last Card") { navigation?.goLast() }
                 .keyboardShortcut(.downArrow, modifiers: .command)
         }

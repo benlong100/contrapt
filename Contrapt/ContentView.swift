@@ -373,6 +373,14 @@ struct ContentView: View {
             openResolvedStack(url, card: pending.card)
         }
         .toolbar { mainToolbar }
+        // ⌘↑ also jumps to the first card (the Go menu advertises ⌘1); a hidden
+        // shortcut keeps the arrow binding without a duplicate menu item.
+        .background {
+            Button("", action: goFirst)
+                .keyboardShortcut(.upArrow, modifiers: .command)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
         .focusedValue(\.cardNavigation, cardNavigation)
         .focusedSceneValue(\.cardActions, cardActions)
         .focusedSceneValue(\.partActions, partActions)
