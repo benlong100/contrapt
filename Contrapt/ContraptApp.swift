@@ -238,6 +238,19 @@ private struct GuideCommand: View {
 }
 
 #if os(macOS)
+/// Help ▸ What's New in HyperTalk? — opens a fresh throwaway copy of the
+/// bundled help stack (help-as-stacks; see HelpStacks).
+private struct WhatsNewCommand: View {
+    var body: some View {
+        Button("What's New in HyperTalk?") {
+            guard let url = HelpStacks.freshCopy(of: HelpStacks.whatsNew) else { return }
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
+        }
+    }
+}
+#endif
+
+#if os(macOS)
 /// The File menu's "Export as Website…" item — writes the focused stack as a
 /// static site into a chosen folder, then reveals it in the Finder.
 private struct ExportWebsiteCommand: View {
@@ -636,9 +649,10 @@ struct ContraptApp: App {
             Divider()
             CardCommands()
         }
-        // The HyperTalk Guide, in the Help menu.
+        // The HyperTalk Guide and the help stacks, in the Help menu.
         CommandGroup(replacing: .help) {
             GuideCommand()
+            WhatsNewCommand()
         }
         #endif
         CommandMenu("Go") {
