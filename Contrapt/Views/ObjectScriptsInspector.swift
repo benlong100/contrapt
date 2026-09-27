@@ -93,6 +93,8 @@ struct ObjectScriptsInspector: View {
             ScriptFormSection(title: scriptTitle, script: scriptBinding, onExpand: { isEditorExpanded = true })
                 .id(scope)
         }
+        // Return ends editing; clicking empty palette space releases focus.
+        .endsTextEditingOnSubmitAndTap()
         .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: scriptTitle, script: scriptBinding)
         }

@@ -71,6 +71,8 @@ struct PartInspector: View {
                 }
             }
         }
+        // Return ends editing; clicking empty palette space releases focus.
+        .endsTextEditingOnSubmitAndTap()
         .platformFullScreenCover(isPresented: $isEditorExpanded) {
             LargeScriptEditor(title: "Script of \(part.name)", script: $part.script)
         }

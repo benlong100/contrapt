@@ -459,7 +459,25 @@ extension Color {
 
 // MARK: - View modifier seams
 
+/// Ends text editing by resigning the focused field, wherever it is. SwiftUI
+/// text fields otherwise hold first-responder status — Return submits but
+/// keeps the caret, and clicks on empty form space don't move focus.
+@MainActor func endTextEditing() {
+    #if os(macOS)
+    NSApp.keyWindow?.makeFirstResponder(nil)
+    #else
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    #endif
+}
+
 extension View {
+    /// Inspector-form behavior: Return ends editing in the submitting field,
+    /// and a click/tap on empty form space releases the focused field.
+    func endsTextEditingOnSubmitAndTap() -> some View {
+        onSubmit { endTextEditing() }
+            .onTapGesture { endTextEditing() }
+    }
+
     /// Inline navigation title on iOS; a no-op where the modifier is absent.
     func inlineNavigationTitle() -> some View {
         #if os(iOS)
