@@ -14,6 +14,10 @@ struct MessageBoxView: View {
     var onCommand: (String) -> Void
 
     @State private var command = ""
+    /// The box takes keyboard focus the moment it appears, so there's a ready
+    /// insertion point and ⌘A (Select All, via the Edit menu's responder-chain
+    /// action) targets this field.
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -31,6 +35,7 @@ struct MessageBoxView: View {
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
                     .codeEntryTraits()
+                    .focused($isFocused)
                     .onSubmit {
                         let line = command.trimmingCharacters(in: .whitespaces)
                         guard !line.isEmpty else { return }
@@ -43,6 +48,7 @@ struct MessageBoxView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal)
         .padding(.bottom, 12)
+        .onAppear { isFocused = true }
     }
 }
 
