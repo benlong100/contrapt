@@ -6,6 +6,36 @@
 import SwiftUI
 import HyperTalk
 
+/// Shown when several parts are selected: a count plus the actions that make
+/// sense for a group (deselect, delete). Per-part editing needs a single
+/// selection.
+struct MultipleSelectionInspector: View {
+    let count: Int
+    var onDeselect: () -> Void
+    var onDelete: () -> Void
+
+    var body: some View {
+        Form {
+            Section {
+                Button {
+                    onDeselect()
+                } label: {
+                    Label("Card, Background & Stack", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+            }
+            Section {
+                LabeledContent("Selected", value: "\(count) objects")
+            } footer: {
+                Text("Move them together with the arrow keys or by dragging, copy/cut/paste as a group, or delete them. Select just one to edit its properties.")
+            }
+            Section {
+                Button("Delete \(count) Objects", role: .destructive) { onDelete() }
+            }
+        }
+    }
+}
+
 /// Edits one part: identity, kind-specific text, geometry, and its script.
 /// Presented as a trailing inspector column so the card stays visible.
 struct PartInspector: View {

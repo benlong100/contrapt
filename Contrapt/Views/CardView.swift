@@ -14,7 +14,7 @@ struct CardView: View {
     let cardIndex: Int
     var isEditing: Bool = false
     var isSnappingEnabled: Bool = true
-    @Binding var selectedPartID: UUID?
+    @Binding var selectedPartIDs: Set<UUID>
     /// The field `find` last matched, boxed on the card (browse mode).
     var findHighlightPartID: UUID? = nil
     /// The matched character range within that field, so a locked plain field
@@ -38,6 +38,9 @@ struct CardView: View {
 
     @State private var guides = AlignmentGuides()
     @State private var isCardPressed = false
+    /// Each selected part's frame at the start of a group drag, so every part
+    /// moves by the same delta as the dragged one.
+    @State private var dragStartFrames: [UUID: PartFrame] = [:]
     @Environment(\.stackAssets) private var stackAssets
 
     /// Named coordinate space on the logical-size canvas, so gesture math
@@ -102,7 +105,7 @@ struct CardView: View {
             .fill(Color.cardSurface)
             .shadow(radius: 8)
         if isEditing {
-            surface.onTapGesture { selectedPartID = nil }
+            surface.onTapGesture { selectedPartIDs = [] }
         } else {
             // .simultaneousGesture (not .gesture): a plain .gesture with a
             // minimumDistance:0 DragGesture takes exclusive control of the
@@ -134,6 +137,58 @@ struct CardView: View {
 
     private var backgroundIndex: Int? {
         stack.backgrounds.firstIndex { $0.id == stack.cards[cardIndex].backgroundID }
+    }
+
+    // MARK: - Selection & group move
+
+    /// Click selection: plain replaces, additive (⌘/⇧-click) toggles.
+    private func selectPart(_ id: UUID, additive: Bool) {
+        if additive {
+            if selectedPartIDs.contains(id) { selectedPartIDs.remove(id) }
+            else { selectedPartIDs.insert(id) }
+        } else {
+            selectedPartIDs = [id]
+        }
+    }
+
+    /// Start a group drag: if the dragged part wasn't selected, collapse to it;
+    /// then snapshot every selected part's starting frame.
+    private func beginGroupMove(dragged id: UUID) {
+        if !selectedPartIDs.contains(id) { selectedPartIDs = [id] }
+        var frames: [UUID: PartFrame] = [:]
+        for pid in selectedPartIDs { if let f = frame(of: pid) { frames[pid] = f } }
+        dragStartFrames = frames
+    }
+
+    /// Move every selected part by the dragged part's (already snapped) delta,
+    /// clamping each origin to the card as loading does.
+    private func groupMove(dx: CGFloat, dy: CGFloat) {
+        for (pid, start) in dragStartFrames {
+            var f = start
+            f.x = min(max(start.x + dx, 0), max(0, stack.cardSize.width - 16))
+            f.y = min(max(start.y + dy, 0), max(0, stack.cardSize.height - 16))
+            setFrame(f, of: pid)
+        }
+    }
+
+    private func endGroupMove() { dragStartFrames = [:] }
+
+    private func frame(of id: UUID) -> PartFrame? {
+        if let i = stack.cards[cardIndex].parts.firstIndex(where: { $0.id == id }) {
+            return stack.cards[cardIndex].parts[i].frame
+        }
+        if let b = backgroundIndex, let i = stack.backgrounds[b].parts.firstIndex(where: { $0.id == id }) {
+            return stack.backgrounds[b].parts[i].frame
+        }
+        return nil
+    }
+
+    private func setFrame(_ frame: PartFrame, of id: UUID) {
+        if let i = stack.cards[cardIndex].parts.firstIndex(where: { $0.id == id }) {
+            stack.cards[cardIndex].parts[i].frame = frame
+        } else if let b = backgroundIndex, let i = stack.backgrounds[b].parts.firstIndex(where: { $0.id == id }) {
+            stack.backgrounds[b].parts[i].frame = frame
+        }
     }
 
     /// The current card's accent for button icons/labels — its highlightColor,
@@ -170,7 +225,8 @@ struct CardView: View {
                     // from receiving clicks, making hidden parts unselectable.)
                     EditablePart(
                         part: $part,
-                        isSelected: selectedPartID == part.id,
+                        isSelected: selectedPartIDs.contains(part.id),
+                        isSoleSelection: selectedPartIDs.count == 1 && selectedPartIDs.contains(part.id),
                         snap: snapContext,
                         guides: $guides,
                         revealButtons: revealButtons,
@@ -179,8 +235,11 @@ struct CardView: View {
                         showsLockBadge: part.isLocked,
                         highlight: cardHighlight,
                         linkColorHex: cardLinkColorHex,
-                        onSelect: { selectedPartID = part.id },
-                        onOpenInspector: onOpenInspector
+                        onSelect: { additive in selectPart(part.id, additive: additive) },
+                        onOpenInspector: onOpenInspector,
+                        onMoveBegan: { beginGroupMove(dragged: part.id) },
+                        onMoveBy: { dx, dy in groupMove(dx: dx, dy: dy) },
+                        onMoveEnded: { endGroupMove() }
                     )
                 } else if part.isVisible {
                     PartView(
@@ -335,6 +394,8 @@ struct SnapContext {
 private struct EditablePart: View {
     @Binding var part: Part
     let isSelected: Bool
+    /// The only selected part — shows the resize handle (resize is single-part).
+    var isSoleSelection = false
     let snap: SnapContext
     @Binding var guides: AlignmentGuides
     var revealButtons = false
@@ -345,8 +406,14 @@ private struct EditablePart: View {
     var showsLockBadge = false
     var highlight: Color = .accentColor
     var linkColorHex: String? = nil
-    var onSelect: () -> Void
+    /// Select this part; `additive` (⌘/⇧-click) toggles it in the selection.
+    var onSelect: (Bool) -> Void
     var onOpenInspector: () -> Void
+    /// Group-drag lifecycle: began (snapshot selection), moved by a snapped
+    /// delta, ended.
+    var onMoveBegan: () -> Void = {}
+    var onMoveBy: (CGFloat, CGFloat) -> Void = { _, _ in }
+    var onMoveEnded: () -> Void = {}
 
     /// Whether this part's kind is being revealed (button/field tool
     /// highlighting), so transparent or hidden parts show their bounds.
@@ -380,12 +447,12 @@ private struct EditablePart: View {
             // Locked Objects" in the Reveal menu to pick one and unlock it.
             .onTapGesture(count: 2) {
                 guard !locksSelection else { return }
-                onSelect()
+                onSelect(false)
                 onOpenInspector()
             }
             .onTapGesture {
                 guard !locksSelection else { return }
-                onSelect()
+                onSelect(additiveSelectionModifierDown)
             }
             .gesture(moveGesture, including: locksSelection ? .subviews : .all)
             .background {
@@ -417,10 +484,21 @@ private struct EditablePart: View {
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if isSelected {
+                if isSoleSelection {
                     resizeHandle
                 }
             }
+    }
+
+    /// Whether a selection modifier (⌘ or ⇧) is held right now, so a click adds
+    /// to the selection rather than replacing it. macOS only — touch has none.
+    private var additiveSelectionModifierDown: Bool {
+        #if os(macOS)
+        let flags = NSEvent.modifierFlags
+        return flags.contains(.command) || flags.contains(.shift)
+        #else
+        return false
+        #endif
     }
 
     private var resizeHandle: some View {
@@ -444,19 +522,23 @@ private struct EditablePart: View {
             .onChanged { value in
                 if frameAtGestureStart == nil {
                     frameAtGestureStart = part.frame
-                    onSelect()
+                    onMoveBegan()
                 }
                 guard let start = frameAtGestureStart else { return }
                 let rawX = start.x + (value.location.x - value.startLocation.x)
                 let rawY = start.y + (value.location.y - value.startLocation.y)
+                // Snap the dragged part; the whole selection moves by the same
+                // resulting delta (applied by the owner via onMoveBy).
                 var lit = AlignmentGuides()
-                part.frame.x = snap.snapPosition(raw: rawX, length: start.width, axis: .horizontal, excluding: part.id, guides: &lit)
-                part.frame.y = snap.snapPosition(raw: rawY, length: start.height, axis: .vertical, excluding: part.id, guides: &lit)
+                let snappedX = snap.snapPosition(raw: rawX, length: start.width, axis: .horizontal, excluding: part.id, guides: &lit)
+                let snappedY = snap.snapPosition(raw: rawY, length: start.height, axis: .vertical, excluding: part.id, guides: &lit)
                 guides = lit
+                onMoveBy(snappedX - start.x, snappedY - start.y)
             }
             .onEnded { _ in
                 frameAtGestureStart = nil
                 guides = AlignmentGuides()
+                onMoveEnded()
             }
     }
 
@@ -924,19 +1006,19 @@ struct PartView: View {
 
 #Preview("Editing") {
     @Previewable @State var stack = Stack.makeNew()
-    @Previewable @State var selection: UUID?
+    @Previewable @State var selection: Set<UUID> = []
     CardView(
         stack: $stack,
         cardIndex: 0,
         isEditing: true,
-        selectedPartID: $selection
+        selectedPartIDs: $selection
     )
     .padding()
-    .onAppear { selection = stack.cards[0].parts[2].id }
+    .onAppear { selection = [stack.cards[0].parts[2].id] }
 }
 
 #Preview("Field Text") {
-    @Previewable @State var selection: UUID?
+    @Previewable @State var selection: Set<UUID> = []
     var stack: Stack = {
         var s = Stack.makeNew()
         func field(_ text: String, y: Double, _ fmt: TextFormat) -> Part {
@@ -951,12 +1033,12 @@ struct PartView: View {
         ]
         return s.sanitized()
     }()
-    CardView(stack: .constant(stack), cardIndex: 0, selectedPartID: $selection)
+    CardView(stack: .constant(stack), cardIndex: 0, selectedPartIDs: $selection)
         .padding()
 }
 
 #Preview("Button Styles") {
-    @Previewable @State var selection: UUID?
+    @Previewable @State var selection: Set<UUID> = []
     var stack: Stack = {
         var s = Stack.makeNew()
         let styles: [(ButtonStyleKind, Bool)] = [
@@ -975,6 +1057,6 @@ struct PartView: View {
         s.cards[0].parts = parts
         return s.sanitized()
     }()
-    CardView(stack: .constant(stack), cardIndex: 0, selectedPartID: $selection)
+    CardView(stack: .constant(stack), cardIndex: 0, selectedPartIDs: $selection)
         .padding()
 }

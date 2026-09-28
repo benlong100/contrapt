@@ -50,7 +50,10 @@ struct ContentView: View {
 
     @State private var currentCardIndex = 0
     @State private var isEditing = false
-    @State private var selectedPartID: UUID?
+    /// The selected parts in edit mode. Copy/cut/paste/delete/nudge and group
+    /// drag act on all of them; the inspector shows one only when exactly one
+    /// is selected (`singleSelectedPartID`).
+    @State private var selectedPartIDs: Set<UUID> = []
     /// The field `find` last matched, boxed on the card until the next edit.
     @State private var findHighlight: FindHighlight?
     @State private var isInspectorPresented = false
@@ -135,7 +138,7 @@ struct ContentView: View {
             cardIndex: cardIndex,
             isEditing: isEditing,
             isSnappingEnabled: isSnappingEnabled,
-            selectedPartID: $selectedPartID,
+            selectedPartIDs: $selectedPartIDs,
             findHighlightPartID: findHighlight?.partID,
             findHighlightRange: findHighlight?.range,
             revealButtons: revealButtons,
@@ -194,8 +197,8 @@ struct ContentView: View {
         #if os(macOS)
         .background(
             EditKeyCatcher(
-                isEnabled: isEditing && selectedPartID != nil,
-                onDelete: { if let selectedPartID { deletePart(id: selectedPartID) } },
+                isEnabled: isEditing && !selectedPartIDs.isEmpty,
+                onDelete: { deleteSelectedParts() },
                 onNudge: { dx, dy in moveSelectedPart(dx: dx, dy: dy) }
             )
         )
@@ -204,9 +207,9 @@ struct ContentView: View {
         .focusEffectDisabled()
         .focused($isCardFocused)
         .onKeyPress { press in
-            guard isEditing, selectedPartID != nil else { return .ignored }
+            guard isEditing, !selectedPartIDs.isEmpty else { return .ignored }
             if press.key == .delete || press.key == .deleteForward {
-                if let selectedPartID { deletePart(id: selectedPartID) }
+                deleteSelectedParts()
                 return .handled
             }
             let step: CGFloat = press.modifiers.contains(.shift) ? 10 : 1
@@ -219,8 +222,8 @@ struct ContentView: View {
             }
             return .handled
         }
-        .onChange(of: selectedPartID) { _, newValue in
-            if isEditing, newValue != nil { isCardFocused = true }
+        .onChange(of: selectedPartIDs) { _, newValue in
+            if isEditing, !newValue.isEmpty { isCardFocused = true }
         }
         .onChange(of: isEditing) { _, editing in
             if !editing { isCardFocused = false }
@@ -328,14 +331,20 @@ struct ContentView: View {
         }
         .inspector(isPresented: $isInspectorPresented) {
             Group {
-                if let selectedPartID, let partBinding = partBinding(for: selectedPartID) {
+                if let id = singleSelectedPartID, let partBinding = partBinding(for: id) {
                     PartInspector(
                         part: partBinding,
-                        onLinkTo: { linkingPartID = selectedPartID },
-                        onDeselect: { self.selectedPartID = nil }
+                        onLinkTo: { linkingPartID = id },
+                        onDeselect: { selectedPartIDs = [] }
                     ) {
-                        deletePart(id: selectedPartID)
+                        deletePart(id: id)
                     }
+                } else if selectedPartIDs.count > 1 {
+                    MultipleSelectionInspector(
+                        count: selectedPartIDs.count,
+                        onDeselect: { selectedPartIDs = [] },
+                        onDelete: { deleteSelectedParts() }
+                    )
                 } else {
                     ObjectScriptsInspector(stack: stack, cardIndex: cardIndex, scope: $objectScope)
                 }
@@ -587,7 +596,7 @@ struct ContentView: View {
             }
             Button(isEditing ? "Done" : "Edit") {
                 if isEditing {
-                    selectedPartID = nil
+                    selectedPartIDs = []
                     isInspectorPresented = false
                 } else {
                     // Entering edit mode opens the inspector and clears any
@@ -679,7 +688,7 @@ struct ContentView: View {
             Button("Send Farther", systemImage: "chevron.down") { arrangeSelectedPart(.farther) }
             Button("Send to Back", systemImage: "arrow.down.to.line") { arrangeSelectedPart(.back) }
         }
-        .disabled(selectedPartID == nil)
+        .disabled(singleSelectedPartID == nil)
         // HyperCard's button/field tool highlighting: outline all buttons or
         // fields so transparent and hidden ones are findable while editing.
         Menu("Reveal", systemImage: "eye") {
@@ -695,10 +704,8 @@ struct ContentView: View {
             if hidingCard {
                 // A card-layer part that's now hidden shouldn't stay selected,
                 // and (as in HyperCard) editing now targets the background.
-                if let id = selectedPartID,
-                   stack.cards[cardIndex].parts.contains(where: { $0.id == id }) {
-                    selectedPartID = nil
-                }
+                let cardPartIDs = Set(stack.cards[cardIndex].parts.map(\.id))
+                selectedPartIDs.subtract(cardPartIDs)
                 objectScope = .background
             } else {
                 objectScope = .card
@@ -915,6 +922,12 @@ struct ContentView: View {
     // MARK: - Editing
 
     /// The selected part may live on the current card or its background.
+    /// The lone selected part's id, or nil when zero or several are selected —
+    /// drives the single-part inspector, resize, link, and arrange.
+    private var singleSelectedPartID: UUID? {
+        selectedPartIDs.count == 1 ? selectedPartIDs.first : nil
+    }
+
     private func partBinding(for id: UUID) -> Binding<Part>? {
         let index = cardIndex
         let current = document.stack
@@ -934,12 +947,15 @@ struct ContentView: View {
     /// through the stack binding, so a run of arrow presses coalesces into one
     /// undo step like a drag.
     private func moveSelectedPart(dx: CGFloat, dy: CGFloat) {
-        guard let id = selectedPartID, let binding = partBinding(for: id) else { return }
+        guard !selectedPartIDs.isEmpty else { return }
         let size = document.stack.cardSize
-        var frame = binding.wrappedValue.frame
-        frame.x = min(max(frame.x + dx, 0), max(0, size.width - 16))
-        frame.y = min(max(frame.y + dy, 0), max(0, size.height - 16))
-        binding.wrappedValue.frame = frame
+        for id in selectedPartIDs {
+            guard let binding = partBinding(for: id) else { continue }
+            var frame = binding.wrappedValue.frame
+            frame.x = min(max(frame.x + dx, 0), max(0, size.width - 16))
+            frame.y = min(max(frame.y + dy, 0), max(0, size.height - 16))
+            binding.wrappedValue.frame = frame
+        }
     }
 
     private func addPart(_ kind: PartKind) {
@@ -977,7 +993,7 @@ struct ContentView: View {
         part.scriptID = updated.claimScriptID()
         appendPartToActiveLayer(part, in: &updated)
         stack.wrappedValue = updated
-        selectedPartID = part.id
+        selectedPartIDs = [part.id]
     }
 
     /// Appends an already-prepared part to the layer the inspector targets —
@@ -1137,7 +1153,7 @@ struct ContentView: View {
     enum ArrangeAction { case front, closer, farther, back }
 
     private func arrangeSelectedPart(_ action: ArrangeAction) {
-        guard let id = selectedPartID else { return }
+        guard let id = singleSelectedPartID else { return }
         var updated = document.stack
         let index = cardIndex
         if reorder(&updated.cards[index].parts, id: id, action: action) {
@@ -1175,77 +1191,97 @@ struct ContentView: View {
             updated.backgrounds[backgroundIndex].parts.removeAll { $0.id == id }
         }
         stack.wrappedValue = updated
-        selectedPartID = nil
+        selectedPartIDs.remove(id)
+    }
+
+    /// Deletes every selected part (one undo step).
+    private func deleteSelectedParts() {
+        guard !selectedPartIDs.isEmpty else { return }
+        var updated = document.stack
+        let index = cardIndex
+        updated.cards[index].parts.removeAll { selectedPartIDs.contains($0.id) }
+        let card = updated.cards[index]
+        if let backgroundIndex = updated.backgrounds.firstIndex(where: { $0.id == card.backgroundID }) {
+            updated.backgrounds[backgroundIndex].parts.removeAll { selectedPartIDs.contains($0.id) }
+        }
+        stack.wrappedValue = updated
+        selectedPartIDs = []
     }
 
     // MARK: - Cut / Copy / Paste Part
 
-    /// The selected part, wherever it lives (card layer or background layer).
-    private func selectedPart() -> Part? {
-        guard let id = selectedPartID else { return nil }
-        if let part = document.stack.cards[cardIndex].parts.first(where: { $0.id == id }) {
-            return part
-        }
+    /// The selected parts, wherever they live (card or background layer), in
+    /// each layer's z-order (card parts after background parts).
+    private func selectedParts() -> [Part] {
+        guard !selectedPartIDs.isEmpty else { return [] }
         let card = document.stack.cards[cardIndex]
-        if let background = document.stack.backgrounds.first(where: { $0.id == card.backgroundID }) {
-            return background.parts.first(where: { $0.id == id })
-        }
-        return nil
+        let background = document.stack.backgrounds.first { $0.id == card.backgroundID }
+        let bgParts = (background?.parts ?? []).filter { selectedPartIDs.contains($0.id) }
+        let cardParts = card.parts.filter { selectedPartIDs.contains($0.id) }
+        return bgParts + cardParts
     }
 
-    private func copySelectedPart() {
-        guard let part = selectedPart() else { return }
+    private func copySelectedParts() {
+        let parts = selectedParts()
+        guard !parts.isEmpty else { return }
         var assets: [String: Data] = [:]
-        if case .image(let image) = part.kind, let data = document.assets[image.assetName] {
-            assets[image.assetName] = data
+        for part in parts {
+            if case .image(let image) = part.kind, let data = document.assets[image.assetName] {
+                assets[image.assetName] = data
+            }
         }
-        partClipboard.payload = PartClipboard.Payload(part: part, assets: assets)
+        partClipboard.payload = PartClipboard.Payload(parts: parts, assets: assets)
     }
 
-    private func cutSelectedPart() {
-        guard let id = selectedPartID, selectedPart() != nil else { return }
-        copySelectedPart()
-        deletePart(id: id)
+    private func cutSelectedParts() {
+        guard !selectedPartIDs.isEmpty else { return }
+        copySelectedParts()
+        deleteSelectedParts()
     }
 
-    /// Pastes the clipboard's part onto the current card, nudged down-right so
-    /// it doesn't hide the original, with a fresh identity so repeated pastes
-    /// never collide. Asset names are UUIDs, so re-adding them can't clash.
+    /// Pastes the clipboard's parts onto the current card, preserving their
+    /// relative layout. If any source part is still on this card the group is
+    /// nudged down-right so it doesn't hide the originals; on a different card
+    /// the positions are kept (as in HyperCard). Fresh ids avoid collisions.
     private func pastePart() {
-        guard let payload = partClipboard.payload else { return }
+        guard let payload = partClipboard.payload, !payload.parts.isEmpty else { return }
         for (name, data) in payload.assets where document.assets[name] == nil {
             document.assets[name] = data
         }
+        // Offset the whole group when any source part is still on this card.
+        let offset = payload.parts.contains { partBinding(for: $0.id) != nil }
         var updated = document.stack
-        var part = payload.part
-        // Pasting onto the source card would land exactly on the original and
-        // hide it, so offset there; pasting onto a different card keeps the
-        // source position (as in HyperCard). The source part still carries its
-        // id, so its presence on this card means we're on the source card.
-        if partBinding(for: payload.part.id) != nil {
-            part.frame.x += 20
-            part.frame.y += 20
+        var newIDs: Set<UUID> = []
+        for source in payload.parts {
+            var part = source
+            if offset { part.frame.x += 20; part.frame.y += 20 }
+            part.id = UUID()
+            part.scriptID = updated.claimScriptID()
+            appendPartToActiveLayer(part, in: &updated)
+            newIDs.insert(part.id)
         }
-        part.id = UUID()
-        part.scriptID = updated.claimScriptID()
-        appendPartToActiveLayer(part, in: &updated)
         stack.wrappedValue = updated
-        selectedPartID = part.id
+        selectedPartIDs = newIDs
     }
 
-    /// Duplicates the selected part in place — a fresh copy nudged down-right,
+    /// Duplicates the selected parts in place — fresh copies nudged down-right,
     /// without touching the clipboard (as macOS's Duplicate does).
     private func duplicateSelectedPart() {
-        guard let part = selectedPart() else { return }
+        let parts = selectedParts()
+        guard !parts.isEmpty else { return }
         var updated = document.stack
-        var copy = part
-        copy.id = UUID()
-        copy.scriptID = updated.claimScriptID()
-        copy.frame.x += 20
-        copy.frame.y += 20
-        updated.cards[cardIndex].parts.append(copy)
+        var newIDs: Set<UUID> = []
+        for source in parts {
+            var copy = source
+            copy.id = UUID()
+            copy.scriptID = updated.claimScriptID()
+            copy.frame.x += 20
+            copy.frame.y += 20
+            appendPartToActiveLayer(copy, in: &updated)
+            newIDs.insert(copy.id)
+        }
         stack.wrappedValue = updated
-        selectedPartID = copy.id
+        selectedPartIDs = newIDs
     }
 
     /// Part-editing actions published to the Edit menu on macOS. The flags are
@@ -1253,12 +1289,12 @@ struct ContentView: View {
     /// card operations) otherwise.
     private var partActions: PartActions {
         PartActions(
-            cut: cutSelectedPart,
-            copy: copySelectedPart,
+            cut: cutSelectedParts,
+            copy: copySelectedParts,
             paste: pastePart,
             duplicate: duplicateSelectedPart,
-            delete: { if let id = selectedPartID { deletePart(id: id) } },
-            canCopy: isEditing && selectedPartID != nil,
+            delete: deleteSelectedParts,
+            canCopy: isEditing && !selectedPartIDs.isEmpty,
             canPaste: isEditing && partClipboard.payload != nil
         )
     }
@@ -1277,7 +1313,7 @@ struct ContentView: View {
         updated.cards.insert(card, at: cardIndex + 1)
         stack.wrappedValue = updated
         currentCardIndex = cardIndex + 1
-        selectedPartID = nil
+        selectedPartIDs = []
     }
 
     /// New Background: a fresh background plus a card on it — HyperCard's
@@ -1303,7 +1339,7 @@ struct ContentView: View {
         updated.cards.insert(card, at: cardIndex + 1)
         stack.wrappedValue = updated
         currentCardIndex = cardIndex + 1
-        selectedPartID = nil
+        selectedPartIDs = []
     }
 
     // MARK: - Cut / Copy / Paste Card
@@ -1355,7 +1391,7 @@ struct ContentView: View {
 
         stack.wrappedValue = updated
         currentCardIndex = cardIndex + 1
-        selectedPartID = nil
+        selectedPartIDs = []
     }
 
     /// A copy of a part with a new UUID and a freshly claimed scriptID.
@@ -1403,7 +1439,7 @@ struct ContentView: View {
         guard canDeleteCurrentCard else { return }
         stack.wrappedValue.cards.remove(at: cardIndex)
         currentCardIndex = min(cardIndex, document.stack.cards.count - 1)
-        selectedPartID = nil
+        selectedPartIDs = []
     }
 
     // MARK: - Navigation
@@ -1561,14 +1597,14 @@ struct PartActions {
     var canPaste: Bool
 }
 
-/// An in-app clipboard for a single part, carrying any asset bytes the part
-/// references (image parts) so Paste works across cards and windows. Asset
+/// An in-app clipboard for one or more parts, carrying any asset bytes they
+/// reference (image parts) so Paste works across cards and windows. Asset
 /// names are UUIDs, so re-inserting them can't collide.
 final class PartClipboard: ObservableObject {
     static let shared = PartClipboard()
 
     struct Payload {
-        let part: Part
+        let parts: [Part]
         let assets: [String: Data]
     }
 
