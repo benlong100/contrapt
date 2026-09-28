@@ -235,9 +235,24 @@ final class MockHost: HyperTalkHost {
     var cardCount = 1
     var backgroundCount = 1
     var buttonCount = 0
+    /// Scoped card counts for `number of cds in this bg` tests, keyed by
+    /// "this" / a bg name / "#N" / "id N". Falls back to cardCount.
+    var backgroundCardCounts: [String: Int] = [:]
+
     func count(_ countable: Countable) throws -> Int {
         switch countable {
-        case .cards: return sortKeys.isEmpty ? cardCount : sortKeys.count
+        case .cards(let scope):
+            if let scope {
+                let key: String
+                switch scope {
+                case .current: key = "this"
+                case .reference(.named(let n)): key = n
+                case .reference(.number(let n)): key = "#\(n)"
+                case .reference(.id(let i)): key = "id \(i)"
+                }
+                return backgroundCardCounts[key] ?? cardCount
+            }
+            return sortKeys.isEmpty ? cardCount : sortKeys.count
         case .backgrounds: return backgroundCount
         case .parts(let kind, _): return kind == "field" ? fields.count : buttonCount
         }

@@ -98,11 +98,23 @@ public enum GoDestination: Equatable, Sendable {
 
 /// What `the number of …` counts.
 public enum Countable: Sendable, Equatable {
-    case cards
+    /// `the number of cards`, optionally scoped to one background:
+    /// `the number of cds in this bg`, `… of bg "Paths"`, `… of bg 2`.
+    /// Nil scope counts the whole stack. This is how multi-background
+    /// stacks (like Home) loop over just their own section's cards.
+    case cards(inBackground: BackgroundScope?)
     case backgrounds
     /// `the number of [card|background] buttons/fields`. Kind is
     /// "button"/"field"; `.any` counts both the card and background layers.
     case parts(kind: String, domain: HyperTalkObject.PartDomain)
+
+    /// Which background a scoped card count means.
+    public enum BackgroundScope: Sendable, Equatable {
+        /// `this bg` — the current card's background.
+        case current
+        /// `bg "Name"` / `bg 2` / `bg id 7`.
+        case reference(HyperTalkObject.Reference)
+    }
 }
 
 /// An object a script can address with `get`/`set` and `the … of …`.

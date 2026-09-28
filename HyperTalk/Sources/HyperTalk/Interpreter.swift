@@ -530,7 +530,7 @@ final class Runtime {
             return .passMessage
 
         case .sortCards(let ascending, let numeric, let keyExpression):
-            let count = try hostCall(line: statement.line) { try host.count(.cards) }
+            let count = try hostCall(line: statement.line) { try host.count(.cards(inBackground: nil)) }
             var keyed: [(key: String, index: Int)] = []
             keyed.reserveCapacity(count)
             for index in 0..<count {
@@ -1256,7 +1256,7 @@ final class Runtime {
             let total = try hostCall(line: line) { try host.count(.parts(kind: kind, domain: domain)) }
             return .part(kind: kind, domain: domain, reference: .number(Self.resolveOrdinal(ordinal, count: total)), onCard: nil)
         case .cardByOrdinal(let ordinal):
-            let total = try hostCall(line: line) { try host.count(.cards) }
+            let total = try hostCall(line: line) { try host.count(.cards(inBackground: nil)) }
             return .card(.number(Self.resolveOrdinal(ordinal, count: total)))
         case .indirect(let expression):
             // A container whose value names the object — re-parse it as a

@@ -111,7 +111,17 @@ final class WebHost: HyperTalkHost {
 
     func count(_ countable: Countable) throws -> Int {
         switch countable {
-        case .cards: return stack.cards.count
+        case .cards(let scope):
+            guard let scope else { return stack.cards.count }
+            let wanted: UUID?
+            switch scope {
+            case .current:
+                wanted = stack.cards[cardIndex].backgroundID
+            case .reference(let reference):
+                wanted = backgroundID(for: reference)
+            }
+            guard let wanted else { throw HostError("There is no such background.") }
+            return stack.cards.count { $0.backgroundID == wanted }
         case .backgrounds: return stack.backgrounds.count
         case .parts(let kind, let domain):
             let card = stack.cards[cardIndex]
@@ -220,6 +230,20 @@ final class WebHost: HyperTalkHost {
             }
         case .home, .back, .stack:
             throw HostError("Can't address a field of that card.")
+        }
+    }
+
+    /// Resolves a count scope's background (`bg "Paths"` / `bg 2` / `bg id 7`).
+    private func backgroundID(for reference: HyperTalkObject.Reference) -> UUID? {
+        switch reference {
+        case .named(let name):
+            return stack.backgrounds.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.id
+        case .number(let number):
+            guard (1...stack.backgrounds.count).contains(number) else { return nil }
+            return stack.backgrounds[number - 1].id
+        case .id(let id):
+            let wanted = id.trimmingCharacters(in: .whitespaces)
+            return stack.backgrounds.first { String($0.scriptID) == wanted }?.id
         }
     }
 

@@ -1554,7 +1554,7 @@ struct Parser {
         }
         let noun = peekIdentifier()
         if !qualified {
-            if noun == "cards" || noun == "cds" { advance(); return .cards }
+            if noun == "cards" || noun == "cds" { advance(); return .cards(inBackground: nil) }
             if noun == "backgrounds" || noun == "bkgnds" || noun == "bgs" {
                 advance(); return .backgrounds
             }
@@ -1600,24 +1600,60 @@ struct Parser {
         return parser.parseCountable()
     }
 
-    /// After a `number of <plural>` count, swallows an optional
-    /// `[of|in] [this|<ordinal>] card/background [name|number]` scope — e.g.
-    /// `number of cds in this bg`, `number of cds of first bg`. Contrapt counts
-    /// within the current stack, so the scope is parsed and ignored; it just
-    /// needs consuming so the surrounding statement parses. Restores the cursor
-    /// if what follows isn't actually a card/background scope.
-    private mutating func skipCountScopeIfPresent() {
+    /// After a `number of <plural>` count, parses an optional
+    /// `[of|in] [this|<ordinal>] card/background [id] [name|number]` scope.
+    /// A *background* scope on a card count is captured — `number of cds in
+    /// this bg` counts only that background's cards (the multi-background
+    /// Home loop). Anything else (card scopes, scopes on non-card counts) is
+    /// consumed and ignored as before. Restores the cursor if what follows
+    /// isn't actually a card/background scope.
+    private mutating func applyCountScopeIfPresent(to countable: Countable) -> Countable {
         let saved = index
-        guard consumeWord("of") || consumeWord("in") else { return }
-        _ = consumeWord("this")
+        guard consumeWord("of") || consumeWord("in") else { return countable }
+        let isThis = consumeWord("this")
+        var ordinal: String?
         if let w = peekIdentifier(),
            w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil {
+            ordinal = w
             advance()
         }
-        guard consumeCardWord() || consumeBackgroundWord() else { index = saved; return }
-        _ = consumeWord("id")
-        if case .number = current.kind { advance() }
-        else if case .string = current.kind { advance() }
+        if consumeBackgroundWord() {
+            let isID = consumeWord("id")
+            var reference: HyperTalkObject.Reference?
+            if case .number(let value) = current.kind {
+                advance()
+                reference = isID ? .id(Value.string(from: value)) : .number(Int(value))
+            } else if case .string(let text) = current.kind {
+                advance()
+                reference = .named(text)
+            }
+            guard case .cards = countable else { return countable }
+            let scope: Countable.BackgroundScope
+            if isThis {
+                scope = .current
+            } else if let reference {
+                scope = .reference(reference)
+            } else if let ordinal, let n = Self.ordinals[ordinal] {
+                scope = .reference(.number(n))
+            } else if ordinal == nil {
+                // Bare `in bg` reads as the current background.
+                scope = .current
+            } else {
+                // last/middle/any background — not modeled; current is the
+                // least-wrong reading (it was the whole stack before).
+                scope = .current
+            }
+            return .cards(inBackground: scope)
+        }
+        if consumeCardWord() {
+            // A card scope on a count is meaningless — consume and ignore.
+            _ = consumeWord("id")
+            if case .number = current.kind { advance() }
+            else if case .string = current.kind { advance() }
+            return countable
+        }
+        index = saved
+        return countable
     }
 
     /// A part reference may be scoped to a specific card/background —
@@ -1782,8 +1818,7 @@ struct Parser {
                 advance() // number
                 advance() // of
                 if let countable = parseCountable() {
-                    skipCountScopeIfPresent()
-                    return .count(countable)
+                    return .count(applyCountScopeIfPresent(to: countable))
                 }
                 if let unmodeled = parseUnmodeledCount() { return unmodeled }
                 // `the number of (<expr>)` — the noun is computed at run time
@@ -1875,8 +1910,7 @@ struct Parser {
                 let saved = index
                 advance() // of
                 if let countable = parseCountable() {
-                    skipCountScopeIfPresent()
-                    return .count(countable)
+                    return .count(applyCountScopeIfPresent(to: countable))
                 }
                 if let unmodeled = parseUnmodeledCount() { return unmodeled }
                 // Bare `number of chars/words/lines/items in X` — a chunk
