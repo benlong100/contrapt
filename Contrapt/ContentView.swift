@@ -277,7 +277,15 @@ struct ContentView: View {
         .overlay(alignment: .bottom) {
             ZStack {
                 if isMessageBoxVisible {
-                    MessageBoxView(output: messageBoxText, onCommand: runMessageBoxCommand)
+                    MessageBoxView(output: messageBoxText,
+                                   onCommand: runMessageBoxCommand,
+                                   onDismiss: { isMessageBoxVisible = false })
+                        // Republish the scene value from inside the box: its
+                        // field grabs focus on appear, and focused-value
+                        // resolution follows the focused branch — without
+                        // this, ⌘M's menu item can read nil (disabled) while
+                        // typing here, and macOS hands ⌘M to Window ▸ Minimize.
+                        .focusedSceneValue(\.messageBoxVisible, $isMessageBoxVisible)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }

@@ -497,6 +497,17 @@ extension View {
             .onTapGesture { endTextEditing() }
     }
 
+    /// Escape dismisses (onExitCommand) on macOS; a no-op on iOS, which has
+    /// no Escape key for views (hardware-keyboard Escape is a follow-up).
+    @ViewBuilder
+    func onEscapeKey(_ action: @escaping () -> Void) -> some View {
+        #if os(macOS)
+        onExitCommand(perform: action)
+        #else
+        self
+        #endif
+    }
+
     /// Inline navigation title on iOS; a no-op where the modifier is absent.
     func inlineNavigationTitle() -> some View {
         #if os(iOS)

@@ -12,6 +12,9 @@ import SwiftUI
 struct MessageBoxView: View {
     let output: String?
     var onCommand: (String) -> Void
+    /// Closes the box: Escape while typing in it (standard for a transient
+    /// panel), alongside the Cmd-M menu toggle.
+    var onDismiss: () -> Void = {}
 
     @State private var command = ""
     /// The box takes keyboard focus the moment it appears, so there's a ready
@@ -49,6 +52,7 @@ struct MessageBoxView: View {
         .padding(.horizontal)
         .padding(.bottom, 12)
         .onAppear { isFocused = true }
+        .onEscapeKey { onDismiss() }
     }
 }
 
