@@ -419,6 +419,12 @@ final class Runtime {
                 _ = try await evaluate(valueExpression, line: statement.line)
                 return .normal
             }
+            if case .window = objectExpression {
+                // Contrapt has no window objects; `set the loc/mode/visible of
+                // window "X"` is a no-op. Evaluate the value for side effects.
+                _ = try await evaluate(valueExpression, line: statement.line)
+                return .normal
+            }
             let object = try await resolveObject(objectExpression, line: statement.line)
             let value = try await evaluate(valueExpression, line: statement.line)
             try hostCall(line: statement.line) { try host.setProperty(property, of: object, to: value) }
@@ -867,6 +873,11 @@ final class Runtime {
                 // visibility reads false (hidden until a `put` shows it).
                 return property == "visible" ? "false" : ""
             }
+            if case .window = objectExpression {
+                // Contrapt has no window objects; a window's `visible` reads
+                // false and every other property reads empty.
+                return property == "visible" ? "false" : ""
+            }
             if case .stackNamed(let nameExpression) = objectExpression {
                 // Contrapt doesn't model other stacks as property-bearing
                 // objects; name properties echo the referenced name so string
@@ -939,6 +950,11 @@ final class Runtime {
             if case .menu = objectExpression {
                 // Contrapt has no HyperCard menus, so `there is a menu …` is
                 // always false (and `there is not a menu …` always true).
+                return negated ? "true" : "false"
+            }
+            if case .window = objectExpression {
+                // Contrapt has no window objects, so `there is a window …` is
+                // always false.
                 return negated ? "true" : "false"
             }
             if case .stackNamed = objectExpression {
@@ -1186,6 +1202,10 @@ final class Runtime {
             // Reached only if the message box is used somewhere other than a
             // property get/set (both short-circuit) — Contrapt doesn't model it.
             throw ScriptError(line: line, message: "Contrapt doesn't model the message box as an object.")
+        case .window:
+            // Reached only if a window is used somewhere other than a property
+            // get/set or existence test (all short-circuit) — no window objects.
+            throw ScriptError(line: line, message: "Contrapt doesn't have HyperCard windows.")
         case .partByOrdinal(let kind, let domain, let ordinal):
             let total = try hostCall(line: line) { try host.count(.parts(kind: kind, domain: domain)) }
             return .part(kind: kind, domain: domain, reference: .number(Self.resolveOrdinal(ordinal, count: total)))

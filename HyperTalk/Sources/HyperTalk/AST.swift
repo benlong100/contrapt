@@ -255,6 +255,12 @@ indirect enum ObjectExpr {
     /// `visible` property, so `visible of msg box` reads false and setting it
     /// is a no-op — enough for stacks that save/restore it around a task.
     case messageBox
+    /// `window "Tools"`, `card window`, `tool window` — HyperCard palette and
+    /// document windows, which Contrapt doesn't model. Parses so old stacks
+    /// that save/restore or reposition their windows (`the visible of window
+    /// "X"`, `set the loc of window "AddColor" to …`) import and run: the
+    /// property reads empty and setting it is a no-op.
+    case window(Expr)
     /// `last cd btn`, `middle field`, `any button` — a part by a positional
     /// keyword (`first`…`tenth` are exact and parse to `.part` with a numeric
     /// index instead). Resolved against the live count when evaluated.

@@ -1286,6 +1286,24 @@ struct Parser {
             return Self.partKindSynonyms[word] != nil
         }
 
+        // Windows — `window "Tools"`, `card window`, `tool window`. Contrapt has
+        // no window objects; they resolve to an absent object (property reads
+        // empty, sets are no-ops) so old stacks that juggle palette/document
+        // windows import and run. Checked before the card/part handling below so
+        // `card window` isn't read as a card named "window".
+        if peekIdentifier() == "window" {
+            advance()
+            _ = consumeWord("id")
+            let name: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
+                ? .stringLiteral("") : try parsePrimary()
+            return .window(name)
+        }
+        if let w = peekIdentifier(), Self.windowQualifiers.contains(w), peekIdentifier(1) == "window" {
+            advance() // qualifier
+            advance() // window
+            return .window(.stringLiteral(w))
+        }
+
         // A leading ordinal: `last cd btn`, `first card`, `middle field`,
         // `any button`. `first`…`tenth` are exact positions; `last`/`middle`/
         // `any` resolve against the live count when evaluated.
@@ -1433,6 +1451,11 @@ struct Parser {
     ]
     static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg"]
     static let cardWords: Set<String> = ["card", "cd"]
+    /// Qualifiers HyperCard allows before `window`: `card window`, `tool
+    /// window`, `pattern window`, `scroll window`, `fatbits window`. (`message
+    /// window` is handled as the message box.)
+    static let windowQualifiers: Set<String> = ["card", "cd", "tool", "pattern", "patterns",
+                                                 "scroll", "fatbits", "variable"]
     /// Object-less global properties readable as `the <name>`. `stacks` (the
     /// open-stack list) and `mouseclick` (a pending click) are functions in
     /// HyperCard; they read the same way here.
@@ -1529,6 +1552,24 @@ struct Parser {
         }
         index = saved
         return nil
+    }
+
+    /// After `the number of`, reads a menu count — `menuItems of menu "X"` or
+    /// `menus` — or nil if what follows isn't one. Contrapt has no menus, so
+    /// the count is a literal 0: loops like `repeat with x = 1 to the number
+    /// of menuItems of menu "File"` simply never run. Consumes only on success.
+    private mutating func parseMenuCount() -> Expr? {
+        let saved = index
+        let noun = peekIdentifier()
+        if noun == "menus" { advance(); return .numberLiteral(0) }
+        guard noun == "menuitems" || noun == "menuitem" else { return nil }
+        advance()
+        // The owning menu: `of menu "File"` — consumed and ignored.
+        if consumeWord("of") || consumeWord("in") {
+            guard consumeWord("menu") else { index = saved; return nil }
+            _ = try? parsePrimary()
+        }
+        return .numberLiteral(0)
     }
 
     /// After a `number of <plural>` count, swallows an optional
@@ -1687,6 +1728,7 @@ struct Parser {
                     skipCountScopeIfPresent()
                     return .count(countable)
                 }
+                if let menuCount = parseMenuCount() { return menuCount }
                 index = saved // not a count noun — let a property handle it
             }
             // `the first word of X`, `the last line of X`, etc.
@@ -1758,6 +1800,7 @@ struct Parser {
                     skipCountScopeIfPresent()
                     return .count(countable)
                 }
+                if let menuCount = parseMenuCount() { return menuCount }
                 index = saved // e.g. `number of this cd` → the ordinal property
             }
             // Bare ordinal chunk: `last char of X`, `first word of X`,
