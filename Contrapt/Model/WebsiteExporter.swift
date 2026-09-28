@@ -159,18 +159,23 @@ extension WebsiteExporter {
     </html>
     """
 
-    /// Starts the player — after loading the Wasm engine when the export
-    /// includes one. player.js captures window.ContraptEngine at load time,
-    /// so it must be injected only once the engine is installed (or once
-    /// loading it failed and the site falls back to the static preview).
+    /// Starts the static player immediately, and — when the export includes
+    /// the Wasm engine — downloads and starts it in parallel, reporting
+    /// progress to the player (the engine is tens of MB; the card must not
+    /// wait for it). The player upgrades in place via __contraptEngineArrived.
     ///
     /// Deliberately a *classic* script (not type="module"): module scripts
     /// don't load from file:// at all, which would kill even the static
     /// preview. The dynamic import() below fails under file:// (local-file
     /// CORS) and is caught — engine when served over http, static otherwise.
     static let bootJS = """
-    (async () => {
-      if (window.__HAS_ENGINE__) {
+    (() => {
+      const s = document.createElement('script');
+      s.src = 'player.js';
+      document.body.appendChild(s);
+      if (!window.__HAS_ENGINE__) return;
+
+      (async () => {
         try {
           // The PackageToJS bundle: its index.js instantiates the wasm module,
           // whose main() installs window.ContraptEngine synchronously.
@@ -179,18 +184,40 @@ extension WebsiteExporter {
           // Fetch and compile the wasm ourselves instead of letting the loader
           // stream-compile the fetch: streaming requires the server to declare
           // Content-Type: application/wasm, which plenty of shared hosts don't
-          // do for .wasm files. Compiling from bytes works everywhere.
+          // do for .wasm files. Compiling from bytes works everywhere — and
+          // reading the stream by hand gives the player download progress.
           const response = await fetch('./engine/ContraptEngineWasm.wasm');
           if (!response.ok) throw new Error('engine wasm: HTTP ' + response.status);
-          const module = await WebAssembly.compile(await response.arrayBuffer());
+          // Note: with Content-Encoding, content-length is the encoded size
+          // while the reader yields decoded bytes — progress is clamped.
+          const total = Number(response.headers.get('content-length')) || 0;
+          let bytes;
+          if (response.body && total > 0) {
+            const reader = response.body.getReader();
+            const chunks = [];
+            let received = 0;
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              received += value.length;
+              window.__contraptEngineProgress?.(Math.min(1, received / total));
+            }
+            bytes = new Uint8Array(received);
+            let offset = 0;
+            for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+          } else {
+            bytes = new Uint8Array(await response.arrayBuffer());
+          }
+          window.__contraptEngineProgress?.(1); // downloading done; compiling
+          const module = await WebAssembly.compile(bytes);
           await init({ module });
+          window.__contraptEngineArrived?.();
         } catch (e) {
           console.warn('Contrapt engine failed to load; static preview only.', e);
+          window.__contraptEngineFailed?.();
         }
-      }
-      const s = document.createElement('script');
-      s.src = 'player.js';
-      document.body.appendChild(s);
+      })();
     })();
     """
 
@@ -294,9 +321,13 @@ extension WebsiteExporter {
       //   start()            -> { effects, state }
       //   mouseUp(scriptID)  -> { effects, state }   (or { error })
       //   openCard(index)    -> { effects, state }
-      // Absent (a plain static export), the player just pages through cards and
-      // scripts don't run — the fallback below.
-      const engine = window.ContraptEngine;
+      // The engine loads in parallel with this player (boot.js): the static
+      // card renders immediately, the status line tracks the engine download,
+      // and boot.js calls __contraptEngineArrived to upgrade in place. Absent
+      // an engine (a plain static export), the player just pages through cards
+      // and scripts don't run.
+      let engine = window.ContraptEngine;
+      let engineActive = false;
 
       function beep() {
         try {
@@ -353,7 +384,10 @@ extension WebsiteExporter {
       document.title = stack.name || 'Contrapt Stack';
       render();
 
-      if (engine) {
+      function activateEngine() {
+        engine = window.ContraptEngine;
+        if (!engine || engineActive) return;
+        engineActive = true;
         note.textContent = '';
         // A click on any part sends mouseUp along its message path.
         root.addEventListener('click', ev => {
@@ -362,6 +396,22 @@ extension WebsiteExporter {
           handle(engine.mouseUp(Number(partEl.dataset.scriptId)));
         });
         handle(engine.start());
+      }
+      // boot.js drives these while the engine downloads and starts.
+      window.__contraptEngineProgress = fraction => {
+        if (engineActive) return;
+        note.textContent = fraction >= 1
+          ? 'Starting the script engine…'
+          : 'Loading the script engine… ' + Math.min(99, Math.round(fraction * 100)) + '%';
+      };
+      window.__contraptEngineArrived = activateEngine;
+      window.__contraptEngineFailed = () => {
+        if (!engineActive) note.textContent = "Static preview — scripts don't run";
+      };
+      if (engine) {
+        activateEngine();
+      } else if (window.__HAS_ENGINE__) {
+        note.textContent = 'Loading the script engine…';
       }
     })();
     """
