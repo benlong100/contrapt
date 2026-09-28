@@ -143,6 +143,22 @@ extension WebsiteExporter {
       #bar button { font-size: 15px; padding: 6px 14px; }
       #cardLabel { font-variant-numeric: tabular-nums; }
       #note { margin-left: auto; color: #888; font-size: 12px; }
+      .field[contenteditable] { cursor: text; }
+      .field[contenteditable]:focus { outline: 2px solid #4a90d9; outline-offset: -1px; }
+      .dlg-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.25);
+        display: flex; align-items: center; justify-content: center; z-index: 10; }
+      .dlg { background: #fff; border: 1px solid #000; border-radius: 10px;
+        box-shadow: 0 12px 40px rgba(0,0,0,.4); padding: 20px 22px;
+        min-width: 280px; max-width: 440px;
+        font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+      .dlg p { margin: 0 0 14px; font-size: 15px; white-space: pre-wrap; }
+      .dlg input { width: 100%; box-sizing: border-box; font-size: 15px;
+        padding: 6px 8px; margin-bottom: 14px; border: 1px solid #999;
+        border-radius: 6px; }
+      .dlg-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+      .dlg-buttons button { font-size: 14px; padding: 6px 16px;
+        border: 1px solid #000; border-radius: 8px; background: #fff; cursor: pointer; }
+      .dlg-buttons button.default { background: #000; color: #fff; }
     </style>
     </head>
     <body>
@@ -269,6 +285,8 @@ extension WebsiteExporter {
           d.className += ' field ' + (f.style || 'rectangle');
           styleText(d, f.format);
           d.textContent = f.text || '';
+          // Unlocked plain fields become editable once the engine is live.
+          if (f.kind !== 'rich' && !f.lockText) d.dataset.editable = '1';
         } else if (p.type === 'button') {
           const b = p.button || {};
           d.className += ' button ' + (b.style || 'roundRect') + (b.hilite ? ' hilite' : '');
@@ -314,6 +332,22 @@ extension WebsiteExporter {
         label.textContent = 'Card ' + (idx + 1) + ' of ' + stack.cards.length +
           (card.name ? ' — ' + card.name : '');
         fit();
+        if (engineActive) enableFieldEditing();
+      }
+
+      // --- Editable fields ---------------------------------------------------
+      // With the engine live, unlocked plain fields edit in place; every input
+      // pushes the text into the engine so scripts read what the visitor typed.
+      function enableFieldEditing() {
+        Object.values(partEls).forEach(el => {
+          if (el.dataset.editable !== '1' || el.dataset.editing === '1') return;
+          el.dataset.editing = '1';
+          try { el.contentEditable = 'plaintext-only'; }
+          catch (e) { el.contentEditable = 'true'; }
+          el.addEventListener('input', () => {
+            engine.setField(Number(el.dataset.scriptId), el.textContent);
+          });
+        });
       }
       // --- Interactive layer -------------------------------------------------
       // A Wasm runtime, when bundled, installs `window.ContraptEngine`: async
@@ -347,7 +381,9 @@ extension WebsiteExporter {
           if (!el) return;
           el.style.display = rp.visible === false ? 'none' : '';
           if (rp.kind === 'field' || rp.kind === 'label') {
-            el.textContent = rp.text || '';
+            // Never clobber the field the visitor is typing in.
+            if (el === document.activeElement) return;
+            if (el.textContent !== (rp.text || '')) el.textContent = rp.text || '';
           } else if (rp.kind === 'button') {
             el.classList.toggle('hilite', !!rp.hilite);
             const span = el.querySelector('span');
@@ -389,6 +425,7 @@ extension WebsiteExporter {
         if (!engine || engineActive) return;
         engineActive = true;
         note.textContent = '';
+        enableFieldEditing();
         // A click on any part sends mouseUp along its message path.
         root.addEventListener('click', ev => {
           const partEl = ev.target.closest('.part');
@@ -397,6 +434,69 @@ extension WebsiteExporter {
         });
         handle(engine.start());
       }
+      // --- Dialogs -----------------------------------------------------------
+      // `answer` and `ask` suspend the script until the visitor responds; the
+      // engine calls these (returning promises) instead of native prompts.
+      function showDialog(prompt, build) {
+        return new Promise(resolve => {
+          const overlay = document.createElement('div');
+          overlay.className = 'dlg-overlay';
+          const box = document.createElement('div');
+          box.className = 'dlg';
+          const text = document.createElement('p');
+          text.textContent = prompt;
+          box.appendChild(text);
+          const done = value => { overlay.remove(); resolve(value); };
+          build(box, done);
+          overlay.appendChild(box);
+          document.body.appendChild(overlay);
+        });
+      }
+      window.ContraptDialogs = {
+        answer(prompt, buttons) {
+          return showDialog(prompt, (box, done) => {
+            const row = document.createElement('div');
+            row.className = 'dlg-buttons';
+            (buttons || ['OK']).forEach((title, i, all) => {
+              const b = document.createElement('button');
+              b.textContent = title;
+              if (i === all.length - 1) b.className = 'default';   // HyperCard's default is the last
+              b.onclick = () => done(title);
+              row.appendChild(b);
+            });
+            box.appendChild(row);
+            box.addEventListener('keydown', e => {
+              if (e.key === 'Enter') { e.preventDefault(); done((buttons || ['OK']).at(-1)); }
+            });
+            setTimeout(() => row.lastChild && row.lastChild.focus(), 0);
+          });
+        },
+        ask(prompt, initial) {
+          return showDialog(prompt, (box, done) => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = initial || '';
+            box.appendChild(input);
+            const row = document.createElement('div');
+            row.className = 'dlg-buttons';
+            const cancel = document.createElement('button');
+            cancel.textContent = 'Cancel';
+            cancel.onclick = () => done(null);
+            const ok = document.createElement('button');
+            ok.textContent = 'OK';
+            ok.className = 'default';
+            ok.onclick = () => done(input.value);
+            row.appendChild(cancel); row.appendChild(ok);
+            box.appendChild(row);
+            box.addEventListener('keydown', e => {
+              if (e.key === 'Enter') { e.preventDefault(); done(input.value); }
+              if (e.key === 'Escape') { e.preventDefault(); done(null); }
+            });
+            setTimeout(() => { input.focus(); input.select(); }, 0);
+          });
+        },
+      };
+
       // boot.js drives these while the engine downloads and starts.
       window.__contraptEngineProgress = fraction => {
         if (engineActive) return;

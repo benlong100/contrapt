@@ -114,6 +114,13 @@ public final class StackEngine {
         try? host.fieldText(.named(name), domain: .any, onCard: nil)
     }
 
+    /// The visitor edited a field on the page: record its text, so the state
+    /// scripts read tracks what was typed. The part is identified by its
+    /// permanent scriptID on the current card (or its background).
+    public func setField(partScriptID id: Int, text: String) throws {
+        try host.setFieldText(.id(String(id)), domain: .any, onCard: nil, to: text)
+    }
+
     // MARK: - Message path
 
     /// The message path for a part identified by permanent scriptID on the

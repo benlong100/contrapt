@@ -120,6 +120,12 @@ func installEngine() {
     api.message = retained(JSClosure.async { arguments in
         .string(await engine.runMessageJSON(arguments.first?.string ?? ""))
     })
+    api.setField = retained(JSClosure { arguments in
+        .string(engine.setFieldJSON(
+            partScriptID: Int(arguments.first?.number ?? -1),
+            text: arguments.count > 1 ? (arguments[1].string ?? "") : ""
+        ))
+    })
     global.ContraptEngine = .object(api)
 
     // Tell the page the engine is live (boot.js may await this).

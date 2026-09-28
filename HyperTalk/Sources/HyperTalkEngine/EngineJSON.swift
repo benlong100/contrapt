@@ -106,6 +106,19 @@ extension StackEngine {
         await eventJSON { try await self.openCard(index: index) }
     }
 
+    /// The visitor edited a field: record its text. `{ effects, state }` —
+    /// effects is always empty today (typing sends no messages yet; openField/
+    /// closeField are a follow-up), but the envelope matches the other calls.
+    public func setFieldJSON(partScriptID: Int, text: String) -> String {
+        do {
+            try setField(partScriptID: partScriptID, text: text)
+            return encode(EventResult(effects: [], state: currentCardState()))
+        } catch {
+            return encode(EventResult(effects: [], state: currentCardState(),
+                                      error: error.localizedDescription))
+        }
+    }
+
     /// Run one message-box line; `{ result, effects, state }` (or `{ error }`).
     public func runMessageJSON(_ line: String) async -> String {
         do {
