@@ -1221,10 +1221,14 @@ final class Runtime {
 
     private func resolveObject(_ object: ObjectExpr, line: Int) async throws -> HyperTalkObject {
         switch object {
-        case .part(let kind, let domain, let nameExpression):
-            return .part(kind: kind, domain: domain, reference: reference(from: try await evaluate(nameExpression, line: line)))
-        case .partByID(let kind, let domain, let idExpression):
-            return .part(kind: kind, domain: domain, reference: .id(try await evaluate(idExpression, line: line)))
+        case .part(let kind, let domain, let nameExpression, let card):
+            return .part(kind: kind, domain: domain,
+                         reference: reference(from: try await evaluate(nameExpression, line: line)),
+                         onCard: try await resolveCardRef(card, line: line))
+        case .partByID(let kind, let domain, let idExpression, let card):
+            return .part(kind: kind, domain: domain,
+                         reference: .id(try await evaluate(idExpression, line: line)),
+                         onCard: try await resolveCardRef(card, line: line))
         case .card(let expression):
             return .card(reference(from: try await evaluate(expression, line: line)))
         case .cardByID(let idExpression):
@@ -1250,7 +1254,7 @@ final class Runtime {
             throw ScriptError(line: line, message: "Contrapt doesn't have HyperCard windows.")
         case .partByOrdinal(let kind, let domain, let ordinal):
             let total = try hostCall(line: line) { try host.count(.parts(kind: kind, domain: domain)) }
-            return .part(kind: kind, domain: domain, reference: .number(Self.resolveOrdinal(ordinal, count: total)))
+            return .part(kind: kind, domain: domain, reference: .number(Self.resolveOrdinal(ordinal, count: total)), onCard: nil)
         case .cardByOrdinal(let ordinal):
             let total = try hostCall(line: line) { try host.count(.cards) }
             return .card(.number(Self.resolveOrdinal(ordinal, count: total)))

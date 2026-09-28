@@ -12,7 +12,7 @@ import Testing
 // the single-layer `run` helper.
 
 @Test func theTargetNamesTheOriginallyTargetedPart() async throws {
-    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Greet"))
+    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Greet"), onCard: nil)
     let host = MockHost(fields: ["out": ""])
     host.properties["card button Greet.name"] = "card button \"Greet\""
     let layers = [
@@ -32,7 +32,7 @@ import Testing
 }
 
 @Test func meNamesTheObjectRunningTheScript() async throws {
-    let field = HyperTalkObject.part(kind: "field", domain: .card, reference: .named("Note"))
+    let field = HyperTalkObject.part(kind: "field", domain: .card, reference: .named("Note"), onCard: nil)
     let host = MockHost(fields: ["out": ""])
     host.properties["card field Note.name"] = "card field \"Note\""
     let layers = [
@@ -47,7 +47,7 @@ import Testing
 }
 
 @Test func meFollowsTheHandlingLayerWhileTargetStaysAtOrigin() async throws {
-    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Btn"))
+    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Btn"), onCard: nil)
     let host = MockHost(fields: ["out": ""])
     host.properties["card button Btn.name"] = "Btn"
     host.properties["this card.name"] = "Home"
@@ -70,7 +70,7 @@ import Testing
 }
 
 @Test func setAPropertyOfMe() async throws {
-    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("B"))
+    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("B"), onCard: nil)
     let host = MockHost()
     let layers = [
         ScriptLayer(name: "button script", source: """
@@ -84,7 +84,7 @@ import Testing
 }
 
 @Test func bareMeReadsAsTheObjectsName() async throws {
-    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Go"))
+    let button = HyperTalkObject.part(kind: "button", domain: .card, reference: .named("Go"), onCard: nil)
     let host = MockHost(fields: ["out": ""])
     host.properties["card button Go.name"] = "Go"
     let layers = [

@@ -1329,7 +1329,7 @@ struct Parser {
             if let k = peekIdentifier(), let kind = Self.partKindSynonyms[k] {
                 advance()
                 if let n = numeric {
-                    return .part(kind: kind, domain: ordDomain, name: .numberLiteral(Double(n)))
+                    return .part(kind: kind, domain: ordDomain, name: .numberLiteral(Double(n)), card: parsePartScopeIfPresent())
                 }
                 return .partByOrdinal(kind: kind, domain: ordDomain, ordinal: keyword!)
             }
@@ -1358,14 +1358,12 @@ struct Parser {
 
         if let word = peekIdentifier(), let kind = Self.partKindSynonyms[word] {
             advance()
-            let part: ObjectExpr
             if consumeWord("id") {
-                part = .partByID(kind: kind, domain: domain, id: try parsePrimary())
-            } else {
-                part = .part(kind: kind, domain: domain, name: try parsePrimary())
+                let id = try parsePrimary()
+                return .partByID(kind: kind, domain: domain, id: id, card: parsePartScopeIfPresent())
             }
-            skipPartScopeIfPresent()
-            return part
+            let name = try parsePrimary()
+            return .part(kind: kind, domain: domain, name: name, card: parsePartScopeIfPresent())
         }
         // A background reference (`bkgnd`, `background`) → this background.
         // `bkgnd id 2717` / `bkgnd "Home Cards"` / `bkgnd 2` name a specific
@@ -1623,29 +1621,58 @@ struct Parser {
     }
 
     /// A part reference may be scoped to a specific card/background —
-    /// `bg btn 3 of cd 5`, `cd fld 2 of this card`, `bg btn X of first bg`.
-    /// Contrapt's background parts are shared across cards, so the owning
-    /// card/background is parsed and ignored; it only needs consuming so the
-    /// surrounding `set … to …` (or property read) sees what follows. Restores
-    /// the cursor if the `of …` isn't actually a card/background scope.
-    private mutating func skipPartScopeIfPresent() {
-        // Scopes chain: `bg btn id 68 of cd 1 of bg "Graphs"` — consume each
-        // `of <card|bg> …` segment in turn.
+    /// `cd btn id 8 of cd "Stack Menus"`, `cd fld 2 of this card`, `bg btn X
+    /// of first bg`. A *card* scope is captured (the part lives on that card
+    /// and property reads/writes resolve there); a *background* scope is
+    /// parsed and ignored, since Contrapt's background parts are shared
+    /// across cards. Restores the cursor if the `of …` isn't actually a
+    /// card/background scope. Scopes chain (`bg btn id 68 of cd 1 of bg
+    /// "Graphs"`); the innermost card scope wins.
+    private mutating func parsePartScopeIfPresent() -> CardRef? {
+        var cardScope: CardRef?
         while true {
             let saved = index
-            guard consumeWord("of") else { return }
-            _ = consumeWord("this")
+            guard consumeWord("of") else { return cardScope }
+            let isThis = consumeWord("this")
+            var ordinal: String?
             if let w = peekIdentifier(),
                w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil {
+                ordinal = w
                 advance()
             }
-            guard consumeCardWord() || consumeBackgroundWord() else { index = saved; return }
-            _ = consumeWord("id")
-            // An optional identifier/number/string naming the card (`of cd
-            // curCard`, `of card 5`, `of bg "X"`) — but not a following
-            // statement keyword.
-            if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
-                _ = try? parsePrimary()
+            if consumeCardWord() {
+                let isID = consumeWord("id")
+                // An optional identifier/number/string naming the card (`of cd
+                // curCard`, `of card 5`) — but not a following statement keyword.
+                var name: Expr?
+                if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
+                    name = try? parsePrimary()
+                }
+                if cardScope == nil {
+                    if isThis {
+                        cardScope = .current
+                    } else if let ordinal {
+                        switch ordinal {
+                        case "first": cardScope = .first
+                        case "last": cardScope = .last
+                        case "middle", "any": cardScope = .current // best effort
+                        default: cardScope = .expression(.numberLiteral(Double(Self.ordinals[ordinal] ?? 1)))
+                        }
+                    } else if let name {
+                        cardScope = isID ? .idExpression(name) : .expression(name)
+                    } else {
+                        cardScope = .current
+                    }
+                }
+            } else if consumeBackgroundWord() {
+                // Background scope: consume its optional id/name and ignore it.
+                _ = consumeWord("id")
+                if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
+                    _ = try? parsePrimary()
+                }
+            } else {
+                index = saved
+                return cardScope
             }
         }
     }

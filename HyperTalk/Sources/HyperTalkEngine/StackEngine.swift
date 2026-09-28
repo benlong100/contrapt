@@ -131,7 +131,7 @@ public final class StackEngine {
     }
 
     private func scriptPath(part: Part, domain: HyperTalkObject.PartDomain, cardIndex: Int) -> [ScriptLayer] {
-        let object = HyperTalkObject.part(kind: part.kind.word, domain: domain, reference: .id(String(part.scriptID)))
+        let object = HyperTalkObject.part(kind: part.kind.word, domain: domain, reference: .id(String(part.scriptID)), onCard: nil)
         var layers = [ScriptLayer(name: "\(part.kind.word) \"\(part.name)\" script", source: part.script, object: object)]
         layers += scriptPath(part: nil, cardIndex: cardIndex)
         return layers

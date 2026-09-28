@@ -113,6 +113,20 @@ import Testing
     #expect(host.fields["out"] == "0")
 }
 
+@Test func partPropertyScopedToAnotherCardResolvesThere() async throws {
+    // openStack: `if (hilite of cd btn id 8 of cd "Stack Menus") then powerMenu`
+    // — the property must be read from the part on THAT card, not the current
+    // one (where no button id 8 exists).
+    let host = MockHost(fields: ["out": ""])
+    host.properties["card stack menus.card button id 8.hilite"] = "true"
+    try await run("""
+    on mouseUp
+      if (hilite of cd btn id 8 of cd "Stack Menus") then put "on" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "on")
+}
+
 @Test func knownExternalCommandsNoOp() async throws {
     // `GeneralPalette centerBtnName,left,top` — an XCMD in the stack's
     // resource fork. The import records its name; calling it is a no-op

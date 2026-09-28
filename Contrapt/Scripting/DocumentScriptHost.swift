@@ -426,8 +426,8 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func exists(_ object: HyperTalkObject) -> Bool {
         switch object {
-        case .part(let kind, let domain, let reference):
-            return (try? locatePart(kind: kind, domain: domain, reference: reference)) != nil
+        case .part(let kind, let domain, let reference, let onCard):
+            return (try? locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)) != nil
         case .card(let reference):
             return (try? cardIndexFor(reference)) != nil
         case .thisCard:
@@ -674,8 +674,8 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String {
         switch object {
-        case .part(let kind, let domain, let reference):
-            let location = try locatePart(kind: kind, domain: domain, reference: reference)
+        case .part(let kind, let domain, let reference, let onCard):
+            let location = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
             if property == "number" {
                 return String(ordinal(of: location, kind: kind))
             }
@@ -718,8 +718,8 @@ final class DocumentScriptHost: HyperTalkHost {
             throw HostError("The id of an object can't be changed.")
         }
         switch object {
-        case .part(let kind, let domain, let reference):
-            let location = try locatePart(kind: kind, domain: domain, reference: reference)
+        case .part(let kind, let domain, let reference, let onCard):
+            let location = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
             var updated = part(at: location)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: location)
@@ -1061,18 +1061,19 @@ final class DocumentScriptHost: HyperTalkHost {
 
     /// Card parts win over background parts, matching HyperCard's layering.
     private enum FieldLocation {
-        case card(partIndex: Int)
+        case card(cardIndex: Int, partIndex: Int)
         case background(backgroundIndex: Int, partIndex: Int)
     }
 
     /// Finds a part of the given kind by name, ordinal, or permanent ID.
     /// Unqualified references search card parts first, then the
     /// background's; `card`/`background` qualifiers restrict the layer.
-    private func locatePart(kind: String, domain: HyperTalkObject.PartDomain, reference: HyperTalkObject.Reference) throws -> FieldLocation {
-        let card = stack.cards[cardIndex]
+    private func locatePart(kind: String, domain: HyperTalkObject.PartDomain, reference: HyperTalkObject.Reference, onCard cardDestination: GoDestination? = nil) throws -> FieldLocation {
+        let ci = try cardDestination.map { try resolveCardIndex($0) } ?? cardIndex
+        let card = stack.cards[ci]
         let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID })
         func onCard() -> FieldLocation? {
-            index(ofKind: kind, matching: reference, in: card.parts).map { .card(partIndex: $0) }
+            index(ofKind: kind, matching: reference, in: card.parts).map { .card(cardIndex: ci, partIndex: $0) }
         }
         func onBackground() -> FieldLocation? {
             guard let backgroundIndex,
@@ -1128,8 +1129,8 @@ final class DocumentScriptHost: HyperTalkHost {
         let parts: [Part]
         let partIndex: Int
         switch location {
-        case .card(let index):
-            parts = stack.cards[cardIndex].parts
+        case .card(let ci, let index):
+            parts = stack.cards[ci].parts
             partIndex = index
         case .background(let backgroundIndex, let index):
             parts = stack.backgrounds[backgroundIndex].parts
@@ -1145,8 +1146,8 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private func setPart(_ part: Part, at location: FieldLocation) {
         switch location {
-        case .card(let partIndex):
-            stackBinding.wrappedValue.cards[cardIndex].parts[partIndex] = part
+        case .card(let ci, let partIndex):
+            stackBinding.wrappedValue.cards[ci].parts[partIndex] = part
         case .background(let backgroundIndex, let partIndex):
             stackBinding.wrappedValue.backgrounds[backgroundIndex].parts[partIndex] = part
         }
@@ -1154,8 +1155,8 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private func part(at location: FieldLocation) -> Part {
         switch location {
-        case .card(let partIndex):
-            stack.cards[cardIndex].parts[partIndex]
+        case .card(let ci, let partIndex):
+            stack.cards[ci].parts[partIndex]
         case .background(let backgroundIndex, let partIndex):
             stack.backgrounds[backgroundIndex].parts[partIndex]
         }
@@ -1163,8 +1164,8 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private func setKind(_ kind: PartKind, at location: FieldLocation) {
         switch location {
-        case .card(let partIndex):
-            stackBinding.wrappedValue.cards[cardIndex].parts[partIndex].kind = kind
+        case .card(let ci, let partIndex):
+            stackBinding.wrappedValue.cards[ci].parts[partIndex].kind = kind
         case .background(let backgroundIndex, let partIndex):
             stackBinding.wrappedValue.backgrounds[backgroundIndex].parts[partIndex].kind = kind
         }

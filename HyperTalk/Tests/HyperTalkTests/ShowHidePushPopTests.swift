@@ -98,10 +98,10 @@ import Testing
 
 @Test func setPartPropertyScopedToACardParses() async throws {
     // The Home stack: `set name of bg btn (curCard-adjust) of cd curCard to …`.
-    // The owning-card scope is parsed and ignored (bg parts are shared), and
-    // the parenthesised index and `set … to …` still resolve.
+    // The owning-card scope is captured (the part resolves on that card — its
+    // background), and the parenthesised index and `set … to …` still resolve.
     let host = MockHost()
-    host.properties["background button 2.name"] = "old"
+    host.properties["card 3.background button 2.name"] = "old"
     _ = try await run("""
     on mouseUp
       put 3 into curCard
@@ -110,8 +110,8 @@ import Testing
       set hilite of bg btn (curCard-adjust) of cd curCard to true
     end mouseUp
     """, host: host)
-    #expect(host.properties["background button 2.name"] == "Welcome")
-    #expect(host.properties["background button 2.hilite"] == "true")
+    #expect(host.properties["card 3.background button 2.name"] == "Welcome")
+    #expect(host.properties["card 3.background button 2.hilite"] == "true")
 }
 
 @Test func messageBoxVisibleReadsFalseAndSetIsNoOp() async throws {

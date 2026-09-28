@@ -109,8 +109,10 @@ final class MockHost: HyperTalkHost {
 
     private func propertyKey(_ property: String, _ object: HyperTalkObject) -> String {
         switch object {
-        case .part(let kind, let domain, let reference):
-            "\(domainText(domain))\(kind) \(referenceText(reference)).\(property)"
+        case .part(let kind, let domain, let reference, let onCard):
+            // Reuses the field-scope prefix: `cd btn id 8 of cd "Stack Menus"`
+            // keys as "card stack menus.card button id 8.<property>".
+            "\(cardPrefix(onCard))\(domainText(domain))\(kind) \(referenceText(reference)).\(property)"
         case .card(let reference): "card \(referenceText(reference)).\(property)"
         case .thisCard: "this card.\(property)"
         case .thisBackground: "this background.\(property)"
@@ -261,9 +263,9 @@ final class MockHost: HyperTalkHost {
     /// property was preset for it. `this …` objects always exist.
     func exists(_ object: HyperTalkObject) -> Bool {
         switch object {
-        case .part(let kind, let domain, let reference):
+        case .part(let kind, let domain, let reference, let onCard):
             if kind == "field", fields[fieldKey(reference, domain)] != nil { return true }
-            let prefix = "\(domainText(domain))\(kind) \(referenceText(reference))."
+            let prefix = "\(cardPrefix(onCard))\(domainText(domain))\(kind) \(referenceText(reference))."
             return properties.keys.contains { $0.hasPrefix(prefix) }
         case .card(let reference):
             return properties.keys.contains { $0.hasPrefix("card \(referenceText(reference)).") }

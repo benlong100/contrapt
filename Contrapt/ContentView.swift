@@ -848,7 +848,7 @@ struct ContentView: View {
             // shared background. Addressed by permanent id so `me` / `the
             // target` survive renames.
             let domain: HyperTalkObject.PartDomain = card.parts.contains(where: { $0.id == part.id }) ? .card : .background
-            let object = HyperTalkObject.part(kind: kind, domain: domain, reference: .id(String(part.scriptID)))
+            let object = HyperTalkObject.part(kind: kind, domain: domain, reference: .id(String(part.scriptID)), onCard: nil)
             layers.append(ScriptLayer(name: "\(kind) \"\(part.name)\" script", source: part.script, object: object))
         }
         layers.append(ScriptLayer(name: "card \"\(card.name)\" script", source: card.script, object: .thisCard))

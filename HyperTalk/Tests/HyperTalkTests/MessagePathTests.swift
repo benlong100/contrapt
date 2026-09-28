@@ -10,7 +10,7 @@ import Testing
 private func layers(button: String = "", card: String = "", background: String = "", stack: String = "") -> [ScriptLayer] {
     [
         ScriptLayer(name: "button \"Test\" script", source: button,
-                    object: .part(kind: "button", domain: .card, reference: .named("Test"))),
+                    object: .part(kind: "button", domain: .card, reference: .named("Test"), onCard: nil)),
         ScriptLayer(name: "card \"Card 1\" script", source: card, object: .thisCard),
         ScriptLayer(name: "background script", source: background, object: .thisBackground),
         ScriptLayer(name: "stack script", source: stack, object: .thisStack),

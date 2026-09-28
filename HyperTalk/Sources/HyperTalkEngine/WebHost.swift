@@ -181,7 +181,7 @@ final class WebHost: HyperTalkHost {
 
     // MARK: - Card resolution
 
-    private func resolveCardIndex(_ destination: GoDestination) throws -> Int {
+    func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
         switch destination {
@@ -273,8 +273,8 @@ final class WebHost: HyperTalkHost {
 
     func exists(_ object: HyperTalkObject) -> Bool {
         switch object {
-        case .part(let kind, let domain, let reference):
-            return (try? locatePart(kind: kind, domain: domain, reference: reference)) != nil
+        case .part(let kind, let domain, let reference, let onCard):
+            return (try? locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)) != nil
         case .card(let reference):
             return (try? cardIndexFor(reference)) != nil
         case .thisCard: return !stack.cards.isEmpty

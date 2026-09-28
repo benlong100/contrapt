@@ -239,8 +239,10 @@ indirect enum ChunkSelector {
 /// An object reference in source: `button "OK"`, `card field 1`,
 /// `button id 6`, `card 3`, `card id 12`, `this card`.
 indirect enum ObjectExpr {
-    case part(kind: String, domain: HyperTalkObject.PartDomain, name: Expr)
-    case partByID(kind: String, domain: HyperTalkObject.PartDomain, id: Expr)
+    /// `card` scopes the part to another card (`cd btn id 8 of cd "Stack
+    /// Menus"`); nil means the current card.
+    case part(kind: String, domain: HyperTalkObject.PartDomain, name: Expr, card: CardRef?)
+    case partByID(kind: String, domain: HyperTalkObject.PartDomain, id: Expr, card: CardRef?)
     case card(Expr)
     case cardByID(Expr)
     case thisCard

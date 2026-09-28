@@ -125,9 +125,11 @@ public enum HyperTalkObject: Sendable, Equatable {
         case background
     }
 
-    /// A part on the current card or its background: kind is the word the
-    /// script used ("button", "field", "label", "image").
-    case part(kind: String, domain: PartDomain, reference: Reference)
+    /// A part on a card or its background: kind is the word the script used
+    /// ("button", "field", "label", "image"). `onCard` names a different card
+    /// the part lives on (`hilite of cd btn id 8 of cd "Stack Menus"`); nil
+    /// means the current card.
+    case part(kind: String, domain: PartDomain, reference: Reference, onCard: GoDestination?)
     case card(Reference)
     case thisCard
     case thisBackground

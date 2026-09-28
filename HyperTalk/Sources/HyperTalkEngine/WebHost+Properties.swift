@@ -15,8 +15,8 @@ extension WebHost {
 
     func propertyValue(_ property: String, of object: HyperTalkObject) throws -> String {
         switch object {
-        case .part(let kind, let domain, let reference):
-            let loc = try locatePart(kind: kind, domain: domain, reference: reference)
+        case .part(let kind, let domain, let reference, let onCard):
+            let loc = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
             if property == "number" { return String(ordinal(of: loc, kind: kind)) }
             return try partProperty(property, of: part(at: loc), kind: kind)
         case .card(let reference):
@@ -54,8 +54,8 @@ extension WebHost {
     func setProperty(_ property: String, of object: HyperTalkObject, to value: String) throws {
         guard property != "id" else { throw HostError("The id of an object can't be changed.") }
         switch object {
-        case .part(let kind, let domain, let reference):
-            let loc = try locatePart(kind: kind, domain: domain, reference: reference)
+        case .part(let kind, let domain, let reference, let onCard):
+            let loc = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
             var updated = part(at: loc)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: loc)
@@ -365,15 +365,18 @@ extension WebHost {
     // MARK: - Part lookup
 
     enum PartLocation {
-        case card(partIndex: Int)
+        case card(cardIndex: Int, partIndex: Int)
         case background(backgroundIndex: Int, partIndex: Int)
     }
 
-    func locatePart(kind: String, domain: HyperTalkObject.PartDomain, reference: HyperTalkObject.Reference) throws -> PartLocation {
-        let card = stack.cards[cardIndex]
+    /// `onCard` scopes the lookup to another card (`cd btn id 8 of cd "Stack
+    /// Menus"`); nil searches the current card.
+    func locatePart(kind: String, domain: HyperTalkObject.PartDomain, reference: HyperTalkObject.Reference, onCard cardDestination: GoDestination? = nil) throws -> PartLocation {
+        let ci = try cardDestination.map { try resolveCardIndex($0) } ?? cardIndex
+        let card = stack.cards[ci]
         let bgIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID })
         func onCard() -> PartLocation? {
-            index(ofKind: kind, matching: reference, in: card.parts).map { .card(partIndex: $0) }
+            index(ofKind: kind, matching: reference, in: card.parts).map { .card(cardIndex: ci, partIndex: $0) }
         }
         func onBackground() -> PartLocation? {
             guard let bgIndex,
@@ -417,7 +420,7 @@ extension WebHost {
         let parts: [Part]
         let partIndex: Int
         switch location {
-        case .card(let i): parts = stack.cards[cardIndex].parts; partIndex = i
+        case .card(let ci, let i): parts = stack.cards[ci].parts; partIndex = i
         case .background(let b, let i): parts = stack.backgrounds[b].parts; partIndex = i
         }
         var seen = 0
@@ -430,14 +433,14 @@ extension WebHost {
 
     func part(at location: PartLocation) -> Part {
         switch location {
-        case .card(let i): stack.cards[cardIndex].parts[i]
+        case .card(let ci, let i): stack.cards[ci].parts[i]
         case .background(let b, let i): stack.backgrounds[b].parts[i]
         }
     }
 
     private func setPart(_ part: Part, at location: PartLocation) {
         switch location {
-        case .card(let i): stack.cards[cardIndex].parts[i] = part
+        case .card(let ci, let i): stack.cards[ci].parts[i] = part
         case .background(let b, let i): stack.backgrounds[b].parts[i] = part
         }
     }
