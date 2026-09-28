@@ -72,6 +72,10 @@ struct ContentView: View {
     @State private var objectScope: ObjectScriptsInspector.Scope = .card
     @State private var messageBoxText: String?
     @State private var isMessageBoxVisible = false
+    #if os(macOS)
+    /// The hosting window, for key-window checks when routing Cmd-M.
+    @State private var hostWindow: NSWindow?
+    #endif
     @State private var scriptErrorText: String?
     @State private var undoFlushTask: Task<Void, Never>?
     @State private var isPhotoPickerPresented = false
@@ -404,6 +408,15 @@ struct ContentView: View {
         .focusedSceneValue(\.stackFullScreen, fullScreenBinding)
         .focusedSceneValue(\.guidePresented, $isGuidePresented)
         .focusedSceneValue(\.messageBoxVisible, $isMessageBoxVisible)
+        #if os(macOS)
+        // Cmd-M arrives via the AppDelegate's key monitor (not menu dispatch —
+        // see contraptToggleMessageBox); only the key window's stack responds.
+        .background(WindowBinder { hostWindow = $0 })
+        .onReceive(NotificationCenter.default.publisher(for: .contraptToggleMessageBox)) { _ in
+            guard hostWindow?.isKeyWindow == true else { return }
+            isMessageBoxVisible.toggle()
+        }
+        #endif
         .focusedSceneValue(\.websiteExport, WebsiteExport { directory, actualSize in
             try WebsiteExporter.export(stack: document.stack, assets: document.assets, into: directory, actualSize: actualSize)
         })

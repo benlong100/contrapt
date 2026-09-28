@@ -26,6 +26,8 @@ import UIKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Drives frequent in-place autosaves (below).
     private var autosaveTimer: Timer?
+    /// Claims plain ⌘M ahead of menu dispatch (see below).
+    private var messageBoxKeyMonitor: Any?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Suppress AppKit's automatic "Enter Full Screen" View-menu item —
@@ -88,6 +90,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var attributes = textView.selectedTextAttributes
             attributes[.backgroundColor] = NSColor.selectedTextBackgroundColor
             textView.selectedTextAttributes = attributes
+        }
+
+        // HyperCard gives ⌘M to the Message Box, but macOS gives it to
+        // Window ▸ Minimize -- and the SwiftUI menu item that shadows the
+        // system's rides focused values, which drop out unpredictably while a
+        // text field (often the message box's own) is first responder. When
+        // they do, the system item wins and the window genies into the Dock.
+        // So the shortcut doesn't go through menu dispatch at all: a local
+        // monitor claims plain ⌘M ahead of the menus and routes it to the
+        // key window's stack (ContentView toggles; see contraptToggleMessageBox).
+        messageBoxKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                  event.charactersIgnoringModifiers?.lowercased() == "m" else { return event }
+            NotificationCenter.default.post(name: .contraptToggleMessageBox, object: nil)
+            return nil
         }
 
         // Autosave in place every second. DocumentGroup already saves on window
@@ -162,12 +179,22 @@ private struct GoCommands: View {
         }
         .disabled(navigation == nil)
         // HyperCard's Message Box (⌘M), toggled from anywhere in a stack.
+        // On macOS both the click and the shortcut go through the key-window
+        // notification (AppDelegate's monitor claims the shortcut before menu
+        // dispatch); the equivalent shown here is for discoverability.
         Divider()
+        #if os(macOS)
+        Button(isMessageBoxVisible == true ? "Hide Message Box" : "Message Box") {
+            NotificationCenter.default.post(name: .contraptToggleMessageBox, object: nil)
+        }
+        .keyboardShortcut("m", modifiers: .command)
+        #else
         Button(isMessageBoxVisible == true ? "Hide Message Box" : "Message Box") {
             isMessageBoxVisible?.toggle()
         }
         .keyboardShortcut("m", modifiers: .command)
         .disabled(isMessageBoxVisible == nil)
+        #endif
         #if os(macOS)
         Divider()
         Button("Reset Home to Default…") {

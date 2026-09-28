@@ -123,6 +123,32 @@ struct EditKeyCatcher: NSViewRepresentable {
 }
 #endif
 
+// MARK: - Message box toggle routing (macOS)
+
+/// Posted by the AppDelegate's key monitor when plain Cmd-M is pressed (and by
+/// the Go menu item's click). The key window's ContentView toggles its box.
+extension Notification.Name {
+    static let contraptToggleMessageBox = Notification.Name("contraptToggleMessageBox")
+}
+
+#if os(macOS)
+/// Hands the hosting NSWindow to SwiftUI state, so app-wide events (the Cmd-M
+/// monitor) can be routed to the key window's stack only.
+struct WindowBinder: NSViewRepresentable {
+    var onWindow: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in onWindow(view?.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in onWindow(nsView?.window) }
+    }
+}
+#endif
+
 // MARK: - Full-screen presentation (macOS)
 
 #if os(macOS)
