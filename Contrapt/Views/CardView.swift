@@ -821,7 +821,10 @@ struct PartView: View {
         // by a fraction of the field height — enough for a tall multi-row grid
         // to clear the rule above it, but capped so a short one-line field
         // (e.g. a 17pt-tall day-number box) isn't shoved out of view.
-        let topPadding: CGFloat = properties.lockText ? min(16, max(2, fieldHeight * 0.2)) : min(8, max(2, fieldHeight * 0.18))
+        // Locked prose starts near the top like HyperCard; the bigger nudge is
+        // only for ruled grids (Show Lines), whose rows must clear their rule.
+        let lockedNudge: CGFloat = properties.showLines ? 16 : 4
+        let topPadding: CGFloat = properties.lockText ? min(lockedNudge, max(2, fieldHeight * 0.2)) : min(8, max(2, fieldHeight * 0.18))
         let bottomPadding: CGFloat = properties.lockText ? 2 : min(8, max(2, fieldHeight * 0.18))
         // Pre-formatted tabular text (several short, hard-broken lines, like a
         // calendar grid) should never soft-wrap — a row that's a hair too wide
