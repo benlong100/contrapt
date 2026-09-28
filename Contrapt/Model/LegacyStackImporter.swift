@@ -107,7 +107,7 @@ enum LegacyStackImporter {
             partIDs.formUnion(parsed.parts.map(\.id))
             var background = Background(id: UUID(), name: parsed.name.isEmpty ? "Background \(stack.backgrounds.count + 1)" : parsed.name,
                                         script: parsed.script, parts: [])
-            background.scriptID = stack.claimScriptID()
+            background.scriptID = preservedScriptID(block.id, in: &stack)
             // Buttons live on the background, as do shared-text fields —
             // background labels (copyright, "Home") whose one value is stored
             // in the background block. Other fields become per-card copies.
@@ -145,7 +145,7 @@ enum LegacyStackImporter {
             var card = Card(id: UUID(),
                             name: parsed.name.isEmpty ? "Card \(stack.cards.count + 1)" : parsed.name,
                             backgroundID: backgroundUUID, script: parsed.script, parts: [])
-            card.scriptID = stack.claimScriptID()
+            card.scriptID = preservedScriptID(block.id, in: &stack)
             card.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
 
             // Background fields, copied onto the card and filled with this
@@ -253,8 +253,18 @@ enum LegacyStackImporter {
         var part = Part(id: UUID(), name: raw.name, frame: frame,
                         script: raw.script, kind: kind)
         part.isVisible = raw.visible
-        part.scriptID = stack.claimScriptID()
+        part.scriptID = preservedScriptID(raw.id, in: &stack)
         return part
+    }
+
+    /// Keeps HyperCard's original object id — imported scripts hardcode them
+    /// (`cd btn id 8 of cd "Stack Menus"`, `go cd id 2917`). The stack's id
+    /// allocator stays above every preserved id, so parts created later in
+    /// Contrapt never collide. Ids ≤ 0 (absent) fall back to the allocator.
+    private static func preservedScriptID(_ originalID: Int, in stack: inout Stack) -> Int {
+        guard originalID > 0 else { return stack.claimScriptID() }
+        stack.nextID = max(stack.nextID, originalID + 1)
+        return originalID
     }
 
     /// Classic bitmap fonts re-render a little large in SwiftUI's system
