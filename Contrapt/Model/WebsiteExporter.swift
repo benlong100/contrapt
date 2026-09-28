@@ -176,7 +176,14 @@ extension WebsiteExporter {
           // whose main() installs window.ContraptEngine synchronously.
           const engineModule = await import('./engine/index.js');
           const init = engineModule.init ?? engineModule.default;
-          await init();
+          // Fetch and compile the wasm ourselves instead of letting the loader
+          // stream-compile the fetch: streaming requires the server to declare
+          // Content-Type: application/wasm, which plenty of shared hosts don't
+          // do for .wasm files. Compiling from bytes works everywhere.
+          const response = await fetch('./engine/ContraptEngineWasm.wasm');
+          if (!response.ok) throw new Error('engine wasm: HTTP ' + response.status);
+          const module = await WebAssembly.compile(await response.arrayBuffer());
+          await init({ module });
         } catch (e) {
           console.warn('Contrapt engine failed to load; static preview only.', e);
         }
