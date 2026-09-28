@@ -66,6 +66,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.pruneUnwantedMenuItems()
         }
 
+        // Turn off macOS's automatic quote/dash substitution in every text view
+        // as it starts editing. Smart quotes turn a typed " into a curly “ or ”,
+        // which breaks HyperTalk string literals (a straight-open string won't
+        // close on a curly quote) — the classic "no closing quote" error while
+        // typing scripts. SwiftUI's TextEditor exposes no switch for this, so we
+        // clear it on the underlying NSTextView.
+        NotificationCenter.default.addObserver(
+            forName: NSText.didBeginEditingNotification, object: nil, queue: .main
+        ) { note in
+            guard let textView = note.object as? NSTextView else { return }
+            textView.isAutomaticQuoteSubstitutionEnabled = false
+            textView.isAutomaticDashSubstitutionEnabled = false
+            textView.isAutomaticTextReplacementEnabled = false
+        }
+
         // Autosave in place every second. DocumentGroup already saves on window
         // close and when the app deactivates, but its idle autosave is on a
         // ~30s cadence, and neither of those fires when the app is force-killed
