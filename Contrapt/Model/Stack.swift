@@ -76,6 +76,11 @@ nonisolated struct Stack: Identifiable, Hashable {
     /// fill the window — the classic small HyperCard card on a desktop.
     /// Imported stacks set this for an "original size" import.
     var presentAtActualSize: Bool = false
+    /// The names of the stack's XCMD/XFCN externals, recorded at import from
+    /// the legacy stack's resource fork. Contrapt can't run the compiled
+    /// code; the interpreter no-ops calls to these names (functions return
+    /// empty) instead of raising "Can't understand".
+    var externalCommands: [String] = []
 
     /// Claims the next permanent scriptID.
     mutating func claimScriptID() -> Int {
@@ -88,7 +93,7 @@ nonisolated struct Stack: Identifiable, Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
-        case isFullScreen, paddingColor, presentAtActualSize
+        case isFullScreen, paddingColor, presentAtActualSize, externalCommands
     }
 
     init(from decoder: Decoder) throws {
@@ -104,6 +109,7 @@ extension Stack: Codable {
         isFullScreen = try container.decodeIfPresent(Bool.self, forKey: .isFullScreen) ?? false
         paddingColor = try container.decodeIfPresent(String.self, forKey: .paddingColor) ?? "black"
         presentAtActualSize = try container.decodeIfPresent(Bool.self, forKey: .presentAtActualSize) ?? false
+        externalCommands = try container.decodeIfPresent([String].self, forKey: .externalCommands) ?? []
     }
 }
 

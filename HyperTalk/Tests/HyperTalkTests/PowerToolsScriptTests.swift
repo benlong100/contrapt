@@ -113,6 +113,48 @@ import Testing
     #expect(host.fields["out"] == "0")
 }
 
+@Test func knownExternalCommandsNoOp() async throws {
+    // `GeneralPalette centerBtnName,left,top` — an XCMD in the stack's
+    // resource fork. The import records its name; calling it is a no-op
+    // instead of "Can't understand 'generalpalette'".
+    let host = MockHost(fields: ["out": ""])
+    host.externalNames = ["generalpalette", "showlist"]
+    try await run("""
+    on mouseUp
+      GeneralPalette "List of Tools",100,200
+      get showList("a,b","pick",true,false,"OK,Cancel",0)
+      put "ran to the end, it is [" & it & "]" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ran to the end, it is []")
+}
+
+@Test func hyperCardShippedExternalsNoOp() async throws {
+    // `palette "Navigator"` — an XCMD HyperCard itself shipped, so it's
+    // never in a stack's fork; a small built-in list covers those.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      palette "Navigator"
+      put "ok" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ok")
+}
+
+@Test func unknownCommandsStillError() async throws {
+    // Only *recorded* externals no-op — a genuinely unknown name (a typo in
+    // the user's own script) still surfaces as an error.
+    let host = MockHost(fields: [:])
+    await #expect(throws: ScriptError.self) {
+        _ = try await run("""
+        on mouseUp
+          bogusCommandNobodyHas 1,2
+        end mouseUp
+        """, host: host)
+    }
+}
+
 @Test func powerToolsStackScriptWallsParse() async throws {
     // Condensed from the Power Tools stack script: every construct that
     // walled, in its original shape.

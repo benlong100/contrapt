@@ -357,6 +357,12 @@ final class DocumentScriptHost: HyperTalkHost {
         onMessage(text)
     }
 
+    /// The XCMD/XFCN names recorded at import — calls to them no-op rather
+    /// than raising "Can't understand" (the compiled code can't run here).
+    func isExternalName(_ name: String) -> Bool {
+        stack.externalCommands.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
     func beep() {
         Beeper.shared.beep()
     }

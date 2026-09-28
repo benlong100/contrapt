@@ -81,6 +81,13 @@ final class MockHost: HyperTalkHost {
         beeps += 1
     }
 
+    /// Simulated XCMD/XFCN names (store lowercased), as an import records them.
+    var externalNames: Set<String> = []
+
+    func isExternalName(_ name: String) -> Bool {
+        externalNames.contains(name.lowercased())
+    }
+
     /// Properties keyed by a readable path like "button OK.width".
     var properties: [String: String] = [:]
 

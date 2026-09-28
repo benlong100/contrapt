@@ -197,7 +197,14 @@ enum LegacyStackImporter {
             iconFork = ResourceFork.forkData(of: iconApp)
         }
         let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, stackFork: stackFork, presentAtActualSize: presentAtActualSize)
-        var entries: [String: Data] = ["stack.json": try imported.stack.fileData()]
+        var importedStack = imported.stack
+        // Record the stack's XCMD/XFCN names so the interpreter can no-op
+        // calls to them (Contrapt can't run compiled externals) instead of
+        // raising "Can't understand" every time a script invokes one.
+        if let stackFork {
+            importedStack.externalCommands = ResourceFork.externalNames(from: stackFork).sorted()
+        }
+        var entries: [String: Data] = ["stack.json": try importedStack.fileData()]
         for (assetName, bytes) in imported.assets { entries["assets/\(assetName)"] = bytes }
         let archive = ZipArchive.archive(entries)
         // A unique subdirectory per import keeps the friendly filename while

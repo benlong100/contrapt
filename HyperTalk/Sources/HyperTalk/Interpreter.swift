@@ -287,8 +287,23 @@ final class Runtime {
             pendingReturn = savedReturn
             return value
         }
+        if isExternal(name) {
+            // An XFCN — external compiled code Contrapt can't run. Reads as
+            // empty, so callers like `get showList(…)` degrade to a cancel.
+            return ""
+        }
         throw ScriptError(line: line, message: "Can't find a function named '\(name)'.")
     }
+
+    /// Whether a name is external compiled code (an XCMD/XFCN): recorded from
+    /// the stack's resource fork at import, or one of the externals HyperCard
+    /// itself shipped (which never lived in the stack's own fork).
+    private func isExternal(_ name: String) -> Bool {
+        Self.hyperCardExternals.contains(name.lowercased()) || host.isExternalName(name)
+    }
+
+    /// Externals bundled inside the HyperCard application itself.
+    static let hyperCardExternals: Set<String> = ["palette", "picture", "flash"]
 
     /// Runs loose statements (a message box line) in a fresh frame rooted
     /// at the first layer, so message sends search the whole path.
@@ -663,6 +678,13 @@ final class Runtime {
             }
             let handled = try await send(name, arguments: arguments, fromLayer: currentLayerIndex, line: statement.line)
             guard handled else {
+                if isExternal(name) {
+                    // An XCMD the import recorded (or one HyperCard itself
+                    // shipped, like `palette`) — compiled code Contrapt can't
+                    // run. No-op rather than error, clearing the result.
+                    lastResult = ""
+                    return .normal
+                }
                 throw ScriptError(line: statement.line, message: "Can't understand '\(name)'.")
             }
             return .normal

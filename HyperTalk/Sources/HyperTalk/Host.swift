@@ -211,6 +211,19 @@ public protocol HyperTalkHost: AnyObject {
     /// if the stack is empty). The interpreter navigates there, or writes the
     /// reference into a container for `pop card into …`.
     func popCard() -> String?
+    /// Whether `name` is one of the stack's external commands or functions —
+    /// the XCMD/XFCN resource names recorded when a legacy stack is imported.
+    /// Contrapt can't run compiled externals, so the interpreter turns calls
+    /// to *known* ones into no-ops (functions return empty) instead of
+    /// "Can't understand" errors — while genuinely unknown names still error,
+    /// so typos in the user's own scripts surface.
+    func isExternalName(_ name: String) -> Bool
+}
+
+public extension HyperTalkHost {
+    /// Hosts without external-name records (tests, the web engine) treat
+    /// every unknown name as a real error.
+    func isExternalName(_ name: String) -> Bool { false }
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them
