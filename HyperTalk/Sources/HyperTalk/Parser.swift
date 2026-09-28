@@ -893,6 +893,12 @@ struct Parser {
             } else {
                 target = .expression(try parseExpression())
             }
+        } else if consumeBackgroundWord() {
+            // `go [to] bg <name>` — the first card of that background, as in
+            // HyperCard. (`go bg id N` parses too; the id is matched as a name,
+            // best effort.) Power Tools: `if there is not a cd it then go bg it`.
+            _ = consumeWord("id")
+            target = .inBackground(.first, background: try parseExpression())
         } else if consumeWord("stack") {
             // `go [to] stack "X"` — another stack (opens at its first card).
             target = .inStack(name: try parseExpression(), card: nil)
@@ -1801,6 +1807,16 @@ struct Parser {
                     return .count(countable)
                 }
                 if let menuCount = parseMenuCount() { return menuCount }
+                // Bare `number of chars/words/lines/items in X` — a chunk
+                // count without the leading `the` (mirrors the `the number
+                // of words of X` handling above).
+                if let kindWord = peekIdentifier(), let kind = Self.chunkKinds[kindWord] {
+                    advance() // kind
+                    guard consumeWord("of") || consumeWord("in") else {
+                        throw ScriptError(line: line, message: "Expected 'of' after 'number of \(kindWord)'.")
+                    }
+                    return .chunkCount(kind, try parsePrimary())
+                }
                 index = saved // e.g. `number of this cd` → the ordinal property
             }
             // Bare ordinal chunk: `last char of X`, `first word of X`,
