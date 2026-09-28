@@ -160,6 +160,10 @@ code {
   white-space: nowrap;
 }
 
+/* Inside the justified story columns an unbreakable code phrase forces the
+   justifier to stretch whole lines; let code wrap between its words there. */
+.columns code { white-space: normal; }
+
 /* ------------------------- The HyperTalk wink ------------------------- */
 /* Three lines of script beside a card whose button actually runs them.   */
 
