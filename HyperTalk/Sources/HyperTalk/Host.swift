@@ -28,16 +28,16 @@ public enum ConvertFormat: Sendable, Equatable {
 
 /// A screen transition queued by `visual effect`, played by the next `go`.
 /// The interpreter parses it; the host (the UI) renders it.
-public struct ScreenEffect: Sendable, Equatable {
-    public enum Kind: String, Sendable {
+public struct ScreenEffect: Sendable, Equatable, Codable {
+    public enum Kind: String, Sendable, Codable {
         case dissolve, wipe, scroll, zoom, iris
         case barnDoor, checkerboard, venetianBlinds, plain
     }
     /// Where the effect moves or how it opens: `wipe left`, `iris open`, etc.
-    public enum Direction: String, Sendable {
+    public enum Direction: String, Sendable, Codable {
         case left, right, up, down, open, close, `in`, out
     }
-    public enum Speed: String, Sendable {
+    public enum Speed: String, Sendable, Codable {
         case verySlow, slow, normal, fast, veryFast
     }
 

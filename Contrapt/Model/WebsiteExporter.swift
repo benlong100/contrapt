@@ -122,6 +122,7 @@ extension WebsiteExporter {
         box-shadow: 0 2px 16px rgba(0,0,0,.4); overflow: hidden; }
       .paint { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
         image-rendering: pixelated; pointer-events: none; }
+      .layer { position: absolute; inset: 0; background: #fff; }
       .part { position: absolute; box-sizing: border-box; overflow: hidden;
         color: #000; line-height: 1.15; }
       .field { white-space: pre-wrap; }
@@ -317,22 +318,114 @@ extension WebsiteExporter {
           : Math.min((window.innerWidth - 40) / W, (window.innerHeight - 104) / H, 2);
         root.style.transform = 'scale(' + s + ')';
       }
-      function render() {
-        const card = stack.cards[idx];
+      function buildLayer(card) {
         const bg = bgById[card.backgroundID];
-        root.innerHTML = '';
-        partEls = {};
-        root.style.width = W + 'px'; root.style.height = H + 'px';
+        const layer = document.createElement('div');
+        layer.className = 'layer';
         if (bg) {
-          const bp = paint(bg.paintImageAsset); if (bp) root.appendChild(bp);
-          (bg.parts || []).forEach(p => root.appendChild(renderPart(p)));
+          const bp = paint(bg.paintImageAsset); if (bp) layer.appendChild(bp);
+          (bg.parts || []).forEach(p => layer.appendChild(renderPart(p)));
         }
-        const cp = paint(card.paintImageAsset); if (cp) root.appendChild(cp);
-        (card.parts || []).forEach(p => root.appendChild(renderPart(p)));
+        const cp = paint(card.paintImageAsset); if (cp) layer.appendChild(cp);
+        (card.parts || []).forEach(p => layer.appendChild(renderPart(p)));
+        return layer;
+      }
+      function render(fx) {
+        const previous = Array.from(root.querySelectorAll('.layer')).pop() || null;
+        const card = stack.cards[idx];
+        partEls = {};
+        const layer = buildLayer(card);
+        root.style.width = W + 'px'; root.style.height = H + 'px';
+        if (fx && fx.kind && fx.kind !== 'plain' && previous) {
+          playEffect(fx, previous, layer);
+        } else {
+          root.innerHTML = '';
+          root.appendChild(layer);
+        }
         label.textContent = 'Card ' + (idx + 1) + ' of ' + stack.cards.length +
           (card.name ? ' — ' + card.name : '');
         fit();
         if (engineActive) enableFieldEditing();
+      }
+
+      // --- Visual effects ----------------------------------------------------
+      // `visual effect <kind> [direction] [speed]` before a `go`: the incoming
+      // layer animates over the outgoing one (closing variants animate the
+      // outgoing layer away instead), with the app's timing curve and speeds.
+      const FX_MS = { verySlow: 1300, slow: 900, normal: 500, fast: 280, veryFast: 120 };
+      function playEffect(fx, oldLayer, newLayer) {
+        const ms = FX_MS[fx.speed] || 500;
+        const dir = fx.direction || '';
+        const closing = dir === 'close' || dir === 'in';
+        root.appendChild(newLayer);
+        if (closing) root.appendChild(oldLayer);   // outgoing animates on top
+        const el = (closing ? oldLayer : newLayer).style;
+        const reveal = closing ? (p => 1 - p) : (p => p);
+        const finish = () => {
+          oldLayer.remove();
+          const s = newLayer.style;
+          s.opacity = ''; s.transform = ''; s.clipPath = '';
+          s.maskImage = ''; s.webkitMaskImage = '';
+          s.maskSize = ''; s.webkitMaskSize = '';
+        };
+        function tween(frame) {
+          const t0 = performance.now();
+          frame(0);
+          function step(now) {
+            const t = Math.min(1, (now - t0) / ms);
+            const p = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;  // ease-in-out
+            frame(p);
+            if (t < 1) requestAnimationFrame(step); else finish();
+          }
+          requestAnimationFrame(step);
+        }
+        switch (fx.kind) {
+          case 'dissolve':
+            tween(p => { el.opacity = reveal(p); });
+            break;
+          case 'zoom':
+            tween(p => { const r = reveal(p); el.opacity = r; el.transform = 'scale(' + r + ')'; });
+            break;
+          case 'scroll': {
+            const from = dir === 'right' ? [-W, 0] : dir === 'up' ? [0, H] : dir === 'down' ? [0, -H] : [W, 0];
+            tween(p => { const r = 1 - p; el.transform = 'translate(' + (from[0] * r) + 'px,' + (from[1] * r) + 'px)'; });
+            break;
+          }
+          case 'wipe':
+            tween(p => {
+              const r = (1 - p) * 100;
+              el.clipPath = dir === 'right' ? 'inset(0 ' + r + '% 0 0)'
+                : dir === 'up' ? 'inset(' + r + '% 0 0 0)'
+                : dir === 'down' ? 'inset(0 0 ' + r + '% 0)'
+                : 'inset(0 0 0 ' + r + '%)';
+            });
+            break;
+          case 'iris':
+            tween(p => { el.clipPath = 'circle(' + (reveal(p) * 75) + '% at 50% 50%)'; });
+            break;
+          case 'barnDoor':
+            tween(p => { const r = (1 - reveal(p)) * 50; el.clipPath = 'inset(0 ' + r + '% 0 ' + r + '%)'; });
+            break;
+          case 'venetianBlinds': {
+            const slat = H / 12;
+            tween(p => {
+              const on = Math.max(0.01, reveal(p) * slat);
+              const m = 'repeating-linear-gradient(to bottom, black 0 ' + on + 'px, transparent ' + on + 'px ' + slat + 'px)';
+              el.webkitMaskImage = m; el.maskImage = m;
+            });
+            break;
+          }
+          case 'checkerboard': {
+            // HyperCard's two-phase checker: half the squares, then the rest.
+            const m = 'repeating-conic-gradient(black 0 25%, transparent 0 50%)';
+            el.webkitMaskImage = m; el.maskImage = m;
+            el.webkitMaskSize = el.maskSize = (W / 4) + 'px ' + (H / 3) + 'px';
+            setTimeout(finish, ms / 2);
+            break;
+          }
+          default:
+            finish();
+        }
       }
 
       // --- Editable fields ---------------------------------------------------
@@ -404,7 +497,11 @@ extension WebsiteExporter {
         let res;
         try { res = JSON.parse(await pending); } catch (e) { note.textContent = 'Engine error.'; return; }
         if (res.error) { note.textContent = 'Error: ' + res.error; return; }
-        if (res.state && res.state.cardIndex !== idx) { idx = res.state.cardIndex; render(); }
+        if (res.state && res.state.cardIndex !== idx) {
+          idx = res.state.cardIndex;
+          const nav = (res.effects || []).find(e => e.type === 'navigate' && e.effects && e.effects.length);
+          render(nav ? nav.effects[0] : undefined);
+        }
         applyState(res.state);
         applyEffects(res.effects);
         if (res.result != null) note.textContent = res.result;

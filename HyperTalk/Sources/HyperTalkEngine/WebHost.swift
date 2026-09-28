@@ -104,7 +104,7 @@ final class WebHost: HyperTalkHost {
             history.append(String(stack.cards[cardIndex].scriptID))
         }
         currentIndex = index
-        recorded.append(.navigate(cardIndex: index, effects: effects.map(describe)))
+        recorded.append(.navigate(cardIndex: index, effects: effects))
     }
 
     // MARK: - Counting
@@ -512,12 +512,6 @@ final class WebHost: HyperTalkHost {
     }
 
     // MARK: - Effect helpers
-
-    private func describe(_ effect: ScreenEffect) -> String {
-        var s = effect.kind.rawValue
-        if let d = effect.direction { s += " \(d.rawValue)" }
-        return s
-    }
 
     private func destinationDescription(_ destination: GoDestination) -> String? {
         switch destination {

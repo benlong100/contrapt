@@ -11,11 +11,13 @@
 //
 
 import Foundation
+import HyperTalk
 
 public enum HostEffect: Equatable, Sendable {
     /// Navigate to a card index (0-based), optionally with visual effects to
-    /// play. The engine has already made this the current card.
-    case navigate(cardIndex: Int, effects: [String])
+    /// play (kind/direction/speed, as scripted). The engine has already made
+    /// this the current card; the page renders the transition.
+    case navigate(cardIndex: Int, effects: [ScreenEffect])
     /// `put <x>` with no destination — show `text` in the message box.
     case message(String)
     /// `beep`.
