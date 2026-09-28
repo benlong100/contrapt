@@ -29,20 +29,38 @@ enum WebsiteExporter {
         var entries: [String: Data] = [:]
         let json = try stack.fileData()
         entries["stack.json"] = json
+        // The compiled Wasm engine, when the app bundles it (WebEngine.zip,
+        // built by Scripts/build-web-engine.sh), makes the export interactive:
+        // boot.js loads it, it installs window.ContraptEngine, and player.js
+        // upgrades itself. Without it the site is the static preview.
+        let engineFiles = bundledEngineEntries()
+        for (path, data) in engineFiles { entries["engine/\(path)"] = data }
         // Also emit the data as a JS global. Opening index.html from a file://
         // URL blocks fetch() of a sibling file (local-file CORS), so the player
         // reads window.__STACK__ from a <script> (which loads fine locally) and
         // only falls back to fetch when the site is served over http.
         let dataJS = "window.__STACK__ = " + (String(data: json, encoding: .utf8) ?? "null") + ";\n"
             + "window.__ACTUAL_SIZE__ = " + (actualSize ? "true" : "false") + ";\n"
+            + "window.__HAS_ENGINE__ = " + (engineFiles.isEmpty ? "false" : "true") + ";\n"
         entries["stack-data.js"] = Data(dataJS.utf8)
         entries["index.html"] = Data(indexHTML.utf8)
         entries["player.js"] = Data(playerJS.utf8)
+        entries["boot.js"] = Data(bootJS.utf8)
         for name in stack.referencedAssetNames() {
             guard let data = assets[name] else { continue }
             entries["assets/\(name)"] = data
         }
         return entries
+    }
+
+    /// The compiled Wasm engine's files (the PackageToJS bundle), read from
+    /// the app resource `WebEngine.zip` — present only after running
+    /// Scripts/build-web-engine.sh. Empty means export the static preview.
+    private static func bundledEngineEntries() -> [String: Data] {
+        guard let url = Bundle.main.url(forResource: "WebEngine", withExtension: "zip"),
+              let data = try? Data(contentsOf: url),
+              let files = try? ZipArchive.extract(data) else { return [:] }
+        return files
     }
 
     /// A filesystem-safe base name for the exported site (no path separators).
@@ -134,9 +152,32 @@ extension WebsiteExporter {
         <span id="note">Static preview — scripts don't run yet</span>
       </div>
       <script src="stack-data.js"></script>
-      <script src="player.js"></script>
+      <script type="module" src="boot.js"></script>
     </body>
     </html>
+    """
+
+    /// Starts the player — after loading the Wasm engine when the export
+    /// includes one. player.js captures window.ContraptEngine at load time,
+    /// so it must be injected only once the engine is installed (or once
+    /// loading it failed and the site falls back to the static preview).
+    static let bootJS = """
+    (async () => {
+      if (window.__HAS_ENGINE__) {
+        try {
+          // The PackageToJS bundle: its index.js instantiates the wasm module,
+          // whose main() installs window.ContraptEngine synchronously.
+          const engineModule = await import('./engine/index.js');
+          const init = engineModule.init ?? engineModule.default;
+          await init();
+        } catch (e) {
+          console.warn('Contrapt engine failed to load; static preview only.', e);
+        }
+      }
+      const s = document.createElement('script');
+      s.src = 'player.js';
+      document.body.appendChild(s);
+    })();
     """
 
     static let playerJS = """
