@@ -1,0 +1,245 @@
+/*
+  Contrapt promotional site.
+
+  The design evokes the 1987 "Introducing HyperCard: Freedom to Associate"
+  brochure without imitating it: a big literate serif headline, one deep-red
+  accent, magazine-column body text on warm paper — plus exactly one
+  bitmap-era touch (the dithered divider bands and the printer's fist ☞).
+  Everything else is modern: responsive, roomy, no chrome.
+*/
+
+:root {
+  --paper: #f7f4ec;        /* warm brochure paper */
+  --ink: #1d1c1a;
+  --red: #a5182e;          /* the brochure's subhead red */
+  --soft: #6d6a63;
+  --rule: #d9d4c7;
+  --serif: "Iowan Old Style", "Palatino", "Book Antiqua", Georgia, serif;
+  --sans: system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.55;
+}
+
+/* ------------------------------ Hero ------------------------------ */
+
+.hero {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 72px 24px 48px;
+  text-align: center;
+}
+
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--soft);
+  margin: 0 0 28px;
+}
+
+.hero h1 {
+  font-size: clamp(52px, 9vw, 104px);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.02;
+  margin: 0;
+}
+
+.redline {
+  color: var(--red);
+  font-size: clamp(24px, 3.6vw, 38px);
+  font-style: italic;
+  margin: 14px 0 0;
+}
+
+.lede {
+  max-width: 640px;
+  margin: 30px auto 0;
+  font-size: 21px;
+}
+
+.cta { margin: 34px 0 0; }
+
+.button {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 16px;
+  text-decoration: none;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  padding: 11px 26px;
+  margin: 0 7px 10px;
+  transition: background 0.15s, color 0.15s;
+}
+.button:hover { background: var(--ink); color: var(--paper); }
+.button.primary { background: var(--red); border-color: var(--red); color: #fff; }
+.button.primary:hover { background: #7e1223; border-color: #7e1223; }
+
+.hero-art { margin: 56px auto 0; max-width: 860px; }
+.hero-art img {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 24px 60px rgba(29, 28, 26, 0.35);
+  transform: rotate(-1.2deg);
+}
+
+/* ---------------------- Dithered divider band ---------------------- */
+/* A 1-bit checkerboard fading band — the one deliberate bitmap note.   */
+
+.dither {
+  height: 26px;
+  margin: 40px 0;
+  background:
+    repeating-conic-gradient(var(--ink) 0% 25%, transparent 0% 50%)
+    50% / 6px 6px;
+  opacity: 0.14;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent);
+}
+
+/* ------------------------------ Story ------------------------------ */
+
+.story {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px 24px 40px;
+}
+
+.story h2 {
+  font-size: clamp(30px, 4.5vw, 44px);
+  font-weight: 600;
+  margin: 0 0 26px;
+}
+
+.hand {
+  color: var(--red);
+  margin-right: 6px;
+  /* The printer's fist — the era's pointing hand, set upright. */
+  font-style: normal;
+}
+
+.columns {
+  column-count: 2;
+  column-gap: 44px;
+  column-rule: 1px solid var(--rule);
+  text-align: justify;
+  hyphens: auto;
+}
+.columns p { margin: 0 0 1em; break-inside: avoid-column; }
+
+.pull {
+  color: var(--red);
+  font-size: 24px;
+  font-style: italic;
+  line-height: 1.35;
+  text-align: left;
+  border-top: 2px solid var(--red);
+  border-bottom: 2px solid var(--red);
+  padding: 14px 4px;
+  margin-top: 6px;
+}
+
+code {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.85em;
+  background: rgba(29, 28, 26, 0.06);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/* ----------------------------- Features ----------------------------- */
+
+.feature {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 24px;
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: 48px;
+  align-items: center;
+}
+.feature.reverse .feature-text { order: 2; }
+.feature.reverse figure { order: 1; }
+
+.feature h3 {
+  font-size: clamp(26px, 3.5vw, 34px);
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+.feature figure { margin: 0; }
+.feature img {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 14px 40px rgba(29, 28, 26, 0.25);
+}
+.feature figcaption {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--soft);
+  margin-top: 12px;
+  text-align: center;
+}
+
+/* The live demo */
+.demo-note { font-size: 18px; }
+.demo-note strong { color: var(--red); }
+
+.demo-frame iframe {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 14px 40px rgba(29, 28, 26, 0.25);
+  background: #6b6b6b;
+}
+.demo-frame figcaption a { color: var(--red); }
+
+/* ------------------------------ Get it ------------------------------ */
+
+.get {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 24px 56px;
+  text-align: center;
+}
+.get h2 { font-size: clamp(30px, 4.5vw, 44px); margin: 0 0 14px; }
+
+/* ------------------------------ Footer ------------------------------ */
+
+footer {
+  border-top: 1px solid var(--rule);
+  padding: 30px 24px 48px;
+}
+footer p {
+  max-width: 720px;
+  margin: 0 auto;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--soft);
+  text-align: center;
+}
+
+/* ---------------------------- Small screens ---------------------------- */
+
+@media (max-width: 760px) {
+  .columns { column-count: 1; text-align: left; }
+  .feature { grid-template-columns: 1fr; gap: 24px; }
+  .feature.reverse .feature-text { order: 1; }
+  .feature.reverse figure { order: 2; }
+  html, body { font-size: 17px; }
+}

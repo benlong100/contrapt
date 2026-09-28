@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contrapt — Freedom to Associate, Again</title>
+<meta name="description" content="Contrapt is a free, open-source reimagining of HyperCard for Mac and iPad: build stacks, script them in HyperTalk, rescue your old HyperCard stacks, and publish any stack to the web.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================== Hero ============================== -->
+<header class="hero">
+  <p class="eyebrow">For Mac &amp; iPad &nbsp;·&nbsp; Free &amp; open source</p>
+  <h1>Introducing Contrapt:</h1>
+  <p class="redline">Freedom to Associate, Again</p>
+  <p class="lede">
+    In 1987, HyperCard let anyone turn ideas into software — cards, buttons,
+    fields, and scripts written in something close to plain English. Contrapt
+    brings that whole idea back: build stacks on your Mac or iPad, run the
+    stacks you made decades ago, and publish any of them to the modern web.
+  </p>
+  <p class="cta">
+    <!-- TODO: real links -->
+    <a class="button primary" href="#get">Join the beta</a>
+    <a class="button" href="#get">View on GitHub</a>
+  </p>
+  <figure class="hero-art">
+    <img src="images/tour.jpg" alt="A fan of illustrated cards spreading across a starfield, the front card reading “Your Tour of Contrapt — click to begin.”">
+  </figure>
+</header>
+
+<div class="dither" role="presentation"></div>
+
+<!-- ============================== Story ============================== -->
+<section class="story">
+  <h2><span class="hand">☞</span> “Oh, that reminds me of…”</h2>
+  <div class="columns">
+    <p>
+      That's how thinking works — one idea calling up the next. The original
+      HyperCard brochure called it <em>freedom to associate</em>, and the
+      program delivered something personal computers have rarely offered since:
+      a place where ordinary people made real, working software. A recipe box
+      that dialed the butcher. A field guide with a soundtrack. A choose-your-own
+      adventure written by a nine-year-old. Nobody asked permission, and nobody
+      needed a computer science degree.
+    </p>
+    <p>
+      Then the web arrived, HyperCard faded, and millions of stacks were
+      stranded on aging floppies and disk images — still full of their makers'
+      art, writing, and cleverness, with nothing modern to run on.
+    </p>
+    <p>
+      Contrapt is a reimagining of that whole idea, built new for today's
+      Mac and iPad. Cards, backgrounds, buttons, and fields, arranged by
+      dragging and edited in place. Scripts in HyperTalk — the same warm,
+      readable language: <code>go to card 3</code>,
+      <code>put the date into field "Today"</code>. Visual effects, paint
+      layers, find, sort. And a message box, of course.
+    </p>
+    <p class="pull">
+      It's not an emulator, and it's not nostalgia under glass —
+      it's the idea itself, given new hardware.
+    </p>
+  </div>
+</section>
+
+<!-- ============================== Features ============================== -->
+<section class="feature">
+  <div class="feature-text">
+    <h3><span class="hand">☞</span> Make stacks</h3>
+    <p>
+      Browse mode runs your stack; edit mode opens it up. Select a button,
+      and the inspector shows its name, style, icon, and script — change the
+      script, click the button, and it just does the new thing. No build step,
+      no project files, no ceremony. The distance between having an idea and
+      clicking on it is measured in seconds.
+    </p>
+  </div>
+  <figure>
+    <img src="images/inspector.jpg" alt="Contrapt on the Mac in edit mode: a help card being edited with the inspector open, showing a button's properties and its HyperTalk script.">
+    <figcaption>Editing a card on the Mac — the inspector holds every part's properties and script.</figcaption>
+  </figure>
+</section>
+
+<section class="feature reverse">
+  <div class="feature-text">
+    <h3><span class="hand">☞</span> Rescue your old stacks</h3>
+    <p>
+      Contrapt imports original HyperCard stack files — the structure, the
+      text, the scripts, the 1-bit artwork, the button icons, even the fonts'
+      spirit. Your 1989 address book opens in 2026, buttons still clicking,
+      scripts still running. The gray desktop is exactly where you left it.
+    </p>
+  </div>
+  <figure>
+    <img src="images/card.jpg" alt="A Contrapt help card titled “Importing on a Mac,” explaining how to import HyperCard stacks, with an Import Size dialog.">
+    <figcaption>The built-in guide to bringing HyperCard stacks forward.</figcaption>
+  </figure>
+</section>
+
+<section class="feature demo">
+  <div class="feature-text">
+    <h3><span class="hand">☞</span> Publish to the web</h3>
+    <p>
+      Any stack exports as a self-contained website — the same HyperTalk
+      engine, compiled to WebAssembly, runs your scripts right in the browser.
+      No server code, no accounts, no tracking; host it on any web space you
+      already have.
+    </p>
+    <p class="demo-note">
+      Below is not a video. It's Apple's original 1987 HyperCard Tour,
+      imported into Contrapt and exported to this site — <strong>click it</strong>.
+    </p>
+  </div>
+  <figure class="demo-frame">
+    <!-- TODO: point at the final hosted demo -->
+    <iframe src="https://trompingmarmots.com/HyperCardTourWebsite/" title="The HyperCard Tour, running live in your browser" loading="lazy"></iframe>
+    <figcaption>
+      <a href="https://trompingmarmots.com/HyperCardTourWebsite/">Open the Tour full-window ↗</a>
+    </figcaption>
+  </figure>
+</section>
+
+<div class="dither" role="presentation"></div>
+
+<!-- ============================== Get it ============================== -->
+<section class="get" id="get">
+  <h2>Get Contrapt</h2>
+  <p>
+    Contrapt is free, open source (MIT), and currently in beta for the Mac,
+    with the iPad close behind.
+  </p>
+  <p class="cta">
+    <!-- TODO: real links -->
+    <a class="button primary" href="#">Join the TestFlight beta</a>
+    <a class="button" href="#">Source on GitHub</a>
+  </p>
+</section>
+
+<footer>
+  <p>
+    Contrapt is an independent project, made with affection for HyperCard
+    (1987–2004) and the people who believed anyone could make software.
+    HyperCard was a trademark of Apple Computer, Inc.; Contrapt is not
+    affiliated with or endorsed by Apple.
+  </p>
+</footer>
+
+</body>
+</html>
