@@ -152,7 +152,7 @@ extension WebsiteExporter {
         <span id="note">Static preview — scripts don't run yet</span>
       </div>
       <script src="stack-data.js"></script>
-      <script type="module" src="boot.js"></script>
+      <script src="boot.js"></script>
     </body>
     </html>
     """
@@ -161,6 +161,11 @@ extension WebsiteExporter {
     /// includes one. player.js captures window.ContraptEngine at load time,
     /// so it must be injected only once the engine is installed (or once
     /// loading it failed and the site falls back to the static preview).
+    ///
+    /// Deliberately a *classic* script (not type="module"): module scripts
+    /// don't load from file:// at all, which would kill even the static
+    /// preview. The dynamic import() below fails under file:// (local-file
+    /// CORS) and is caught — engine when served over http, static otherwise.
     static let bootJS = """
     (async () => {
       if (window.__HAS_ENGINE__) {

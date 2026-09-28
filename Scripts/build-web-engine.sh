@@ -13,9 +13,10 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+ROOT="$(pwd)"
 
-TOOLCHAIN="${CONTRAPT_WASM_TOOLCHAIN:-6.3}"
-SDK="${CONTRAPT_WASM_SDK:-6.3-RELEASE_wasm}"
+TOOLCHAIN="${CONTRAPT_WASM_TOOLCHAIN:-6.3.3}"
+SDK="${CONTRAPT_WASM_SDK:-swift-6.3.3-RELEASE_wasm}"
 
 echo "→ Building ContraptEngineWasm with Swift $TOOLCHAIN / SDK $SDK …"
 cd WasmPlayer
@@ -28,9 +29,18 @@ if [[ ! -d "$BUNDLE" ]]; then
   exit 1
 fi
 
+# The generated platform files import the WASI shim by its bare npm name,
+# which browsers can't resolve. Vendor the shim (npm) and rewrite the import
+# to a relative path so the exported site stays fully self-contained.
+echo "→ Vendoring the WASI shim …"
+(cd "$BUNDLE" && npm install --omit=dev --silent)
+sed -i '' "s|'@bjorn3/browser_wasi_shim'|'../node_modules/@bjorn3/browser_wasi_shim/dist/index.js'|" \
+  "$BUNDLE/platforms/browser.js"
+
 echo "→ Zipping bundle into Contrapt/WebEngine.zip …"
-rm -f ../Contrapt/WebEngine.zip
-(cd "$BUNDLE" && zip -q -r -X ../../../../../Contrapt/WebEngine.zip .)
+rm -f "$ROOT/Contrapt/WebEngine.zip"
+(cd "$BUNDLE" && zip -q -r -X "$ROOT/Contrapt/WebEngine.zip" . \
+  -x "test-engine.mjs" -x "package-lock.json" -x "*.tsbuildinfo")
 
 echo "✓ Done. Rebuild the app; exports now include the interactive engine."
-echo "  Engine size: $(du -h ../Contrapt/WebEngine.zip | cut -f1)"
+echo "  Engine size: $(du -h "$ROOT/Contrapt/WebEngine.zip" | cut -f1)"

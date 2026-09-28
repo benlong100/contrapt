@@ -6,3 +6,8 @@ xcuserdata/
 HyperCard Stacks/
 HyperCard 2 Stacks/
 HyperCard apps/
+
+# Wasm web engine: build artifacts (rebuild with Scripts/build-web-engine.sh)
+WasmPlayer/.build/
+WasmPlayer/Package.resolved
+Contrapt/WebEngine.zip
