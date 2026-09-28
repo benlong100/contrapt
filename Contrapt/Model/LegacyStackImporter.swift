@@ -274,23 +274,38 @@ enum LegacyStackImporter {
     /// 1:1. TUNABLE: 1.0 = no change; lower = smaller. Re-import to apply.
     static let proportionalFontScale = 0.85
 
+    /// Classic bitmap fonts don't share metrics with their modern stand-ins,
+    /// so each classic font id maps to a family plus a width calibration on
+    /// the point size. TUNABLE per id (re-import to apply); calibrated
+    /// against text the originals hard-wrapped:
+    /// - Sans (Geneva, Chicago, Helvetica…): SF renders wider than the
+    ///   bitmaps — 0.85 matches Home/DateBook line breaks.
+    /// - Serifs (Palatino, New York…): the wide classic serif bitmaps beat
+    ///   New York (SwiftUI .serif) — the Tour's Palatino-18 lines that fill
+    ///   a 476px field measure ~341px at 0.85×18 but need ~19pt to reach
+    ///   HyperCard's break points, so ≈ 1.05.
+    /// - Mono (Monaco, Courier): grid metrics already match, 1:1.
+    private static let classicFontMap: [Int: (design: FontDesign, scale: Double)] = [
+        2:  (.serif, 1.05),      // New York
+        14: (.serif, 1.05),      // Bookman
+        16: (.serif, 1.05),      // Palatino
+        20: (.serif, 1.05),      // Times
+        34: (.serif, 1.05),      // New Century Schoolbook
+        4:  (.monospaced, 1.0),  // Monaco
+        22: (.monospaced, 1.0),  // Courier
+    ]
+
     /// Map a part's HyperCard font/size/style/alignment to a TextFormat, so
     /// imported text matches the original rather than Contrapt's defaults.
     private static func textFormat(from raw: RawPart) -> TextFormat {
         var format = TextFormat()
         if raw.textSize > 0 { format.size = Double(min(max(raw.textSize, 6), 96)) }
         format.align = raw.textAlign == 1 ? .center : (raw.textAlign < 0 ? .right : .left)
-        // Classic Mac font ids → Contrapt's font families (best effort).
-        switch raw.fontID {
-        case 4, 22: format.fontDesign = .monospaced  // Monaco, Courier
-        case 2, 14, 16, 20, 34:
-            // New York, Bookman, Palatino, Times, New Century Schoolbook.
-            format.fontDesign = .serif
-        default: format.fontDesign = .standard       // Geneva, Chicago, Helvetica, Avant Garde…
-        }
-        if format.fontDesign != .monospaced {
-            format.size *= proportionalFontScale
-        }
+        // Classic Mac font ids → family + width calibration; anything
+        // unlisted is a sans (Geneva, Chicago, Helvetica, Avant Garde…).
+        let mapping = Self.classicFontMap[raw.fontID] ?? (.standard, proportionalFontScale)
+        format.fontDesign = mapping.design
+        format.size *= mapping.scale
         format.isBold = raw.textStyleBits & 0x01 != 0
         format.isItalic = raw.textStyleBits & 0x02 != 0
         format.isUnderline = raw.textStyleBits & 0x04 != 0
