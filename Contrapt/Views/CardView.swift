@@ -249,7 +249,8 @@ struct CardView: View {
                         linkColorHex: cardLinkColorHex,
                         onTap: { onMouseMessage("mouseUp", part) },
                         onMouseDown: { onMouseMessage("mouseDown", part) },
-                        onFollowLink: onFollowLink
+                        onFollowLink: onFollowLink,
+                        onFieldMessage: { onMouseMessage($0, part) }
                     )
                 }
             }
@@ -736,9 +737,16 @@ struct PartView: View {
     var onTap: () -> Void
     var onMouseDown: () -> Void = {}
     var onFollowLink: (FieldLink) -> Void = { _ in }
+    /// Field-editing lifecycle messages (openField / closeField / exitField).
+    var onFieldMessage: (String) -> Void = { _ in }
 
     @Environment(\.stackAssets) private var stackAssets
     @State private var isPressed = false
+    /// Editable-field focus, for the openField/closeField messages.
+    @FocusState private var fieldFocused: Bool
+    /// The field's text when it gained focus — closeField only fires when the
+    /// text actually changed; otherwise exitField (as in HyperCard 2.2).
+    @State private var textAtOpen: String?
 
     var body: some View {
         switch part.kind {
@@ -838,6 +846,7 @@ struct PartView: View {
                     .gesture(lockedFieldPressGesture(properties, preformatted: preformatted))
             } else if effectivelyMultiline {
                 TextEditor(text: fieldText)
+                    .focused($fieldFocused)
                     .font(properties.format.font)
                     .underline(properties.format.isUnderline)
                     .multilineTextAlignment(properties.format.align.swiftUI)
@@ -853,6 +862,7 @@ struct PartView: View {
                     }
             } else {
                 TextField(properties.placeholder, text: fieldText)
+                    .focused($fieldFocused)
                     .textFieldStyle(.plain)
                     .font(properties.format.font)
                     .underline(properties.format.isUnderline)
@@ -869,6 +879,22 @@ struct PartView: View {
             lineHeight: properties.format.size * 1.4,
             inset: margin
         )
+        // HyperCard's field-editing lifecycle: openField when the insertion
+        // point arrives; on leaving, closeField if the text changed, else
+        // exitField. (A card change tears the view down without a focus
+        // callback, so scripts relying on closeField-at-card-close should
+        // also handle closeCard — a known, documented limit.)
+        .onChange(of: fieldFocused) { _, focused in
+            guard case .field(let current) = part.kind else { return }
+            if focused {
+                textAtOpen = current.text
+                onFieldMessage("openField")
+            } else {
+                let changed = textAtOpen != nil && textAtOpen != current.text
+                textAtOpen = nil
+                onFieldMessage(changed ? "closeField" : "exitField")
+            }
+        }
     }
 
     /// Whether text is short/tabular — every line is short (a calendar grid,

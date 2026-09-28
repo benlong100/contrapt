@@ -107,6 +107,13 @@ extension StackEngine {
         await eventJSON { try await self.openCard(index: index) }
     }
 
+    /// Send a named message to a part — the field-editing lifecycle
+    /// (openField / closeField / exitField) from the page's focus events.
+    /// `{ effects, state }` (or `{ error }`); unhandled messages are fine.
+    public func sendToPartJSON(_ message: String, partScriptID: Int) async -> String {
+        await eventJSON { try await self.send(message, toPartWithScriptID: partScriptID) }
+    }
+
     /// The visitor edited a field: record its text. `{ effects, state }` —
     /// effects is always empty today (typing sends no messages yet; openField/
     /// closeField are a follow-up), but the envelope matches the other calls.

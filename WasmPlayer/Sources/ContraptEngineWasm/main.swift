@@ -125,6 +125,12 @@ func installEngine() {
     api.message = retained(JSClosure.async { arguments in
         .string(await engine.runMessageJSON(arguments.first?.string ?? ""))
     })
+    api.sendToPart = retained(JSClosure.async { arguments in
+        .string(await engine.sendToPartJSON(
+            arguments.first?.string ?? "",
+            partScriptID: arguments.count > 1 ? Int(arguments[1].number ?? -1) : -1
+        ))
+    })
     api.setField = retained(JSClosure { arguments in
         .string(engine.setFieldJSON(
             partScriptID: Int(arguments.first?.number ?? -1),

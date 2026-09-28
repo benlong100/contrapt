@@ -440,6 +440,16 @@ extension WebsiteExporter {
           el.addEventListener('input', () => {
             engine.setField(Number(el.dataset.scriptId), el.textContent);
           });
+          // HyperCard's field-editing lifecycle: openField on focus; on blur,
+          // closeField when the text changed, else exitField.
+          el.addEventListener('focus', () => {
+            el.dataset.openText = el.textContent;
+            handle(engine.sendToPart('openField', Number(el.dataset.scriptId)));
+          });
+          el.addEventListener('blur', () => {
+            const changed = el.textContent !== el.dataset.openText;
+            handle(engine.sendToPart(changed ? 'closeField' : 'exitField', Number(el.dataset.scriptId)));
+          });
         });
       }
       // --- Interactive layer -------------------------------------------------
