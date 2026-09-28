@@ -198,6 +198,10 @@ indirect enum Expr {
     case chunk(ChunkKind, ChunkSelector, Expr)
     /// `the number of words of X` — how many chunks of a kind are in X.
     case chunkCount(ChunkKind, Expr)
+    /// `the number of (<expr>)` — a count whose noun is computed at run time,
+    /// e.g. Power Tools' `the number of (item i of list & "s")` → "cd btns".
+    /// The value is re-parsed as a countable when evaluated.
+    case countDynamic(Expr)
     /// `the number of cards / fields / [card|bkgnd] buttons`, etc.
     case count(Countable)
     /// A function call in an expression: `myFunc(a, b)`, `length(x)`.

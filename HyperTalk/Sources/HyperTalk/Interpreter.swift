@@ -425,6 +425,12 @@ final class Runtime {
                 _ = try await evaluate(valueExpression, line: statement.line)
                 return .normal
             }
+            if case .menu = objectExpression {
+                // No menus either; `set enabled of menuItem 2 of menu "X"`
+                // (Power Tools) is a no-op. Evaluate the value, ignore it.
+                _ = try await evaluate(valueExpression, line: statement.line)
+                return .normal
+            }
             let object = try await resolveObject(objectExpression, line: statement.line)
             let value = try await evaluate(valueExpression, line: statement.line)
             try hostCall(line: statement.line) { try host.setProperty(property, of: object, to: value) }
@@ -878,6 +884,11 @@ final class Runtime {
                 // false and every other property reads empty.
                 return property == "visible" ? "false" : ""
             }
+            if case .menu = objectExpression {
+                // Menus (and menuItems) aren't modeled — their `text` (the
+                // item list) and every other property read empty.
+                return property == "visible" ? "false" : ""
+            }
             if case .stackNamed(let nameExpression) = objectExpression {
                 // Contrapt doesn't model other stacks as property-bearing
                 // objects; name properties echo the referenced name so string
@@ -899,6 +910,15 @@ final class Runtime {
         case .chunkCount(let kind, let sourceExpression):
             let source = try await evaluate(sourceExpression, line: line)
             return String(ChunkResolver.count(kind: kind, in: source, itemDelimiter: itemDelimiter))
+
+        case .countDynamic(let expression):
+            // The noun is computed — `the number of (item i of list & "s")`
+            // where the value is "cd btns". Re-parse it as a countable.
+            let noun = try await evaluate(expression, line: line)
+            guard let countable = Parser.parseSoleCountable(noun) else {
+                throw ScriptError(line: line, message: "Can't count \"\(noun)\".")
+            }
+            return try hostCall(line: line) { String(try host.count(countable)) }
 
         case .call(let name, let argumentExpressions):
             var arguments: [String] = []

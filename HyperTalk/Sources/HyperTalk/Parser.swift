@@ -1416,6 +1416,17 @@ struct Parser {
             if consumeWord("of") { _ = consumeWord("menu"); _ = try? parsePrimary() }
             return .menu(name)
         }
+        // A parenthesized expression builds the object's descriptor inline —
+        // `visible of (object && i)`, Power Tools' Super Grouper idiom.
+        // Re-parsed as an object at run time, like a variable indirect.
+        if case .symbol("(") = current.kind {
+            advance()
+            let expression = try parseExpression()
+            guard consumeSymbol(")") else {
+                throw ScriptError(line: line, message: "This '(' is missing its closing ')'.")
+            }
+            return .indirect(expression)
+        }
         // A bare identifier here is an indirect reference: a container whose
         // value names the object (`set loc of theButton to …`, where
         // `theButton` holds "cd btn id 34"). Re-parsed at run time.
@@ -1560,14 +1571,19 @@ struct Parser {
         return nil
     }
 
-    /// After `the number of`, reads a menu count — `menuItems of menu "X"` or
-    /// `menus` — or nil if what follows isn't one. Contrapt has no menus, so
-    /// the count is a literal 0: loops like `repeat with x = 1 to the number
-    /// of menuItems of menu "File"` simply never run. Consumes only on success.
-    private mutating func parseMenuCount() -> Expr? {
+    /// After `the number of`, reads a count of things Contrapt doesn't model —
+    /// `menuItems of menu "X"`, `menus`, `marked cds` — or nil if what follows
+    /// isn't one. Each counts as a literal 0 (no menus exist; no cards are
+    /// marked), so loops like `repeat with x = 1 to the number of menuItems of
+    /// menu "File"` simply never run. Consumes tokens only on success.
+    private mutating func parseUnmodeledCount() -> Expr? {
         let saved = index
         let noun = peekIdentifier()
         if noun == "menus" { advance(); return .numberLiteral(0) }
+        if noun == "marked", let next = peekIdentifier(1), next == "cards" || next == "cds" {
+            advance(); advance()
+            return .numberLiteral(0)
+        }
         guard noun == "menuitems" || noun == "menuitem" else { return nil }
         advance()
         // The owning menu: `of menu "File"` — consumed and ignored.
@@ -1576,6 +1592,14 @@ struct Parser {
             _ = try? parsePrimary()
         }
         return .numberLiteral(0)
+    }
+
+    /// Parses text like "cd btns" as a countable noun — the runtime half of
+    /// `the number of (<expr>)`, whose noun is computed. Nil if not countable.
+    static func parseSoleCountable(_ source: String) -> Countable? {
+        guard let tokens = try? Tokenizer.tokenize(source) else { return nil }
+        var parser = Parser(tokens: tokens)
+        return parser.parseCountable()
     }
 
     /// After a `number of <plural>` count, swallows an optional
@@ -1734,7 +1758,12 @@ struct Parser {
                     skipCountScopeIfPresent()
                     return .count(countable)
                 }
-                if let menuCount = parseMenuCount() { return menuCount }
+                if let unmodeled = parseUnmodeledCount() { return unmodeled }
+                // `the number of (<expr>)` — the noun is computed at run time
+                // (`the number of (item i of list & "s")` → "cd btns").
+                if case .symbol("(") = current.kind {
+                    return .countDynamic(try parsePrimary())
+                }
                 index = saved // not a count noun — let a property handle it
             }
             // `the first word of X`, `the last line of X`, etc.
@@ -1749,13 +1778,17 @@ struct Parser {
                 return .chunk(kind, selector, try parsePrimary())
             }
             // `the short name of X` → the bare `name`; `the long name of X` →
-            // the HyperCard-style descriptor (`stack "Graph Maker"`).
+            // the HyperCard-style descriptor (`stack "Graph Maker"`). Same for
+            // `id`: `the long id of this cd` → the descriptor (`card id 34`).
             if let adjective = peekIdentifier(), Self.nameAdjectives.contains(adjective),
-               peekIdentifier(1) == "name", peekIdentifier(2) == "of" {
+               let noun = peekIdentifier(1), noun == "name" || noun == "id",
+               peekIdentifier(2) == "of" {
                 advance() // adjective
-                advance() // name
+                advance() // name/id
                 advance() // of
-                return .property(adjective == "long" ? "longname" : "name", try parseObjectExpr())
+                let long = adjective == "long"
+                let property = noun == "name" ? (long ? "longname" : "name") : (long ? "longid" : "id")
+                return .property(property, try parseObjectExpr())
             }
             // `the <property> of <object>`; otherwise "the" is a noise
             // word before a value ("the date" → the unquoted literal).
@@ -1796,6 +1829,18 @@ struct Parser {
             // reserves both words for dispatch identity).
             if word == "me" { return .property("name", .me) }
             if word == "target" { return .property("name", .target) }
+            // `menu "X"` read as a value — its items, one per line, in
+            // HyperCard (`line 4 to 9 of menu "InUse"`). Contrapt has no
+            // menus, so it reads empty. Only a literal or parenthesized name
+            // follows the keyword; a bare `menu` stays a plain variable.
+            if word == "menu" {
+                switch current.kind {
+                case .string, .number, .symbol("("):
+                    return .property("text", .menu(try parsePrimary()))
+                default:
+                    break
+                }
+            }
             // Bare `number of cards/backgrounds/buttons/fields [scope]` — a
             // count (HyperTalk's `the` is optional). `number of this card`
             // (an ordinal property) isn't countable, so it falls through.
@@ -1806,7 +1851,7 @@ struct Parser {
                     skipCountScopeIfPresent()
                     return .count(countable)
                 }
-                if let menuCount = parseMenuCount() { return menuCount }
+                if let unmodeled = parseUnmodeledCount() { return unmodeled }
                 // Bare `number of chars/words/lines/items in X` — a chunk
                 // count without the leading `the` (mirrors the `the number
                 // of words of X` handling above).
@@ -1816,6 +1861,10 @@ struct Parser {
                         throw ScriptError(line: line, message: "Expected 'of' after 'number of \(kindWord)'.")
                     }
                     return .chunkCount(kind, try parsePrimary())
+                }
+                // `number of (<expr>)` — a computed noun, `the` optional.
+                if case .symbol("(") = current.kind {
+                    return .countDynamic(try parsePrimary())
                 }
                 index = saved // e.g. `number of this cd` → the ordinal property
             }
@@ -1835,10 +1884,13 @@ struct Parser {
             // treating `<ident> of …` as a property access is safe.
             // `short name of X` → `name`; `long name of X` → the descriptor.
             if !suppressBarePropertyOf, Self.nameAdjectives.contains(word),
-               peekIdentifier() == "name", peekIdentifier(1) == "of" {
-                advance() // name
+               let noun = peekIdentifier(), noun == "name" || noun == "id",
+               peekIdentifier(1) == "of" {
+                advance() // name/id
                 advance() // of
-                return .property(word == "long" ? "longname" : "name", try parseObjectExpr())
+                let long = word == "long"
+                let property = noun == "name" ? (long ? "longname" : "name") : (long ? "longid" : "id")
+                return .property(property, try parseObjectExpr())
             }
             if !suppressBarePropertyOf, peekIdentifier() == "of" {
                 advance() // of

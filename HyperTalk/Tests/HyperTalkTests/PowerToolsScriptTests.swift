@@ -50,6 +50,104 @@ import Testing
     #expect(host.fields["src"] == "13")
 }
 
+@Test func dynamicCountEvaluatesComputedNoun() async throws {
+    // `the number of (item i of list & "s")` — the countable noun is built
+    // at run time ("cd btn" & "s" → "cd btns"). Super Grouper's object scan.
+    let host = MockHost(fields: ["out": ""])
+    host.buttonCount = 3
+    try await run("""
+    on mouseUp
+      put "cd btn" into obj
+      put the number of (obj & "s") into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "3")
+}
+
+@Test func propertyOfParenthesizedObject() async throws {
+    // `visible of (object && i)` — the object descriptor is built inline.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["button OK.visible"] = "true"
+    try await run("""
+    on mouseUp
+      put "button" into obj
+      if visible of (obj && quote & "OK" & quote) then put "seen" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "seen")
+}
+
+@Test func longIDReadsTheIdDescriptor() async throws {
+    // `the long id of this cd` — the descriptor form, like the long name.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["this card.longid"] = "card id 42"
+    try await run("""
+    on mouseUp
+      put the long id of this cd into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "card id 42")
+}
+
+@Test func menuTextReadsEmptyAndMenuSetsAreNoOps() async throws {
+    // A menu read as text is its item list in HyperCard; Contrapt has no
+    // menus, so chunks of it are empty and menuItem property sets no-op.
+    let host = MockHost(fields: ["out": "x"])
+    try await run("""
+    on mouseUp
+      put line 4 to 6 of menu "InUse" into field "out"
+      set enabled of menuItem 2 of menu "InUse" to true
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "")
+}
+
+@Test func markedCardCountIsZero() async throws {
+    // Card marking isn't modeled — no cards are marked.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      put the number of marked cds into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "0")
+}
+
+@Test func powerToolsStackScriptWallsParse() async throws {
+    // Condensed from the Power Tools stack script: every construct that
+    // walled, in its original shape.
+    let script = """
+    on stopUsing
+      put number of menuItems in menu "InUse" into numMenuItems
+      put line 4 to (numMenuItems - 2) of menu "InUse" into menuItems
+    end stopUsing
+
+    on startGrouping
+      put the long id of this cd into WhereTheGroupIs
+    end startGrouping
+
+    on withinRect selectRect
+      put "cd btn,cd fld,bg btn,bg fld" into list
+      repeat with i = 1 to 4
+        put item i of list into object
+        put the number of (item i of list & "s") into numberOfObjects
+        repeat with i = numberOfObjects down to 1
+          if IntersectRect(rect of (object && i),selectRect) then
+            if visible of (object && i)
+            then put (object && "id") && (the id of (object && i))¬
+            & "," after ObjectList
+          end if
+        end repeat
+      end repeat
+    end withinRect
+
+    on doBackground
+      put the number of marked cds into numMarked
+    end doBackground
+    """
+    _ = try Parser.parse(script)
+}
+
 @Test func powerToolsCardScriptParses() async throws {
     // The full card script (goCard/currentLine/openCard), verbatim walls and
     // all: select with computed chunk ranges, `the mouse is up`, `is within

@@ -31,6 +31,7 @@ extension WebHost {
             switch property {
             case "name": return bg.name
             case "longname": return "bkgnd \"\(bg.name)\""
+            case "longid": return "bkgnd id \(bg.scriptID)"
             case "id": return String(bg.scriptID)
             case "cantdelete": return bg.cantDelete ? "true" : "false"
             case "dontsearch": return bg.dontSearch ? "true" : "false"
@@ -39,7 +40,7 @@ extension WebHost {
         case .thisStack:
             switch property {
             case "name": return stack.name
-            case "longname": return "stack \"\(stack.name)\""
+            case "longname", "longid": return "stack \"\(stack.name)\""
             case "cards": return String(stack.cards.count)
             case "width": return numberText(stack.cardSize.width)
             case "height": return numberText(stack.cardSize.height)
@@ -89,6 +90,7 @@ extension WebHost {
         switch property {
         case "name": return part.name
         case "longname": return "\(kind) \"\(part.name)\""
+        case "longid": return "\(kind) id \(part.scriptID)"
         case "id": return String(part.scriptID)
         case "visible": return part.isVisible ? "true" : "false"
         case "width": return numberText(part.frame.width)
@@ -284,6 +286,7 @@ extension WebHost {
         switch property {
         case "name": return card.name
         case "longname": return "card \"\(card.name)\""
+        case "longid": return "card id \(card.scriptID)"
         case "highlightcolor": return card.highlightColor ?? ""
         case "number": return String(index + 1)
         case "id": return String(card.scriptID)
