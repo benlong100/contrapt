@@ -11,14 +11,13 @@
 
 <!-- ============================== Hero ============================== -->
 <header class="hero">
-  <p class="eyebrow">For Mac &amp; iPad &nbsp;·&nbsp; Free &amp; open source</p>
-  <h1>Introducing Contrapt:</h1>
-  <p class="redline">Freedom to Associate, Again</p>
+  <p class="eyebrow">Contrapt &nbsp;·&nbsp; Free &amp; open source</p>
+  <h1>HyperCard, reborn.</h1>
+  <p class="redline">For Mac &amp; iPad</p>
   <p class="lede">
-    In 1987, HyperCard let anyone turn ideas into software — cards, buttons,
-    fields, and scripts written in something close to plain English. Contrapt
-    brings that whole idea back: build stacks on your Mac or iPad, run the
-    stacks you made decades ago, and publish any of them to the modern web.
+    Make stacks — cards, buttons, fields, and scripts in plain English.
+    Open the stacks you made in 1989.
+    Publish any of them to the web.
   </p>
   <p class="cta">
     <!-- TODO: real links -->
@@ -34,12 +33,13 @@
 
 <!-- ============================== Story ============================== -->
 <section class="story">
-  <h2><span class="hand">☞</span> “Oh, that reminds me of…”</h2>
+  <h2><span class="hand">☞</span> Freedom to Associate, Again</h2>
   <div class="columns">
     <p>
-      That's how thinking works — one idea calling up the next. The original
-      HyperCard brochure called it <em>freedom to associate</em>, and the
-      program delivered something personal computers have rarely offered since:
+      <em>“Oh, that reminds me of…”</em> — that's how thinking works, one
+      idea calling up the next. The original 1987 HyperCard brochure called
+      it <em>freedom to associate</em>, and the program delivered something
+      personal computers have rarely offered since:
       a place where ordinary people made real, working software. A recipe box
       that dialed the butcher. A field guide with a soundtrack. A choose-your-own
       adventure written by a nine-year-old. Nobody asked permission, and nobody
@@ -62,6 +62,23 @@
       It's not an emulator, and it's not nostalgia under glass —
       it's the idea itself, given new hardware.
     </p>
+  </div>
+</section>
+
+<!-- ============================ HyperTalk wink ============================ -->
+<section class="talk">
+  <div class="talk-script">
+    <pre><code>on mouseUp
+  go to next card
+end mouseUp</code></pre>
+    <p class="talk-caption">That's the whole program. It's attached to the button on the right.</p>
+  </div>
+  <div class="talk-card" id="miniStage" aria-live="polite">
+    <div class="mini-card">
+      <p id="miniText">This little card is on this page, not in a screenshot.</p>
+      <button id="miniNext" type="button">Next Card ›</button>
+    </div>
+    <p class="talk-count" id="miniCount">Card 1 of 3</p>
   </div>
 </section>
 
@@ -137,6 +154,29 @@
     <a class="button" href="#">Source on GitHub</a>
   </p>
 </section>
+
+<script>
+  // The HyperTalk wink: three lines of script, one button that obeys them.
+  (() => {
+    const cards = [
+      "This little card is on this page, not in a screenshot.",
+      "In Contrapt, every button carries a script like the one at left.",
+      "That’s the entire idea. It still works.",
+    ];
+    let index = 0;
+    const text = document.getElementById("miniText");
+    const count = document.getElementById("miniCount");
+    document.getElementById("miniNext").addEventListener("click", () => {
+      index = (index + 1) % cards.length;
+      text.style.opacity = 0;
+      setTimeout(() => {
+        text.textContent = cards[index];
+        count.textContent = "Card " + (index + 1) + " of " + cards.length;
+        text.style.opacity = 1;
+      }, 160);
+    });
+  })();
+</script>
 
 <footer>
   <p>
