@@ -724,6 +724,11 @@ final class Runtime {
             return try hostCall(line: line) { try host.fieldText(reference, domain: domain, onCard: onCard) }
         case .messageBox:
             return messageBoxText
+        case .me:
+            guard let field = meAsField(line: line) else {
+                throw ScriptError(line: line, message: "'me' is not a field here.")
+            }
+            return try hostCall(line: line) { try host.fieldText(field.reference, domain: field.domain, onCard: nil) }
         case .chunk(let kind, let selector, let base):
             let source = try await containerValue(base, line: line)
             return try await ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
@@ -743,6 +748,11 @@ final class Runtime {
         case .messageBox:
             messageBoxText = value
             host.showMessage(value)
+        case .me:
+            guard let field = meAsField(line: line) else {
+                throw ScriptError(line: line, message: "'me' is not a field here.")
+            }
+            try hostCall(line: line) { try host.setFieldText(field.reference, domain: field.domain, onCard: nil, to: value) }
         case .chunk(let kind, let selector, let base):
             let source = try await containerValue(base, line: line)
             let updated = try await ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value, itemDelimiter: itemDelimiter) {
@@ -816,6 +826,11 @@ final class Runtime {
             ) else { return nil }
             let offset = outer.range.lowerBound
             return (outer.reference, outer.domain, (offset + inner.lowerBound)..<(offset + inner.upperBound))
+        case .me:
+            // `select line 2 of me` in a field's script.
+            guard let field = meAsField(line: line) else { return nil }
+            let length = try hostCall(line: line) { try host.fieldText(field.reference, domain: field.domain, onCard: nil) }.count
+            return (field.reference, field.domain, 0..<length)
         case .variable(let name):
             // A variable may hold a descriptor ("line 2 of card field id 20",
             // stashed from the clickLine). One re-parse level, no recursion
@@ -829,11 +844,19 @@ final class Runtime {
         }
     }
 
+    /// The running script's `me`, when it belongs to a field — the reference
+    /// the host can read/write its contents by. Nil for any other object.
+    private func meAsField(line: Int) -> (reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain)? {
+        guard let object = try? layerObject(at: currentLayerIndex, keyword: "me", line: line),
+              case .part(let kind, let domain, let reference, _) = object, kind == "field" else { return nil }
+        return (reference, domain)
+    }
+
     private func isVariableContainer(_ container: Container) -> Bool {
         switch container {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
-        case .field, .messageBox: return false
+        case .field, .messageBox, .me: return false
         }
     }
 
@@ -1072,6 +1095,15 @@ final class Runtime {
 
         case .selected(let component):
             return host.selectionValue(component)
+
+        case .meValue:
+            // In a field's script, `me` is the field's contents (HyperCard
+            // 2.x); for any other object it reads as the name, as before.
+            if let field = meAsField(line: line) {
+                return try hostCall(line: line) { try host.fieldText(field.reference, domain: field.domain, onCard: nil) }
+            }
+            let object = try layerObject(at: currentLayerIndex, keyword: "me", line: line)
+            return try hostCall(line: line) { try host.propertyValue("name", of: object) }
 
         case .isType(let expression, let type, let negated):
             let matches = Self.matchesType(try await evaluate(expression, line: line), type)

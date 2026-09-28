@@ -154,6 +154,9 @@ indirect enum CardRef {
 indirect enum Container {
     case variable(String)
     case field(FieldRef)
+    /// `me` as a container in a field's script — the field's contents
+    /// (`put empty into me` in a closeField handler).
+    case me
     /// The message box: `put x into message` / `msg`. Writing shows it.
     case messageBox
     /// A chunk of another container: `word 2 of field "X"`.
@@ -235,6 +238,9 @@ indirect enum Expr {
     case found(FoundField)
     /// `the selectedLine` / `selectedText` / `selectedChunk` / `selectedField`.
     case selected(SelectionComponent)
+    /// Bare `me` as a value: a field's script reads its own contents
+    /// (HyperCard 2.x); any other object falls back to its name.
+    case meValue
     /// `the clickLine` / `the clickText` — the host's last locked-field click.
     case click(ClickField)
     /// `X is [not] a[n] <type>` — a type test (number, integer, point, rect,

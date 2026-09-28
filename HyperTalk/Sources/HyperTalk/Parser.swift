@@ -607,6 +607,11 @@ struct Parser {
     /// A put destination: a chunk of a container (`word 2 of field "X"`),
     /// a field, or a variable.
     private mutating func parseContainer(line: Int) throws -> Container {
+        // `me` in a field's script is the field's contents.
+        if peekIdentifier() == "me" {
+            advance()
+            return .me
+        }
         if let word = peekIdentifier(), let kind = Self.chunkKinds[word] {
             advance()
             let savedSuppress = suppressBarePropertyOf
@@ -1969,7 +1974,7 @@ struct Parser {
             }
             // `me` / `target` on their own → the object's name (HyperTalk
             // reserves both words for dispatch identity).
-            if word == "me" { return .property("name", .me) }
+            if word == "me" { return .meValue }
             if word == "target" { return .property("name", .target) }
             // `menu "X"` read as a value — its items, one per line, in
             // HyperCard (`line 4 to 9 of menu "InUse"`). Contrapt has no
