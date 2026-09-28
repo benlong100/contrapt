@@ -60,7 +60,9 @@ enum WebsiteExporter {
         guard let url = Bundle.main.url(forResource: "WebEngine", withExtension: "zip"),
               let data = try? Data(contentsOf: url),
               let files = try? ZipArchive.extract(data) else { return [:] }
-        return files
+        // Drop the zip's directory placeholders — a "name/" entry is not a
+        // file, and writing one as a file would collide with the directory.
+        return files.filter { !$0.key.hasSuffix("/") }
     }
 
     /// A filesystem-safe base name for the exported site (no path separators).

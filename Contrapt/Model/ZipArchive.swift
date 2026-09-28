@@ -4,14 +4,16 @@
 //
 
 import Foundation
+import Compression
 
-/// Minimal store-only zip support for the stack container (D4).
+/// Minimal zip support for the stack container (D4).
 ///
-/// Writing is deterministic — fixed timestamps, entries sorted by name —
-/// so stack files diff cleanly, and any zip tool can open one. Entries are
-/// stored uncompressed: the manifest is small and media assets are already
-/// compressed. Reading treats input as hostile (D7): bounds-checked,
-/// store-only, CRC-verified, path-sanitized, and size-capped.
+/// Writing is deterministic and store-only — fixed timestamps, entries sorted
+/// by name — so stack files diff cleanly, and any zip tool can open one.
+/// Reading treats input as hostile (D7): bounds-checked, CRC-verified,
+/// path-sanitized, and size-capped. Reads accept stored *and* deflated
+/// entries (external tools deflate by default — e.g. the `zip` CLI producing
+/// WebEngine.zip; a user's re-zipped .contrapt).
 nonisolated enum ZipArchive {
     enum ZipError: LocalizedError {
         case notAnArchive
@@ -138,10 +140,15 @@ nonisolated enum ZipArchive {
             let commentLength = Int(data.readUInt16(at: cursor + 32))
             let localOffset = Int(data.readUInt32(at: cursor + 42))
 
-            guard method == 0, compressedSize == size else {
-                throw ZipError.unsupported("compressed entries are not supported")
+            guard method == 0 || method == 8 else {
+                throw ZipError.unsupported("an entry uses an unsupported compression method")
             }
-            guard size <= maxEntryBytes else { throw ZipError.unsupported("an entry is too large") }
+            if method == 0 {
+                guard compressedSize == size else { throw ZipError.malformed }
+            }
+            guard size <= maxEntryBytes, compressedSize <= maxEntryBytes else {
+                throw ZipError.unsupported("an entry is too large")
+            }
             totalBytes += size
             guard totalBytes <= maxTotalBytes else { throw ZipError.unsupported("the archive is too large") }
 
@@ -162,15 +169,38 @@ nonisolated enum ZipArchive {
             let localNameLength = Int(data.readUInt16(at: localOffset + 26))
             let localExtraLength = Int(data.readUInt16(at: localOffset + 28))
             let start = localOffset + 30 + localNameLength + localExtraLength
-            guard start >= 0, start + size <= data.count else { throw ZipError.malformed }
+            guard start >= 0, start + compressedSize <= data.count else { throw ZipError.malformed }
 
-            let contents = data.subdata(in: start..<(start + size))
+            let stored = data.subdata(in: start..<(start + compressedSize))
+            let contents = method == 8 ? try inflate(stored, expectedSize: size) : stored
             guard crc32(of: contents) == crc else { throw ZipError.malformed }
 
             entries[name] = contents
             cursor += 46 + nameLength + extraLength + commentLength
         }
         return entries
+    }
+
+    /// Inflates one deflated entry. Zip's method 8 is raw deflate, which is
+    /// what Compression's ZLIB codec speaks (no zlib header). The declared
+    /// uncompressed size is trusted only as an exact expectation — output
+    /// that doesn't fill it precisely is treated as damage.
+    private static func inflate(_ compressed: Data, expectedSize: Int) throws -> Data {
+        guard expectedSize > 0 else { return Data() }
+        var output = Data(count: expectedSize)
+        let written = output.withUnsafeMutableBytes { (destination: UnsafeMutableRawBufferPointer) -> Int in
+            compressed.withUnsafeBytes { (source: UnsafeRawBufferPointer) -> Int in
+                guard let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress,
+                      let sourceBase = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                return compression_decode_buffer(
+                    destinationBase, expectedSize,
+                    sourceBase, compressed.count,
+                    nil, COMPRESSION_ZLIB
+                )
+            }
+        }
+        guard written == expectedSize else { throw ZipError.malformed }
+        return output
     }
 
     // MARK: - CRC32
