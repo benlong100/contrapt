@@ -56,6 +56,10 @@ swiftly run swift sdk list +6.3.3
 
 # 4. node (the build script uses npm to vendor the WASI shim)
 brew install node
+
+# 5. binaryen — PackageToJS runs wasm-opt automatically in release mode
+#    when it's on PATH (61 MB -> 44 MB; skipped with a warning if absent)
+brew install binaryen
 ```
 
 When Swift moves on, install the matching pair and pass
@@ -65,7 +69,7 @@ JavaScriptKit 0.59+ requires Swift 6.3+.
 ## Build + bundle
 
 ```sh
-./Scripts/build-web-engine.sh    # → Contrapt/WebEngine.zip (~20 MB)
+./Scripts/build-web-engine.sh    # → Contrapt/WebEngine.zip (~18 MB)
 ```
 
 Then rebuild the app. `File ▸ Export as Website` now emits `engine/` beside
@@ -79,11 +83,12 @@ set `globalThis.__STACK__` to a stack.json object, `defaultNodeSetup()` +
 
 ## Notes / limits
 
-- The `.wasm` is ~63 MB raw / ~20 MB zipped (Foundation subset + debug
-  metadata). Slimming paths, untried: `wasm-opt -Oz --strip-debug`
-  (binaryen), and eventually Embedded Swift (`swift-6.3.3-RELEASE_wasm-embedded`
-  is already installed) — but Embedded means no full Foundation, so the
-  engine's JSONDecoder use would need rework. Ship the fat one first.
+- The `.wasm` is ~44 MB raw / ~17.5 MB gzipped over the wire (wasm-opt
+  applied automatically when binaryen is installed — build without it and
+  the engine balloons to 63 MB with only a warning). The remaining bulk is
+  the Foundation subset; the next slimming step would be Embedded Swift
+  (`swift-6.3.3-RELEASE_wasm-embedded` is already installed), but Embedded
+  means no full Foundation, so the engine's JSONDecoder use needs rework.
 - The PackageToJS output path (`.build/plugins/PackageToJS/outputs/Package`)
   and its `index.js` `init` export are version-specific to JavaScriptKit
   0.59; the build script fails loudly if the bundle moves.
