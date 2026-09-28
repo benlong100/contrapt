@@ -74,6 +74,15 @@ public enum FoundField: Sendable, Equatable {
     case text, chunk, line, field
 }
 
+/// Where the last click on a locked field landed — read by `the clickLine`
+/// (a descriptor like `line 3 of card field id 12`, so `the value of the
+/// clickLine` reads that line and `word 2 of the clickLine` is the line
+/// number) and `the clickText` (the word under the click). HyperCard 2.2's
+/// list-field navigation idiom. Empty before any such click.
+public enum ClickField: Sendable, Equatable {
+    case line, text
+}
+
 /// Where a `go` command should land.
 public enum GoDestination: Equatable, Sendable {
     case next
@@ -204,6 +213,9 @@ public protocol HyperTalkHost: AnyObject {
     /// `the foundText` / `foundChunk` / `foundLine` / `foundField` — details
     /// of the last successful `find` (empty before any match).
     func foundValue(_ field: FoundField) -> String
+    /// `the clickLine` / `the clickText` — where the last click on a locked
+    /// field landed (see ClickField). Optional; defaults to empty.
+    func clickValue(_ field: ClickField) -> String
     /// `the number of cards / backgrounds / [card|bkgnd] buttons / fields`.
     func count(_ countable: Countable) throws -> Int
     /// During `sort`, temporarily resolve field/property lookups against the
@@ -238,6 +250,9 @@ public extension HyperTalkHost {
     /// Hosts without external-name records (tests, the web engine) treat
     /// every unknown name as a real error.
     func isExternalName(_ name: String) -> Bool { false }
+
+    /// Hosts without click tracking read `the clickLine`/`clickText` as empty.
+    func clickValue(_ field: ClickField) -> String { "" }
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

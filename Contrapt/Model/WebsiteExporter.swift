@@ -426,11 +426,32 @@ extension WebsiteExporter {
         engineActive = true;
         note.textContent = '';
         enableFieldEditing();
-        // A click on any part sends mouseUp along its message path.
+        // A click on any part sends mouseUp along its message path. Field
+        // clicks also carry which line/word they landed on (the clickLine /
+        // clickText), via the browser's own text hit-testing.
         root.addEventListener('click', ev => {
           const partEl = ev.target.closest('.part');
           if (!partEl || partEl.dataset.scriptId == null) return;
-          handle(engine.mouseUp(Number(partEl.dataset.scriptId)));
+          let line = null, word = null;
+          if (partEl.classList.contains('field')) {
+            const caret = document.caretRangeFromPoint
+              ? document.caretRangeFromPoint(ev.clientX, ev.clientY)
+              : null;
+            const pos = caret ? { node: caret.startContainer, offset: caret.startOffset }
+              : document.caretPositionFromPoint
+                ? (c => c && { node: c.offsetNode, offset: c.offset })(document.caretPositionFromPoint(ev.clientX, ev.clientY))
+                : null;
+            if (pos && partEl.contains(pos.node)) {
+              const full = partEl.textContent;
+              const before = full.slice(0, pos.offset);
+              line = (before.match(/\\n/g) || []).length + 1;
+              let s = pos.offset, e = pos.offset;
+              while (s > 0 && !/\\s/.test(full[s - 1])) s--;
+              while (e < full.length && !/\\s/.test(full[e])) e++;
+              word = full.slice(s, e);
+            }
+          }
+          handle(engine.mouseUp(Number(partEl.dataset.scriptId), line, word));
         });
         handle(engine.start());
       }

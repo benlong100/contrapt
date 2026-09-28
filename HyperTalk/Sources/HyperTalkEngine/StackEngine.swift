@@ -47,8 +47,21 @@ public final class StackEngine {
     /// A button (or locked field/label) was clicked: send `mouseUp` along its
     /// message path. Returns the world effects the caller should now apply.
     @discardableResult
-    public func dispatchMouseUp(partScriptID: Int) async throws -> [HostEffect] {
-        try await send("mouseUp", toPartWithScriptID: partScriptID)
+    public func dispatchMouseUp(partScriptID: Int, clickLine: Int? = nil, clickText: String? = nil) async throws -> [HostEffect] {
+        // A field click carries which line/word it landed on — recorded as
+        // `the clickLine`/`the clickText` before the script runs (HyperCard's
+        // list-field navigation idiom). Kept until the next field click.
+        if let clickLine {
+            let card = host.stack.cards[host.currentIndex]
+            let layer: String? = card.parts.contains { $0.scriptID == partScriptID } ? "card"
+                : host.stack.backgrounds.first { $0.id == card.backgroundID }?
+                    .parts.contains { $0.scriptID == partScriptID } == true ? "bkgnd" : nil
+            if let layer {
+                host.clickLine = "line \(clickLine) of \(layer) field id \(partScriptID)"
+                host.clickText = clickText ?? ""
+            }
+        }
+        return try await send("mouseUp", toPartWithScriptID: partScriptID)
     }
 
     /// Send an arbitrary message to a part (e.g. `mouseDown`, `mouseUp`).

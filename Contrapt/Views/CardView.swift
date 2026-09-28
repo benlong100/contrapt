@@ -835,7 +835,7 @@ struct PartView: View {
                     .fixedSize(horizontal: preformatted, vertical: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
                     .contentShape(Rectangle())
-                    .gesture(labelPressGesture)
+                    .gesture(lockedFieldPressGesture(properties, preformatted: preformatted))
             } else if effectivelyMultiline {
                 TextEditor(text: fieldText)
                     .font(properties.format.font)
@@ -967,6 +967,36 @@ struct PartView: View {
                 }
             }
             .onEnded { _ in isPressed = false }
+    }
+
+    /// The locked-field press: labelPressGesture plus, on release, recording
+    /// which line/word the click landed on — `the clickLine`/`the clickText`
+    /// the field's mouseUp script can read (HyperCard's list-field idiom).
+    /// The gesture's view is the field's inner text box, so the location maps
+    /// straight into the laid-out text.
+    private func lockedFieldPressGesture(_ properties: FieldPart, preformatted: Bool) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                if !isPressed {
+                    isPressed = true
+                    onMouseDown()
+                }
+            }
+            .onEnded { value in
+                isPressed = false
+                guard (0...part.frame.width).contains(value.location.x),
+                      (0...part.frame.height).contains(value.location.y) else { return }
+                let margin: CGFloat = properties.wideMargins ? 18 : 3
+                let hit = FieldClickHitTest.hit(
+                    in: properties.text,
+                    at: value.location,
+                    textWidth: part.frame.width - margin * 2,
+                    format: properties.format,
+                    wraps: !preformatted
+                )
+                ClickRecord.shared.recordPending(line: hit.line, text: hit.text)
+                onTap()
+            }
     }
 
     private var labelPressGesture: some Gesture {

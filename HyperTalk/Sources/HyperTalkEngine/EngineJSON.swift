@@ -97,8 +97,9 @@ extension StackEngine {
     }
 
     /// A button/locked-field click: `{ effects, state }` (or `{ error }`).
-    public func dispatchMouseUpJSON(partScriptID: Int) async -> String {
-        await eventJSON { try await self.dispatchMouseUp(partScriptID: partScriptID) }
+    /// Field clicks may carry the clicked line/word (see dispatchMouseUp).
+    public func dispatchMouseUpJSON(partScriptID: Int, clickLine: Int? = nil, clickText: String? = nil) async -> String {
+        await eventJSON { try await self.dispatchMouseUp(partScriptID: partScriptID, clickLine: clickLine, clickText: clickText) }
     }
 
     /// Land on a card and send it `openCard`.

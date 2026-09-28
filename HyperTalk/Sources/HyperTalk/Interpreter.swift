@@ -984,6 +984,9 @@ final class Runtime {
         case .found(let field):
             return host.foundValue(field)
 
+        case .click(let field):
+            return host.clickValue(field)
+
         case .isType(let expression, let type, let negated):
             let matches = Self.matchesType(try await evaluate(expression, line: line), type)
             return (negated ? !matches : matches) ? "true" : "false"

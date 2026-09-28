@@ -36,6 +36,25 @@ struct FindHighlight: Equatable {
 
 /// The running `find` cursor and its results, kept across script runs (so
 /// repeating `find` walks to the next match, as in HyperCard).
+/// Where the last click on a locked field landed — `the clickLine` (a
+/// descriptor like `line 3 of card field id 12`) and `the clickText` (the
+/// word clicked). The field's press gesture records the raw hit; the mouseUp
+/// dispatcher composes the descriptor (it knows the part's layer). Session
+/// state, like FindSession: kept until the next locked-field click.
+@MainActor final class ClickRecord {
+    static let shared = ClickRecord()
+    /// The raw hit from the press gesture, consumed by the dispatcher.
+    private var pending: (line: Int, text: String)?
+    var line = ""
+    var text = ""
+
+    func recordPending(line: Int, text: String) { pending = (line, text) }
+    func takePending() -> (line: Int, text: String)? {
+        defer { pending = nil }
+        return pending
+    }
+}
+
 @MainActor final class FindSession {
     static let shared = FindSession()
     var query: String?
@@ -381,6 +400,14 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func showMessage(_ text: String) {
         onMessage(text)
+    }
+
+    /// `the clickLine` / `the clickText` — the last locked-field click.
+    func clickValue(_ field: ClickField) -> String {
+        switch field {
+        case .line: ClickRecord.shared.line
+        case .text: ClickRecord.shared.text
+        }
     }
 
     /// The XCMD/XFCN names recorded at import — calls to them no-op rather

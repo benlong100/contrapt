@@ -112,7 +112,12 @@ func installEngine() {
         .string(await engine.startJSON())
     })
     api.mouseUp = retained(JSClosure.async { arguments in
-        .string(await engine.dispatchMouseUpJSON(partScriptID: Int(arguments.first?.number ?? -1)))
+        let line = arguments.count > 1 ? arguments[1].number.map { Int($0) } : nil
+        let text = arguments.count > 2 ? arguments[2].string : nil
+        return .string(await engine.dispatchMouseUpJSON(
+            partScriptID: Int(arguments.first?.number ?? -1),
+            clickLine: line, clickText: text
+        ))
     })
     api.openCard = retained(JSClosure.async { arguments in
         .string(await engine.openCardJSON(index: Int(arguments.first?.number ?? 0)))

@@ -214,6 +214,8 @@ indirect enum Expr {
     case clock(ClockField)
     /// `the foundText` / `foundChunk` / `foundLine` / `foundField`.
     case found(FoundField)
+    /// `the clickLine` / `the clickText` — the host's last locked-field click.
+    case click(ClickField)
     /// `X is [not] a[n] <type>` — a type test (number, integer, point, rect,
     /// logical). Result is true/false.
     case isType(Expr, String, negated: Bool)

@@ -1445,6 +1445,12 @@ struct Parser {
         "foundtext": .text, "foundchunk": .chunk, "foundline": .line, "foundfield": .field,
     ]
 
+    /// `the clickLine` / `the clickText` — where the last locked-field click
+    /// landed (HyperCard 2.2's list-navigation idiom).
+    static let clickFields: [String: ClickField] = [
+        "clickline": .line, "clicktext": .text,
+    ]
+
     static let oneArgFunctions: Set<String> = [
         "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
         "ln", "ln1", "log2", "abs", "trunc", "round", "average", "sum",
@@ -1764,6 +1770,11 @@ struct Parser {
             if let found = Self.foundFields[peekIdentifier() ?? ""], peekIdentifier(1) != "of" {
                 advance()
                 return .found(found)
+            }
+            // `the clickLine` / `the clickText`.
+            if let click = Self.clickFields[peekIdentifier() ?? ""], peekIdentifier(1) != "of" {
+                advance()
+                return .click(click)
             }
             // `the [long|short|abbreviated] date/time`, `the seconds/ticks`.
             if let field = parseClockField() {

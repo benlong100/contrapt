@@ -81,6 +81,13 @@ final class MockHost: HyperTalkHost {
         beeps += 1
     }
 
+    /// Preset `the clickLine` / `the clickText` values for tests.
+    var clickValues: [ClickField: String] = [:]
+
+    func clickValue(_ field: ClickField) -> String {
+        clickValues[field] ?? ""
+    }
+
     /// Simulated XCMD/XFCN names (store lowercased), as an import records them.
     var externalNames: Set<String> = []
 

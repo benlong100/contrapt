@@ -911,6 +911,15 @@ struct ContentView: View {
     }
 
     private func sendMouseMessage(_ message: String, to part: Part?) {
+        // A click on a locked field records `the clickLine`/`the clickText`
+        // before its mouseUp runs. The gesture computed the raw hit; the
+        // layer qualifier (card vs bkgnd) is decided here.
+        if message == "mouseUp", let part, case .field = part.kind,
+           let pending = ClickRecord.shared.takePending() {
+            let layer = stack.cards[cardIndex].parts.contains(where: { $0.id == part.id }) ? "card" : "bkgnd"
+            ClickRecord.shared.line = "line \(pending.line) of \(layer) field id \(part.scriptID)"
+            ClickRecord.shared.text = pending.text
+        }
         let host = makeHost()
         let path = scriptPath(cardAt: cardIndex, part: part)
         Task { @MainActor in

@@ -255,6 +255,16 @@ final class WebHost: HyperTalkHost {
     // MARK: - Message box, beep
 
     func showMessage(_ text: String) { recorded.append(.message(text)) }
+
+    /// Where the page's last field click landed (see StackEngine.dispatchMouseUp).
+    var clickLine = ""
+    var clickText = ""
+    func clickValue(_ field: ClickField) -> String {
+        switch field {
+        case .line: clickLine
+        case .text: clickText
+        }
+    }
     func beep() { recorded.append(.beep) }
 
     // MARK: - Globals
