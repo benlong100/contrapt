@@ -79,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textView.isAutomaticQuoteSubstitutionEnabled = false
             textView.isAutomaticDashSubstitutionEnabled = false
             textView.isAutomaticTextReplacementEnabled = false
+            // Keep the selection visible even when the field editor isn't the
+            // key window's first responder. AppKit otherwise redraws an inactive
+            // selection in a near-invisible gray (unemphasizedSelectedText…),
+            // which reads as "selected but not highlighted" in inspector fields.
+            // Pinning the selection background forces the emphasized accent color
+            // in both states, so a selection is always visible.
+            var attributes = textView.selectedTextAttributes
+            attributes[.backgroundColor] = NSColor.selectedTextBackgroundColor
+            textView.selectedTextAttributes = attributes
         }
 
         // Autosave in place every second. DocumentGroup already saves on window
