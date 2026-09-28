@@ -268,7 +268,13 @@ struct CardView: View {
                         .allowsHitTesting(false)
                 }
             }
-            .frame(width: part.frame.width, height: part.frame.height)
+            // Top-aligned, and clipped to the part's frame: a locked field
+            // whose text is taller/wider than its frame (the Tour's "Quit the
+            // tour" carries ten trailing returns in a one-line field) shows
+            // its first lines and clips the rest, exactly as HyperCard does —
+            // instead of centering the oversized block so it floats above.
+            .frame(width: part.frame.width, height: part.frame.height, alignment: .top)
+            .clipped()
             .position(
                 x: part.frame.x + part.frame.width / 2,
                 y: part.frame.y + part.frame.height / 2
