@@ -83,6 +83,16 @@ public enum ClickField: Sendable, Equatable {
     case line, text
 }
 
+/// What the `selected*` readers ask about the script selection (set by the
+/// `select` command): `the selectedLine` (a descriptor like `line 2 of card
+/// field id 12`, or `line 2 to 3 of …` for a span), `the selectedText` (the
+/// selected characters), `the selectedChunk` (`char 4 to 9 of card field id
+/// 12`), and `the selectedField` (`card field id 12`). All empty when nothing
+/// is selected; the selection clears on navigation, as in HyperCard.
+public enum SelectionComponent: Sendable, Equatable {
+    case line, text, chunk, field
+}
+
 /// Where a `go` command should land.
 public enum GoDestination: Equatable, Sendable {
     case next
@@ -216,6 +226,14 @@ public protocol HyperTalkHost: AnyObject {
     /// `the clickLine` / `the clickText` — where the last click on a locked
     /// field landed (see ClickField). Optional; defaults to empty.
     func clickValue(_ field: ClickField) -> String
+    /// `select <chunk> of <field>` — set the script selection to a character
+    /// range (character offsets, end exclusive) in a field. The host shows it
+    /// and serves the selected* values. Throws when the field doesn't exist.
+    func setSelection(field: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, start: Int, end: Int) throws
+    /// `select empty` — clear the script selection.
+    func clearSelection()
+    /// `the selectedLine` / `selectedText` / `selectedChunk` / `selectedField`.
+    func selectionValue(_ component: SelectionComponent) -> String
     /// `the number of cards / backgrounds / [card|bkgnd] buttons / fields`.
     func count(_ countable: Countable) throws -> Int
     /// During `sort`, temporarily resolve field/property lookups against the
@@ -253,6 +271,11 @@ public extension HyperTalkHost {
 
     /// Hosts without click tracking read `the clickLine`/`clickText` as empty.
     func clickValue(_ field: ClickField) -> String { "" }
+
+    /// Hosts without selection support ignore `select` and read empty.
+    func setSelection(field: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, start: Int, end: Int) throws {}
+    func clearSelection() {}
+    func selectionValue(_ component: SelectionComponent) -> String { "" }
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

@@ -95,9 +95,28 @@ indirect enum StmtKind {
     /// `click at <h>,<v>` — a synthetic click at a card location. The second
     /// expression is nil when the point arrives as one `"h,v"` value.
     case clickAt(Expr, Expr?)
+    /// `select …` — set (or clear) the script selection in a field: `select
+    /// empty`, `select [the] text of field 1`, `select before/after text of
+    /// field 1` (a collapsed selection at an end), `select line 2 of field 1`
+    /// (any chunk-of-field container).
+    case select(SelectTarget)
     /// An unknown command: a message that travels the message path at run
     /// time, e.g. `greet "Bill", 3`.
     case send(String, [Expr])
+}
+
+/// What a `select` statement selects.
+indirect enum SelectTarget {
+    case empty
+    case textOf(FieldRef)
+    case beforeText(FieldRef)
+    case afterText(FieldRef)
+    /// A chunk-of-field container (`line 2 of field 1`, `char 3 to 9 of
+    /// line 2 of field "Topics"`).
+    case chunk(Container)
+    /// `select the clickLine` / `select the selectedLine` — an expression
+    /// whose *value* is a chunk descriptor, re-parsed at run time.
+    case descriptor(Expr)
 }
 
 enum PutMode {
@@ -214,6 +233,8 @@ indirect enum Expr {
     case clock(ClockField)
     /// `the foundText` / `foundChunk` / `foundLine` / `foundField`.
     case found(FoundField)
+    /// `the selectedLine` / `selectedText` / `selectedChunk` / `selectedField`.
+    case selected(SelectionComponent)
     /// `the clickLine` / `the clickText` — the host's last locked-field click.
     case click(ClickField)
     /// `X is [not] a[n] <type>` — a type test (number, integer, point, rect,

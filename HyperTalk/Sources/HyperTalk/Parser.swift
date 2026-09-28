@@ -460,6 +460,50 @@ struct Parser {
         case "show", "hide":
             advance()
             return try parseShowHide(visible: word == "show", line: line)
+        case "select":
+            advance()
+            // `select empty` clears; `select [the|before|after] text of <fld>`
+            // selects all or collapses at an end; otherwise a chunk-of-field
+            // container (`select line 2 of field 1`, `select char 3 to 9 of
+            // line 2 of fld "Topics"`).
+            _ = consumeWord("the")
+            if consumeWord("empty") {
+                try expectNewline()
+                return Stmt(kind: .select(.empty), line: line)
+            }
+            // `select the clickLine` / `the selectedLine` — the reader's value
+            // is a descriptor like `line 2 of card field id 20`, re-parsed as
+            // a container at run time. (HyperCard's classic list one-liner.)
+            if let click = Self.clickFields[peekIdentifier() ?? ""] {
+                advance()
+                try expectNewline()
+                return Stmt(kind: .select(.descriptor(.click(click))), line: line)
+            }
+            if let component = Self.selectionFields[peekIdentifier() ?? ""] {
+                advance()
+                try expectNewline()
+                return Stmt(kind: .select(.descriptor(.selected(component))), line: line)
+            }
+            let edge = consumeWord("before") ? "before" : (consumeWord("after") ? "after" : nil)
+            if consumeWord("text") {
+                guard consumeWord("of") else {
+                    throw ScriptError(line: line, message: "Expected 'of' after 'select text'.")
+                }
+                guard let fieldRef = try parseFieldRefIfPresent() else {
+                    throw ScriptError(line: line, message: "Expected a field after 'select text of'.")
+                }
+                try expectNewline()
+                let target: SelectTarget = edge == "before" ? .beforeText(fieldRef)
+                    : edge == "after" ? .afterText(fieldRef) : .textOf(fieldRef)
+                return Stmt(kind: .select(target), line: line)
+            }
+            // Any container parses (old stacks `select theObject` to drive
+            // paint/edit tools); the runtime selects text only when the
+            // container bottoms out in a field, and no-ops otherwise.
+            let container = try parseContainer(line: line)
+            try expectNewline()
+            return Stmt(kind: .select(.chunk(container)), line: line)
+
         case "push":
             advance()
             // `push [this|recent] card` — the object is optional/ignored; the
@@ -1451,6 +1495,14 @@ struct Parser {
         "clickline": .line, "clicktext": .text,
     ]
 
+    /// `the selectedLine` etc. — the script selection set by `select`.
+    /// `the selection` is HyperCard's synonym for the selected text.
+    static let selectionFields: [String: SelectionComponent] = [
+        "selectedline": .line, "selectedtext": .text,
+        "selectedchunk": .chunk, "selectedfield": .field,
+        "selection": .text,
+    ]
+
     static let oneArgFunctions: Set<String> = [
         "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
         "ln", "ln1", "log2", "abs", "trunc", "round", "average", "sum",
@@ -1596,6 +1648,17 @@ struct Parser {
             _ = try? parsePrimary()
         }
         return .numberLiteral(0)
+    }
+
+    /// Parses text as a container (a field or chunk-of-field) — the runtime
+    /// half of `select <descriptor>`, where the descriptor came from `the
+    /// clickLine` or a variable. Nil when it isn't a container.
+    static func parseSoleContainer(_ source: String) -> Container? {
+        guard let tokens = try? Tokenizer.tokenize(source) else { return nil }
+        var parser = Parser(tokens: tokens)
+        guard let container = try? parser.parseContainer(line: 0),
+              parser.current.kind == .endOfScript || parser.current.kind == .newline else { return nil }
+        return container
     }
 
     /// Parses text like "cd btns" as a countable noun — the runtime half of
@@ -1775,6 +1838,12 @@ struct Parser {
             if let click = Self.clickFields[peekIdentifier() ?? ""], peekIdentifier(1) != "of" {
                 advance()
                 return .click(click)
+            }
+            // `the selectedLine` / `selectedText` / `selectedChunk` /
+            // `selectedField` / `the selection`.
+            if let component = Self.selectionFields[peekIdentifier() ?? ""], peekIdentifier(1) != "of" {
+                advance()
+                return .selected(component)
             }
             // `the [long|short|abbreviated] date/time`, `the seconds/ticks`.
             if let field = parseClockField() {

@@ -55,6 +55,20 @@ struct FindHighlight: Equatable {
     }
 }
 
+/// The script selection set by `select line 2 of field 1` — which field (by
+/// model id + permanent scriptID), its layer word for descriptors, and the
+/// character range. Session state (hosts are per-dispatch); cleared on
+/// navigation, as in HyperCard.
+@MainActor final class SelectionSession {
+    static let shared = SelectionSession()
+    var partID: UUID?
+    var scriptID = 0
+    var layer = "card"
+    var range: Range<Int> = 0..<0
+
+    func clear() { partID = nil }
+}
+
 @MainActor final class FindSession {
     static let shared = FindSession()
     var query: String?
@@ -86,6 +100,7 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onAsk: (String, String) async -> String?
     private let onNavigate: (Int, [ScreenEffect]) -> Void
     private let onFind: (FindHighlight?) -> Void
+    private let onSelection: (FindHighlight?) -> Void
     private let onGoHome: () -> Void
     private let onClickPart: (Part) -> Void
     private let onGoStack: (String, GoDestination?) -> Void
@@ -98,6 +113,7 @@ final class DocumentScriptHost: HyperTalkHost {
         onAsk: @escaping (String, String) async -> String?,
         onNavigate: @escaping (Int, [ScreenEffect]) -> Void,
         onFind: @escaping (FindHighlight?) -> Void = { _ in },
+        onSelection: @escaping (FindHighlight?) -> Void = { _ in },
         onGoHome: @escaping () -> Void = {},
         onClickPart: @escaping (Part) -> Void = { _ in },
         onGoStack: @escaping (String, GoDestination?) -> Void = { _, _ in }
@@ -109,6 +125,7 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onAsk = onAsk
         self.onNavigate = onNavigate
         self.onFind = onFind
+        self.onSelection = onSelection
         self.onGoHome = onGoHome
         self.onClickPart = onClickPart
         self.onGoStack = onGoStack
@@ -228,6 +245,8 @@ final class DocumentScriptHost: HyperTalkHost {
             target = index
         case .inBackground:
             target = try resolveCardIndex(destination)
+            // The script selection doesn't survive leaving the card.
+            if target != cardIndex { clearSelection() }
         case .home, .back, .stack:
             return // handled above / not a same-stack destination
         }
@@ -408,6 +427,61 @@ final class DocumentScriptHost: HyperTalkHost {
         case .line: ClickRecord.shared.line
         case .text: ClickRecord.shared.text
         }
+    }
+
+    // MARK: - Script selection (`select` / the selected* readers)
+
+    func setSelection(field reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, start: Int, end: Int) throws {
+        let location = try locatePart(kind: "field", domain: domain, reference: reference)
+        let selected = part(at: location)
+        let session = SelectionSession.shared
+        session.partID = selected.id
+        session.scriptID = selected.scriptID
+        if case .background = location { session.layer = "bkgnd" } else { session.layer = "card" }
+        let length = fieldContents(of: selected).count
+        let lo = max(0, min(start, length))
+        session.range = lo..<max(lo, min(end, length))
+        onSelection(FindHighlight(partID: selected.id, range: session.range))
+    }
+
+    func clearSelection() {
+        SelectionSession.shared.clear()
+        onSelection(nil)
+    }
+
+    func selectionValue(_ component: SelectionComponent) -> String {
+        let session = SelectionSession.shared
+        guard session.partID != nil, let selected = partWithScriptID(session.scriptID) else { return "" }
+        let descriptor = "\(session.layer) field id \(session.scriptID)"
+        let text = Array(fieldContents(of: selected))
+        let range = session.range.clamped(to: 0..<text.count)
+        switch component {
+        case .field:
+            return descriptor
+        case .text:
+            return String(text[range])
+        case .chunk:
+            return "char \(range.lowerBound + 1) to \(range.upperBound) of \(descriptor)"
+        case .line:
+            let startLine = text[0..<range.lowerBound].count { $0 == "\n" } + 1
+            let endLine = text[0..<max(range.lowerBound, range.upperBound == 0 ? 0 : range.upperBound - 1)]
+                .count { $0 == "\n" } + 1
+            return startLine == endLine
+                ? "line \(startLine) of \(descriptor)"
+                : "line \(startLine) to \(endLine) of \(descriptor)"
+        }
+    }
+
+    private func fieldContents(of part: Part) -> String {
+        if case .field(let properties) = part.kind { return properties.text }
+        return ""
+    }
+
+    private func partWithScriptID(_ id: Int) -> Part? {
+        let card = stack.cards[cardIndex]
+        if let part = card.parts.first(where: { $0.scriptID == id }) { return part }
+        return stack.backgrounds.first { $0.id == card.backgroundID }?
+            .parts.first { $0.scriptID == id }
     }
 
     /// The XCMD/XFCN names recorded at import — calls to them no-op rather

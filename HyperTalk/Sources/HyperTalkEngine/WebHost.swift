@@ -21,7 +21,11 @@ final class WebHost: HyperTalkHost {
     /// from it after each dispatch.
     var stack: Stack
     /// The card the page is showing (0-based).
-    var currentIndex: Int = 0
+    var currentIndex: Int = 0 {
+        // The script selection doesn't survive leaving the card (HyperCard) —
+        // and this catches every card-change path (go, openCard, find, sort).
+        didSet { if oldValue != currentIndex { selection = nil } }
+    }
     /// World-facing effects recorded during the current dispatch, drained by
     /// the engine afterwards.
     private(set) var recorded: [HostEffect] = []
@@ -264,6 +268,59 @@ final class WebHost: HyperTalkHost {
         case .line: clickLine
         case .text: clickText
         }
+    }
+
+    // MARK: - Script selection (`select` / the selected* readers)
+
+    /// The current script selection: which field (by permanent id), its
+    /// layer word for descriptors, and a character range in its text.
+    var selection: (scriptID: Int, layer: String, range: Range<Int>)?
+
+    func setSelection(field reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, start: Int, end: Int) throws {
+        let location = try locatePart(kind: "field", domain: domain, reference: reference)
+        let part = part(at: location)
+        let layer: String
+        if case .background = location { layer = "bkgnd" } else { layer = "card" }
+        let length = fieldTextOf(part).count
+        let lo = max(0, min(start, length))
+        let hi = max(lo, min(end, length))
+        selection = (part.scriptID, layer, lo..<hi)
+    }
+
+    func clearSelection() { selection = nil }
+
+    func selectionValue(_ component: SelectionComponent) -> String {
+        guard let selection, let part = partWithScriptID(selection.scriptID) else { return "" }
+        let fieldDescriptor = "\(selection.layer) field id \(selection.scriptID)"
+        let text = Array(fieldTextOf(part))
+        let range = selection.range.clamped(to: 0..<text.count)
+        switch component {
+        case .field:
+            return fieldDescriptor
+        case .text:
+            return String(text[range])
+        case .chunk:
+            return "char \(range.lowerBound + 1) to \(range.upperBound) of \(fieldDescriptor)"
+        case .line:
+            let startLine = text[0..<range.lowerBound].count { $0 == "\n" } + 1
+            let endLine = text[0..<max(range.lowerBound, range.upperBound == 0 ? 0 : range.upperBound - 1)]
+                .count { $0 == "\n" } + 1
+            return startLine == endLine
+                ? "line \(startLine) of \(fieldDescriptor)"
+                : "line \(startLine) to \(endLine) of \(fieldDescriptor)"
+        }
+    }
+
+    private func fieldTextOf(_ part: Part) -> String {
+        if case .field(let f) = part.kind { return f.text }
+        return ""
+    }
+
+    private func partWithScriptID(_ id: Int) -> Part? {
+        let card = stack.cards[cardIndex]
+        if let part = card.parts.first(where: { $0.scriptID == id }) { return part }
+        return stack.backgrounds.first { $0.id == card.backgroundID }?
+            .parts.first { $0.scriptID == id }
     }
     func beep() { recorded.append(.beep) }
 

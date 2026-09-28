@@ -145,6 +145,7 @@ extension WebsiteExporter {
       #cardLabel { font-variant-numeric: tabular-nums; }
       #note { margin-left: auto; color: #888; font-size: 12px; }
       .field[contenteditable] { cursor: text; }
+      .field .sel { background: #000; color: #fff; }
       .field[contenteditable]:focus { outline: 2px solid #4a90d9; outline-offset: -1px; }
       .dlg-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.25);
         display: flex; align-items: center; justify-content: center; z-index: 10; }
@@ -486,7 +487,20 @@ extension WebsiteExporter {
           if (rp.kind === 'field' || rp.kind === 'label') {
             // Never clobber the field the visitor is typing in.
             if (el === document.activeElement) return;
-            if (el.textContent !== (rp.text || '')) el.textContent = rp.text || '';
+            const text = rp.text || '';
+            if (rp.selStart != null && rp.selEnd != null && rp.selEnd > rp.selStart) {
+              // The script selection (`select line 2 of field 1`): show the
+              // range highlighted, HyperCard-style.
+              el.textContent = '';
+              el.appendChild(document.createTextNode(text.slice(0, rp.selStart)));
+              const mark = document.createElement('span');
+              mark.className = 'sel';
+              mark.textContent = text.slice(rp.selStart, rp.selEnd);
+              el.appendChild(mark);
+              el.appendChild(document.createTextNode(text.slice(rp.selEnd)));
+            } else if (el.textContent !== text || el.querySelector('.sel')) {
+              el.textContent = text;
+            }
           } else if (rp.kind === 'button') {
             el.classList.toggle('hilite', !!rp.hilite);
             const span = el.querySelector('span');

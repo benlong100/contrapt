@@ -81,6 +81,21 @@ final class MockHost: HyperTalkHost {
         beeps += 1
     }
 
+    /// `select` calls, in order; `selectionCleared` records `select empty`.
+    var selections: [(reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, start: Int, end: Int)] = []
+    var selectionCleared = false
+    var selectionValues: [SelectionComponent: String] = [:]
+
+    func setSelection(field reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, start: Int, end: Int) throws {
+        selections.append((reference, domain, start, end))
+    }
+
+    func clearSelection() { selectionCleared = true }
+
+    func selectionValue(_ component: SelectionComponent) -> String {
+        selectionValues[component] ?? ""
+    }
+
     /// Preset `the clickLine` / `the clickText` values for tests.
     var clickValues: [ClickField: String] = [:]
 

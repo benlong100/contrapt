@@ -113,12 +113,23 @@ public final class StackEngine {
     public func cardState(at index: Int) -> CardState {
         let card = host.stack.cards[index]
         let background = host.stack.backgrounds.first { $0.id == card.backgroundID }
+        // Stamp the script selection onto its field's render part.
+        func stamped(_ parts: [Part]) -> [RenderPart] {
+            parts.map { part in
+                var rendered = Self.render(part)
+                if let selection = host.selection, selection.scriptID == part.scriptID {
+                    rendered.selStart = selection.range.lowerBound
+                    rendered.selEnd = selection.range.upperBound
+                }
+                return rendered
+            }
+        }
         return CardState(
             cardIndex: index,
             cardScriptID: card.scriptID,
             cardName: card.name,
-            backgroundParts: (background?.parts ?? []).map(Self.render),
-            cardParts: card.parts.map(Self.render)
+            backgroundParts: stamped(background?.parts ?? []),
+            cardParts: stamped(card.parts)
         )
     }
 
@@ -216,4 +227,8 @@ public struct RenderPart: Codable, Equatable, Sendable {
     public let visible: Bool
     public let text: String?
     public let hilite: Bool?
+    /// The script selection's character range when it lies in this field
+    /// (`select line 2 of field 1`); nil otherwise.
+    public var selStart: Int?
+    public var selEnd: Int?
 }

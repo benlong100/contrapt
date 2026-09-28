@@ -75,6 +75,75 @@ enum ChunkResolver {
         return kind == .character ? source.count : split(source, kind: kind, itemDelimiter: itemDelimiter).count
     }
 
+    /// The character-offset range a chunk occupies in `source` — the position
+    /// half of `resolve` (which returns the text), for `select` and its
+    /// selected* descriptors. Nil when the selector lies outside the text.
+    static func range(
+        kind: ChunkKind,
+        selector: ChunkSelector,
+        in source: String,
+        itemDelimiter: String = ",",
+        evaluateIndex: (Expr) async throws -> Int
+    ) async throws -> Range<Int>? {
+        if kind == .character {
+            let count = source.count
+            let (start, end) = try await bounds(selector, count: count, evaluateIndex: evaluateIndex)
+            guard start <= end, start >= 1, start <= count else { return nil }
+            return (start - 1)..<min(count, end)
+        }
+        let spans = unitSpans(source, kind: kind, itemDelimiter: itemDelimiter)
+        let (start, end) = try await bounds(selector, count: spans.count, evaluateIndex: evaluateIndex)
+        guard start <= end, start >= 1, start <= spans.count else { return nil }
+        let hi = min(spans.count, end)
+        return spans[start - 1].lowerBound..<spans[hi - 1].upperBound
+    }
+
+    /// Character-offset spans of each unit of `kind` in `source`, aligned
+    /// with what `split` produces.
+    private static func unitSpans(_ source: String, kind: ChunkKind, itemDelimiter: String) -> [Range<Int>] {
+        let characters = Array(source)
+        switch kind {
+        case .character:
+            return characters.indices.map { $0..<($0 + 1) }
+        case .line:
+            var spans: [Range<Int>] = []
+            var start = 0
+            for (offset, character) in characters.enumerated() where character == "\n" {
+                spans.append(start..<offset)
+                start = offset + 1
+            }
+            spans.append(start..<characters.count)
+            return spans
+        case .item:
+            guard !itemDelimiter.isEmpty, let delimiter = itemDelimiter.first else { return [0..<characters.count] }
+            var spans: [Range<Int>] = []
+            var start = 0
+            for (offset, character) in characters.enumerated() where character == delimiter {
+                spans.append(start..<offset)
+                start = offset + 1
+            }
+            spans.append(start..<characters.count)
+            return spans
+        case .word:
+            // Mirror wordSplit: whitespace-separated, quoted spans one word.
+            var spans: [Range<Int>] = []
+            var start: Int? = nil
+            var inQuotes = false
+            for (offset, character) in characters.enumerated() {
+                if character == "\"" {
+                    inQuotes.toggle()
+                    if start == nil { start = offset }
+                } else if !inQuotes, character == " " || character == "\t" || character == "\n" {
+                    if let s = start { spans.append(s..<offset); start = nil }
+                } else if start == nil {
+                    start = offset
+                }
+            }
+            if let s = start { spans.append(s..<characters.count) }
+            return spans
+        }
+    }
+
     // MARK: - Splitting
 
     private static func split(_ source: String, kind: ChunkKind, itemDelimiter: String) -> [String] {

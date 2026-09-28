@@ -20,6 +20,9 @@ struct CardView: View {
     /// The matched character range within that field, so a locked plain field
     /// can box the exact word rather than the whole field.
     var findHighlightRange: Range<Int>? = nil
+    /// The script selection (`select line 2 of field 1`) to highlight.
+    var selectionPartID: UUID? = nil
+    var selectionRange: Range<Int>? = nil
     /// Edit-mode reveal overlays (HyperCard's button/field tool highlighting).
     var revealButtons = false
     var revealFields = false
@@ -244,7 +247,8 @@ struct CardView: View {
                 } else if part.isVisible {
                     PartView(
                         part: $part,
-                        highlightRange: substringHighlight(for: part) ? findHighlightRange : nil,
+                        highlightRange: substringHighlight(for: part) ? findHighlightRange
+                            : (selectionPartID == part.id ? selectionRange : nil),
                         highlight: cardHighlight,
                         linkColorHex: cardLinkColorHex,
                         onTap: { onMouseMessage("mouseUp", part) },

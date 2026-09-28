@@ -56,6 +56,8 @@ struct ContentView: View {
     @State private var selectedPartIDs: Set<UUID> = []
     /// The field `find` last matched, boxed on the card until the next edit.
     @State private var findHighlight: FindHighlight?
+    /// The script selection's highlight (`select line 2 of field 1`).
+    @State private var scriptSelection: FindHighlight?
     @State private var isInspectorPresented = false
     /// Edit-mode reveal overlays — HyperCard's button/field tool highlighting,
     /// so transparent or hidden parts are findable. Remembered across sessions.
@@ -145,6 +147,8 @@ struct ContentView: View {
             selectedPartIDs: $selectedPartIDs,
             findHighlightPartID: findHighlight?.partID,
             findHighlightRange: findHighlight?.range,
+            selectionPartID: scriptSelection?.partID,
+            selectionRange: scriptSelection?.range,
             revealButtons: revealButtons,
             revealFields: revealFields,
             selectLocked: selectLocked,
@@ -368,6 +372,12 @@ struct ContentView: View {
     var body: some View {
         decoratedStage
         .onChange(of: cardIndex) { _, newIndex in
+            // The script selection doesn't survive leaving the card — this
+            // catches UI navigation too, not just scripted `go`.
+            if scriptSelection != nil {
+                scriptSelection = nil
+                SelectionSession.shared.clear()
+            }
             sendSystemMessage("openCard", toCardAt: newIndex)
         }
         .task {
@@ -624,6 +634,8 @@ struct ContentView: View {
                     // lingering find box (a browse-mode artifact).
                     isInspectorPresented = true
                     findHighlight = nil
+                    scriptSelection = nil
+                    SelectionSession.shared.clear()
                 }
                 isEditing.toggle()
             }
@@ -800,6 +812,8 @@ struct ContentView: View {
             onFind: { highlight in
                 findHighlight = highlight
             },
+            // `select …` highlights a field range (clears on navigation).
+            onSelection: { scriptSelection = $0 },
             // `go home` opens the Home stack (macOS; iOS front door is Home).
             onGoHome: { openHome() },
             // `click at h,v` routes a mouseUp to the part under the point.

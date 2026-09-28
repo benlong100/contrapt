@@ -507,6 +507,10 @@ final class Runtime {
             lastResult = found ? "" : "not found"
             return .normal
 
+        case .select(let target):
+            try await executeSelect(target, line: statement.line)
+            return .normal
+
         case .pushCard:
             host.pushCard()
             return .normal
@@ -754,6 +758,85 @@ final class Runtime {
         return (reference, fieldRef.domain, try await resolveCardRef(fieldRef.card, line: line))
     }
 
+    /// `select …` — resolve the target to a field + character range and hand
+    /// it to the host. Containers that don't bottom out in a field (old
+    /// stacks `select theObject` for paint tools) are a graceful no-op.
+    private func executeSelect(_ target: SelectTarget, line: Int) async throws {
+        switch target {
+        case .empty:
+            host.clearSelection()
+        case .textOf(let fieldRef), .beforeText(let fieldRef), .afterText(let fieldRef):
+            let (reference, domain, _) = try await resolveFieldRef(fieldRef, line: line)
+            let length = try hostCall(line: line) { try host.fieldText(reference, domain: domain, onCard: nil) }.count
+            let range: Range<Int> = switch target {
+            case .beforeText: 0..<0
+            case .afterText: length..<length
+            default: 0..<length
+            }
+            try hostCall(line: line) {
+                try host.setSelection(field: reference, domain: domain, start: range.lowerBound, end: range.upperBound)
+            }
+        case .chunk(let container):
+            guard let resolved = try await fieldAndRange(of: container, line: line) else { return }
+            try hostCall(line: line) {
+                try host.setSelection(field: resolved.reference, domain: resolved.domain,
+                                      start: resolved.range.lowerBound, end: resolved.range.upperBound)
+            }
+        case .descriptor(let expression):
+            // The value is a chunk descriptor (`line 2 of card field id 20`,
+            // from the clickLine); re-parse and select it. Anything else —
+            // including an empty value before any click — is a no-op.
+            let value = try await evaluate(expression, line: line)
+            guard let container = Parser.parseSoleContainer(value),
+                  let resolved = try await fieldAndRange(of: container, line: line) else { return }
+            try hostCall(line: line) {
+                try host.setSelection(field: resolved.reference, domain: resolved.domain,
+                                      start: resolved.range.lowerBound, end: resolved.range.upperBound)
+            }
+        }
+    }
+
+    /// Walks a (possibly nested) chunk container down to its base field and
+    /// computes the chunk's absolute character range in the field's text.
+    /// Nil when the base isn't a field (nothing text-selectable).
+    private func fieldAndRange(of container: Container, line: Int)
+        async throws -> (reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>)? {
+        switch container {
+        case .field(let fieldRef):
+            let (reference, domain, _) = try await resolveFieldRef(fieldRef, line: line)
+            let length = try hostCall(line: line) { try host.fieldText(reference, domain: domain, onCard: nil) }.count
+            return (reference, domain, 0..<length)
+        case .chunk(let kind, let selector, let base):
+            guard let outer = try await fieldAndRange(of: base, line: line) else { return nil }
+            let text = try hostCall(line: line) { try host.fieldText(outer.reference, domain: outer.domain, onCard: nil) }
+            let baseText = String(Array(text)[outer.range.lowerBound..<min(outer.range.upperBound, text.count)])
+            guard let inner = try await ChunkResolver.range(
+                kind: kind, selector: selector, in: baseText, itemDelimiter: itemDelimiter,
+                evaluateIndex: { Int(try Value.number(from: try await self.evaluate($0, line: line), line: line)) }
+            ) else { return nil }
+            let offset = outer.range.lowerBound
+            return (outer.reference, outer.domain, (offset + inner.lowerBound)..<(offset + inner.upperBound))
+        case .variable(let name):
+            // A variable may hold a descriptor ("line 2 of card field id 20",
+            // stashed from the clickLine). One re-parse level, no recursion
+            // into further variables.
+            guard let value = variableValue(name),
+                  let container = Parser.parseSoleContainer(value),
+                  !isVariableContainer(container) else { return nil }
+            return try await fieldAndRange(of: container, line: line)
+        case .messageBox:
+            return nil
+        }
+    }
+
+    private func isVariableContainer(_ container: Container) -> Bool {
+        switch container {
+        case .variable: return true
+        case .chunk(_, _, let base): return isVariableContainer(base)
+        case .field, .messageBox: return false
+        }
+    }
+
     /// Resolves a field's `of <card>` owner to a navigation destination the
     /// host can locate (nil for the current card).
     private func resolveCardRef(_ card: CardRef?, line: Int) async throws -> GoDestination? {
@@ -986,6 +1069,9 @@ final class Runtime {
 
         case .click(let field):
             return host.clickValue(field)
+
+        case .selected(let component):
+            return host.selectionValue(component)
 
         case .isType(let expression, let type, let negated):
             let matches = Self.matchesType(try await evaluate(expression, line: line), type)
