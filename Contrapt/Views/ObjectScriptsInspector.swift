@@ -38,6 +38,11 @@ struct ObjectScriptsInspector: View {
             if scope == .card {
                 Section("Card") {
                     TextField("Name", text: $stack.cards[cardIndex].name)
+                    HStack {
+                        LabeledContent("Number", value: "\(cardIndex + 1) of \(stack.cards.count)")
+                        Spacer()
+                        LabeledContent("ID", value: "\(stack.cards[cardIndex].scriptID)")
+                    }
                     Picker("Background", selection: cardBackgroundBinding) {
                         ForEach(Array(stack.backgrounds.enumerated()), id: \.element.id) { index, background in
                             Text(backgroundLabel(background, index: index)).tag(background.id)
