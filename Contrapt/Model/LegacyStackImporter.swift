@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import HyperTalk
 
 enum LegacyStackImporter {
     struct ImportError: LocalizedError {
@@ -204,6 +205,9 @@ enum LegacyStackImporter {
         if let stackFork {
             importedStack.externalCommands = ResourceFork.externalNames(from: stackFork).sorted()
         }
+        // HyperCard derived indentation in its script editor and stored the
+        // text flat — recompute it so imported scripts read properly here.
+        reindentScripts(of: &importedStack)
         var entries: [String: Data] = ["stack.json": try importedStack.fileData()]
         for (assetName, bytes) in imported.assets { entries["assets/\(assetName)"] = bytes }
         let archive = ZipArchive.archive(entries)
@@ -218,6 +222,26 @@ enum LegacyStackImporter {
             .appendingPathExtension("contrapt")
         try archive.write(to: url)
         return url
+    }
+
+    /// Applies HyperCard-style block indentation to every script in the stack.
+    private static func reindentScripts(of stack: inout Stack) {
+        func indented(_ script: String) -> String {
+            script.isEmpty ? script : HyperTalk.reindent(script)
+        }
+        stack.script = indented(stack.script)
+        for i in stack.backgrounds.indices {
+            stack.backgrounds[i].script = indented(stack.backgrounds[i].script)
+            for j in stack.backgrounds[i].parts.indices {
+                stack.backgrounds[i].parts[j].script = indented(stack.backgrounds[i].parts[j].script)
+            }
+        }
+        for i in stack.cards.indices {
+            stack.cards[i].script = indented(stack.cards[i].script)
+            for j in stack.cards[i].parts.indices {
+                stack.cards[i].parts[j].script = indented(stack.cards[i].parts[j].script)
+            }
+        }
     }
 
     // MARK: - Raw → Contrapt part
