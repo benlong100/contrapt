@@ -523,7 +523,7 @@ final class Runtime {
             } else if let popped {
                 let effects = pendingVisualEffects
                 pendingVisualEffects = []
-                try hostCall(line: statement.line) { try host.goToCard(.id(popped), effects: effects) }
+                try await hostCall(line: statement.line) { try await self.host.goToCard(.id(popped), effects: effects) }
             }
             return .normal
 
@@ -932,7 +932,7 @@ final class Runtime {
         // The go consumes any queued visual effects, whether or not it succeeds.
         let effects = pendingVisualEffects
         pendingVisualEffects = []
-        try hostCall(line: line) { try host.goToCard(destination, effects: effects) }
+        try await hostCall(line: line) { try await self.host.goToCard(destination, effects: effects) }
     }
 
     private func executeRepeat(_ kind: RepeatKind, _ body: [Stmt], line: Int) async throws -> Flow {
@@ -1488,6 +1488,14 @@ final class Runtime {
     private func hostCall<T>(line: Int, _ body: () throws -> T) throws -> T {
         do {
             return try body()
+        } catch let error as HostError {
+            throw ScriptError(line: line, message: error.message)
+        }
+    }
+
+    private func hostCall<T>(line: Int, _ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
         } catch let error as HostError {
             throw ScriptError(line: line, message: error.message)
         }

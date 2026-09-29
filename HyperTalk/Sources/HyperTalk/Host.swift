@@ -172,8 +172,10 @@ public enum HyperTalkObject: Sendable, Equatable {
 /// the sandbox).
 public protocol HyperTalkHost: AnyObject {
     /// `go` to another card, optionally playing the effects queued by
-    /// `visual effect` since the last `go` (empty for a plain cut).
-    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws
+    /// `visual effect` since the last `go` (empty for a plain cut). Async so
+    /// a host can hold the script while the effect plays — HyperCard scripts
+    /// resume only after the new card is on screen.
+    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) async throws
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
     /// optionally restricted to the card or background layer. `onCard` names a
     /// different card the field lives on (`field "X" of prev card`); nil means

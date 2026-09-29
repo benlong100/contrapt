@@ -59,7 +59,7 @@ final class WebHost: HyperTalkHost {
 
     // MARK: - Navigation
 
-    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws {
+    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) async throws {
         if case .home = destination { recorded.append(.goHome); return }
         if case .stack(let name, let card) = destination {
             recorded.append(.goStack(name: name, card: card.flatMap(destinationDescription)))

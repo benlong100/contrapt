@@ -203,7 +203,7 @@ final class DocumentScriptHost: HyperTalkHost {
 
     // MARK: - HyperTalkHost
 
-    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws {
+    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) async throws {
         if case .home = destination { onGoHome(); return }
         if case .stack(let name, let card) = destination { onGoStack(name, card); return }
         let count = stack.cards.count
@@ -215,6 +215,7 @@ final class DocumentScriptHost: HyperTalkHost {
                 return // nothing to go back to — harmless, as in HyperCard
             }
             onNavigate(index, effects)
+            await settle(after: effects)
             return
         }
         let target: Int
@@ -254,6 +255,17 @@ final class DocumentScriptHost: HyperTalkHost {
         VisitHistory.shared.ids.append(String(stack.cards[cardIndex].scriptID))
         // The view owns the animated transition (see ContentView.navigate).
         onNavigate(target, effects)
+        await settle(after: effects)
+    }
+
+    /// Holds the script while a transition plays, as HyperCard did. The view
+    /// swaps the card-index binding a runloop tick into the animation, so the
+    /// pause is also what lets a chained `go next cd` compute from the card
+    /// actually showing — five dissolves in a repeat loop land on five
+    /// successive cards instead of collapsing into one step.
+    private func settle(after effects: [ScreenEffect]) async {
+        guard let effect = effects.first else { return }
+        try? await Task.sleep(for: .seconds(effect.duration + 0.05))
     }
 
     func count(_ countable: Countable) throws -> Int {

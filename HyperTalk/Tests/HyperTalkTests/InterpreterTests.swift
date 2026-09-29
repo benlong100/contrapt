@@ -20,7 +20,7 @@ final class MockHost: HyperTalkHost {
     /// The effects passed with each `go`, in order.
     var goEffects: [[ScreenEffect]] = []
 
-    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) throws {
+    func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) async throws {
         destinations.append(destination)
         goEffects.append(effects)
     }
