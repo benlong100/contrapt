@@ -51,8 +51,8 @@ enum WobaBitmap {
             ? decode(Array(block[maskStart..<maskStart + maskLen]), top: mTop, left: mLeft, bottom: mBottom, right: mRight)
             : nil
         return renderPNG(image: image, imageX: iLeft & ~31, imageY: iTop,
-                         imageRect: (top: iTop, left: iLeft, bottom: iBottom, right: iRight),
                          mask: mask, maskX: mLeft & ~31, maskY: mTop,
+                         maskRect: (top: mTop, left: mLeft, bottom: mBottom, right: mRight),
                          cardWidth: cardWidth, cardHeight: cardHeight)
     }
 
@@ -141,13 +141,16 @@ enum WobaBitmap {
         return Plane(buffer: buf, rowBytes: rowBytes, height: height)
     }
 
-    /// Composite the image/mask planes into a card-sized RGBA PNG. A pixel is
-    /// opaque where the mask is set (or, with no mask, anywhere in the image
-    /// rect); opaque pixels are black where the image bit is set, white
-    /// otherwise; everything else is transparent.
+    /// Composite the image/mask planes into a card-sized RGBA PNG, using
+    /// WOBA's mask convention: a decoded mask plane marks the opaque region;
+    /// no mask data but a non-empty mask RECT means that whole rectangle is
+    /// opaque; both empty means the image is its own mask — only its black
+    /// pixels paint, and all white is transparent (how the Tour's card
+    /// layers add line art over the background's drawing). Black image
+    /// pixels are always opaque; opaque non-black pixels are white.
     private static func renderPNG(image: Plane?, imageX: Int, imageY: Int,
-                                  imageRect: (top: Int, left: Int, bottom: Int, right: Int),
                                   mask: Plane?, maskX: Int, maskY: Int,
+                                  maskRect: (top: Int, left: Int, bottom: Int, right: Int),
                                   cardWidth: Int, cardHeight: Int) -> Data? {
         guard cardWidth > 0, cardHeight > 0 else { return nil }
         var pixels = [UInt8](repeating: 0, count: cardWidth * cardHeight * 4) // RGBA, all transparent
@@ -172,9 +175,11 @@ enum WobaBitmap {
                 let opaque: Bool
                 if mask != nil {
                     opaque = black || bit(mask, maskX, maskY, cardX, cardY)
+                } else if maskRect.bottom > maskRect.top, maskRect.right > maskRect.left {
+                    opaque = black || (cardY >= maskRect.top && cardY < maskRect.bottom
+                        && cardX >= maskRect.left && cardX < maskRect.right)
                 } else {
-                    opaque = cardY >= imageRect.top && cardY < imageRect.bottom
-                        && cardX >= imageRect.left && cardX < imageRect.right
+                    opaque = black
                 }
                 guard opaque else { continue }
                 let value: UInt8 = black ? 0 : 255
