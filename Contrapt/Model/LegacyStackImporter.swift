@@ -315,17 +315,18 @@ enum LegacyStackImporter {
     /// against text the originals hard-wrapped:
     /// - Sans (Geneva, Chicago, Helvetica…): SF renders wider than the
     ///   bitmaps — 0.85 matches Home/DateBook line breaks.
-    /// - Serifs (Palatino, New York…): the wide classic serif bitmaps beat
-    ///   New York (SwiftUI .serif) — the Tour's Palatino-18 lines that fill
-    ///   a 476px field measure ~341px at 0.85×18 but need ~19pt to reach
-    ///   HyperCard's break points, so ≈ 1.05.
+    /// - Serifs (Palatino, New York…): rendered as real Palatino (see
+    ///   TextFormat.font / FieldClickHitTest.platformFont), whose metrics
+    ///   match the classic bitmaps at the original point size — 1:1. (The
+    ///   system serif, New York, runs wider: at any single scale it either
+    ///   overflows prose fields or under-fills hard-wrapped ones.)
     /// - Mono (Monaco, Courier): grid metrics already match, 1:1.
     private static let classicFontMap: [Int: (design: FontDesign, scale: Double)] = [
-        2:  (.serif, 1.05),      // New York
-        14: (.serif, 1.05),      // Bookman
-        16: (.serif, 1.05),      // Palatino
-        20: (.serif, 1.05),      // Times
-        34: (.serif, 1.05),      // New Century Schoolbook
+        2:  (.serif, 1.0),       // New York
+        14: (.serif, 1.0),       // Bookman
+        16: (.serif, 1.0),       // Palatino
+        20: (.serif, 1.0),       // Times
+        34: (.serif, 1.0),       // New Century Schoolbook
         4:  (.monospaced, 1.0),  // Monaco
         22: (.monospaced, 1.0),  // Courier
     ]

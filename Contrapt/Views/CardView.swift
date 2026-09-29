@@ -665,9 +665,15 @@ extension TextAlign {
 }
 
 extension TextFormat {
-    /// The composed font (design, size, bold, italic).
+    /// The composed font (design, size, bold, italic). Serif is real
+    /// Palatino, not the system serif: imported classic stacks (New York,
+    /// Palatino, Times) depend on its QuickDraw-era widths for their line
+    /// breaks — New York runs wider and overflows their fields. Must match
+    /// FieldClickHitTest.platformFont, which lays the same text out.
     var font: Font {
-        var font = Font.system(size: size, design: fontDesign.swiftUI)
+        var font = fontDesign == .serif
+            ? Font.custom("Palatino", size: size)
+            : Font.system(size: size, design: fontDesign.swiftUI)
         if isBold { font = font.bold() }
         if isItalic { font = font.italic() }
         return font

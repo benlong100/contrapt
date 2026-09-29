@@ -254,7 +254,7 @@ extension WebsiteExporter {
       let partEls = {};
 
       function fontFamily(d) {
-        if (d === 'serif') return 'Georgia, "Times New Roman", serif';
+        if (d === 'serif') return 'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif';
         if (d === 'monospaced') return 'ui-monospace, Menlo, monospace';
         if (d === 'rounded') return '"SF Pro Rounded", system-ui, sans-serif';
         return 'system-ui, -apple-system, Helvetica, Arial, sans-serif';

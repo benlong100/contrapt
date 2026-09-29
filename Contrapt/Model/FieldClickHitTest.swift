@@ -105,6 +105,11 @@ enum FieldClickHitTest {
     /// The platform font matching how the field's SwiftUI Text renders.
     static func platformFont(for format: TextFormat) -> PlatformFont {
         let size = CGFloat(format.size)
+        // Serif is real Palatino (see TextFormat.font) — classic-stack line
+        // breaks depend on its metrics; the system serif runs wider.
+        if format.fontDesign == .serif, let palatino = palatinoFont(size: size, bold: format.isBold, italic: format.isItalic) {
+            return palatino
+        }
         let base = PlatformFont.systemFont(ofSize: size, weight: format.isBold ? .bold : .regular)
         let design: PlatformFontDescriptor.SystemDesign = switch format.fontDesign {
         case .serif: .serif
@@ -118,6 +123,31 @@ enum FieldClickHitTest {
         #else
         guard let descriptor = base.fontDescriptor.withDesign(design) else { return base }
         return NSFont(descriptor: descriptor, size: size) ?? base
+        #endif
+    }
+
+    /// Palatino with the requested traits, or nil if the family is missing
+    /// (then the system serif stands in).
+    private static func palatinoFont(size: CGFloat, bold: Bool, italic: Bool) -> PlatformFont? {
+        #if canImport(UIKit)
+        var traits: UIFontDescriptor.SymbolicTraits = []
+        if bold { traits.insert(.traitBold) }
+        if italic { traits.insert(.traitItalic) }
+        var descriptor = UIFontDescriptor(fontAttributes: [.family: "Palatino"])
+        if !traits.isEmpty, let adjusted = descriptor.withSymbolicTraits(traits) {
+            descriptor = adjusted
+        }
+        let font = UIFont(descriptor: descriptor, size: size)
+        return font.familyName.hasPrefix("Palatino") ? font : nil
+        #else
+        var traits: NSFontDescriptor.SymbolicTraits = []
+        if bold { traits.insert(.bold) }
+        if italic { traits.insert(.italic) }
+        var descriptor = NSFontDescriptor(fontAttributes: [.family: "Palatino"])
+        if !traits.isEmpty { descriptor = descriptor.withSymbolicTraits(traits) }
+        guard let font = NSFont(descriptor: descriptor, size: size),
+              font.familyName?.hasPrefix("Palatino") == true else { return nil }
+        return font
         #endif
     }
 }
