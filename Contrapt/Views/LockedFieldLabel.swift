@@ -29,6 +29,12 @@ struct LockedFieldLabel {
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = textHeight
         paragraph.maximumLineHeight = textHeight
+        // TextKit seats glyphs at the BOTTOM of a fixed line box (baseline =
+        // height - descent); QuickDraw seated them at the TOP (baseline =
+        // ascent). When the box is taller than the font's natural height,
+        // lift the text by the difference so titles sit like HyperCard's.
+        let naturalHeight = font.ascender - font.descender + font.leading
+        let baselineLift = max(0, textHeight - naturalHeight)
         paragraph.lineBreakMode = preformatted ? .byClipping : .byWordWrapping
         paragraph.alignment = switch format.align {
         case .center: .center
@@ -41,6 +47,7 @@ struct LockedFieldLabel {
             .foregroundColor: PlatformColor.labelColor,
         ]
         if format.isUnderline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        if baselineLift > 0 { attributes[.baselineOffset] = baselineLift }
         if format.isOutline {
             // HyperCard's outline style: white interiors, black stroke — how
             // the Tour draws white titles over its black paint bars.

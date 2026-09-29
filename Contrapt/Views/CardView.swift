@@ -829,7 +829,9 @@ struct PartView: View {
         // (e.g. a 17pt-tall day-number box) isn't shoved out of view.
         // Locked prose starts near the top like HyperCard; the bigger nudge is
         // only for ruled grids (Show Lines), whose rows must clear their rule.
-        let lockedNudge: CGFloat = properties.showLines ? 16 : 4
+        // Fields with an imported textHeight own their vertical grid — they
+        // get HyperCard's bare ~1px frame inset.
+        let lockedNudge: CGFloat = properties.textHeight != nil ? 1 : (properties.showLines ? 16 : 4)
         let topPadding: CGFloat = properties.lockText ? min(lockedNudge, max(2, fieldHeight * 0.2)) : min(8, max(2, fieldHeight * 0.18))
         let bottomPadding: CGFloat = properties.lockText ? 2 : min(8, max(2, fieldHeight * 0.18))
         // Pre-formatted tabular text (several short, hard-broken lines, like a
