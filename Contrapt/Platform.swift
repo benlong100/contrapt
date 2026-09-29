@@ -289,12 +289,22 @@ extension ScreenEffect {
                 identity: EffectRevealModifier(progress: 1, kind: kind)
             )
         case .wipe:
-            switch direction {
-            case .right: return .push(from: .leading)
-            case .up: return .push(from: .bottom)
-            case .down: return .push(from: .top)
-            default: return .push(from: .trailing) // left, or unspecified
-            }
+            // HyperCard's wipe is a stationary reveal, not a push: a boundary
+            // sweeps across and the incoming card's pixels appear in place
+            // (wipe left = rightmost column first) while the outgoing card
+            // holds still and yields column by column. Both cards are masked
+            // to their own side of the same moving boundary, so the effect is
+            // correct whichever one ends up on top.
+            return .asymmetric(
+                insertion: .modifier(
+                    active: WipeMaskModifier(progress: 0, direction: direction, side: .swept),
+                    identity: WipeMaskModifier(progress: 1, direction: direction, side: .swept)
+                ),
+                removal: .modifier(
+                    active: WipeMaskModifier(progress: 0, direction: direction, side: .remaining),
+                    identity: WipeMaskModifier(progress: 1, direction: direction, side: .remaining)
+                )
+            )
         case .scroll:
             switch direction {
             case .right: return .move(edge: .leading)
@@ -307,15 +317,76 @@ extension ScreenEffect {
         }
     }
 
+    /// How long this effect's animation runs. Scripts pause this long per
+    /// `go` (see DocumentScriptHost.goToCard), so chained effects play out
+    /// one after another instead of piling into a single frame.
+    var duration: Double {
+        switch speed {
+        case .verySlow: 1.3
+        case .slow: 0.9
+        case .normal: 0.5
+        case .fast: 0.28
+        case .veryFast: 0.12
+        }
+    }
+
     /// The timing curve and duration for this effect's speed.
     var animation: Animation {
-        switch speed {
-        case .verySlow: .easeInOut(duration: 1.3)
-        case .slow: .easeInOut(duration: 0.9)
-        case .normal: .easeInOut(duration: 0.5)
-        case .fast: .easeInOut(duration: 0.28)
-        case .veryFast: .easeInOut(duration: 0.12)
+        .easeInOut(duration: duration)
+    }
+}
+
+/// One side of a wipe's moving boundary. The incoming card is masked to the
+/// swept region (grows from the entry edge as progress rises 0→1); the
+/// outgoing card to the remaining region (shrinks toward the far edge as its
+/// removal progress falls 1→0). Same clock, complementary regions — a
+/// column-by-column replacement, as HyperCard drew it.
+private enum WipeSide { case swept, remaining }
+
+private struct WipeMaskModifier: ViewModifier, Animatable {
+    var progress: CGFloat
+    let direction: ScreenEffect.Direction?
+    let side: WipeSide
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.mask(WipeBandShape(progress: progress, direction: direction, side: side))
+    }
+}
+
+private struct WipeBandShape: Shape {
+    var progress: CGFloat
+    let direction: ScreenEffect.Direction?
+    let side: WipeSide
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let p = max(0, min(1, progress))
+        // The swept band grows from the entry edge; the remaining band is its
+        // complement, anchored at the opposite edge.
+        let band: CGRect
+        switch (direction ?? .left, side) {
+        case (.right, .swept):   band = CGRect(x: rect.minX, y: rect.minY, width: rect.width * p, height: rect.height)
+        case (.right, .remaining): band = CGRect(x: rect.maxX - rect.width * p, y: rect.minY, width: rect.width * p, height: rect.height)
+        case (.up, .swept):      band = CGRect(x: rect.minX, y: rect.maxY - rect.height * p, width: rect.width, height: rect.height * p)
+        case (.up, .remaining):  band = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * p)
+        case (.down, .swept):    band = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * p)
+        case (.down, .remaining): band = CGRect(x: rect.minX, y: rect.maxY - rect.height * p, width: rect.width, height: rect.height * p)
+        // Left, or unspecified: boundary sweeps right → left.
+        case (_, .swept):     band = CGRect(x: rect.maxX - rect.width * p, y: rect.minY, width: rect.width * p, height: rect.height)
+        case (_, .remaining): band = CGRect(x: rect.minX, y: rect.minY, width: rect.width * p, height: rect.height)
         }
+        var path = Path()
+        path.addRect(band)
+        return path
     }
 }
 
