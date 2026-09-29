@@ -248,12 +248,16 @@ enum LegacyStackImporter {
             // Shared-text fields are background labels (copyright, "Home"), so
             // they're locked too — static text, no editable caret in browse.
             field.lockText = raw.lockText || raw.sharedText
-            // HyperCard's per-field line height, scaled with the same width
-            // calibration as the size so line boxes track their glyphs. This
-            // is how the Tour packs 12 lines of 18pt Palatino into 250px.
-            if raw.textHeight > 0 {
-                let mapping = Self.classicFontMap[raw.fontID] ?? (.standard, proportionalFontScale)
-                field.textHeight = Double(raw.textHeight) * mapping.scale
+            // HyperCard's per-field line height — an absolute pixel grid
+            // against an absolute frame, so it imports UNSCALED (scaling it
+            // overflows exactly-full fields: the Tour packs 12 lines into
+            // 250px at textHeight 20; 12 x 21 wouldn't fit). The glyphs run
+            // slightly tight in their boxes, which is precisely the look.
+            // Implausibly small values (a run of 2s appears in the Tour's own
+            // data) are junk or unset markers, not a 2px line grid — ignore
+            // them and keep the natural line height.
+            if raw.textHeight >= 8 {
+                field.textHeight = Double(raw.textHeight)
             }
             kind = .field(field)
         }

@@ -860,6 +860,10 @@ struct PartView: View {
                             preformatted: preformatted,
                             highlightRange: highlightRange
                         )
+                        // Ideal height, so a last line that only partially
+                        // fits still draws (the part frame clips it) rather
+                        // than the label dropping it whole.
+                        .fixedSize(horizontal: preformatted, vertical: true)
                     } else {
                         Text(highlightedText(properties.text))
                             .font(properties.format.font)
