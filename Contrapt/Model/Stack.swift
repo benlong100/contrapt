@@ -352,12 +352,15 @@ nonisolated struct TextFormat: Hashable {
     var isBold = false
     var isItalic = false
     var isUnderline = false
+    /// HyperCard's outline text style: white glyph interiors with a black
+    /// stroke — the classic trick for white titles over black paint bars.
+    var isOutline = false
     var align: TextAlign = .left
 }
 
 extension TextFormat: Codable {
     private enum CodingKeys: String, CodingKey {
-        case fontDesign, size, isBold, isItalic, isUnderline, align
+        case fontDesign, size, isBold, isItalic, isUnderline, isOutline, align
     }
 
     init(from decoder: Decoder) throws {
@@ -367,6 +370,7 @@ extension TextFormat: Codable {
         isBold = try container.decodeIfPresent(Bool.self, forKey: .isBold) ?? false
         isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
         isUnderline = try container.decodeIfPresent(Bool.self, forKey: .isUnderline) ?? false
+        isOutline = try container.decodeIfPresent(Bool.self, forKey: .isOutline) ?? false
         align = try container.decodeIfPresent(TextAlign.self, forKey: .align) ?? .left
     }
 }

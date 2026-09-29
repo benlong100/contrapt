@@ -41,6 +41,13 @@ struct LockedFieldLabel {
             .foregroundColor: PlatformColor.labelColor,
         ]
         if format.isUnderline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        if format.isOutline {
+            // HyperCard's outline style: white interiors, black stroke — how
+            // the Tour draws white titles over its black paint bars.
+            attributes[.foregroundColor] = PlatformColor.white
+            attributes[.strokeColor] = PlatformColor.black
+            attributes[.strokeWidth] = -2.5
+        }
         let attributed = NSMutableAttributedString(string: text, attributes: attributes)
         if let range = highlightRange {
             // Clamp character offsets into the string and invert the span.

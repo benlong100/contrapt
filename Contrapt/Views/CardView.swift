@@ -997,6 +997,11 @@ struct PartView: View {
                     Text(properties.title)
                         .font(properties.format.font)
                         .underline(properties.format.isUnderline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        // Imported bitmap-icon buttons label in black, as in
+                        // 1-bit HyperCard; SF-symbol buttons keep the tint.
+                        .foregroundStyle(properties.iconAsset != nil ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

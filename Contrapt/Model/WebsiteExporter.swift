@@ -266,6 +266,7 @@ extension WebsiteExporter {
         el.style.fontWeight = fmt.isBold ? 'bold' : 'normal';
         el.style.fontStyle = fmt.isItalic ? 'italic' : 'normal';
         if (fmt.isUnderline) el.style.textDecoration = 'underline';
+        if (fmt.isOutline) { el.style.color = '#fff'; el.style.webkitTextStroke = '1px #000'; }
         el.style.justifyContent = el.style.textAlign =
           fmt.align === 'center' ? 'center' : fmt.align === 'right' ? 'right' : 'left';
       }

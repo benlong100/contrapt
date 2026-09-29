@@ -310,7 +310,9 @@ enum LegacyStackImporter {
     /// imported text matches the original rather than Contrapt's defaults.
     private static func textFormat(from raw: RawPart) -> TextFormat {
         var format = TextFormat()
-        if raw.textSize > 0 { format.size = Double(min(max(raw.textSize, 6), 96)) }
+        // HyperCard's default text size (textSize 0 = "use default") was 12 —
+        // icon-button names like Topics/Next depend on it to fit their tiles.
+        format.size = raw.textSize > 0 ? Double(min(max(raw.textSize, 6), 96)) : 12
         format.align = raw.textAlign == 1 ? .center : (raw.textAlign < 0 ? .right : .left)
         // Classic Mac font ids → family + width calibration; anything
         // unlisted is a sans (Geneva, Chicago, Helvetica, Avant Garde…).
@@ -320,6 +322,9 @@ enum LegacyStackImporter {
         format.isBold = raw.textStyleBits & 0x01 != 0
         format.isItalic = raw.textStyleBits & 0x02 != 0
         format.isUnderline = raw.textStyleBits & 0x04 != 0
+        // Outline (and shadow, which reads similarly at 1-bit): white glyph
+        // interiors — the Tour's white titles over black paint bars.
+        format.isOutline = raw.textStyleBits & 0x08 != 0 || raw.textStyleBits & 0x10 != 0
         return format
     }
 }
