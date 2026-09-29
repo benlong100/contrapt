@@ -23,11 +23,15 @@ enum FieldClickHitTest {
     /// the field's inner text box). `wraps` is false for preformatted text
     /// (the field renders it unwrapped and clips, so the layout must too).
     static func hit(in text: String, at location: CGPoint, textWidth: CGFloat,
-                    format: TextFormat, wraps: Bool) -> (line: Int, text: String) {
+                    format: TextFormat, wraps: Bool, textHeight: Double? = nil) -> (line: Int, text: String) {
         guard !text.isEmpty else { return (1, "") }
 
         let font = platformFont(for: format)
         let paragraph = NSMutableParagraphStyle()
+        if let textHeight {
+            paragraph.minimumLineHeight = textHeight
+            paragraph.maximumLineHeight = textHeight
+        }
         paragraph.alignment = switch format.align {
         case .center: .center
         case .right: .right
@@ -99,7 +103,7 @@ enum FieldClickHitTest {
     }
 
     /// The platform font matching how the field's SwiftUI Text renders.
-    private static func platformFont(for format: TextFormat) -> PlatformFont {
+    static func platformFont(for format: TextFormat) -> PlatformFont {
         let size = CGFloat(format.size)
         let base = PlatformFont.systemFont(ofSize: size, weight: format.isBold ? .bold : .regular)
         let design: PlatformFontDescriptor.SystemDesign = switch format.fontDesign {

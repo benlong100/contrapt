@@ -410,6 +410,10 @@ nonisolated struct FieldPart: Hashable {
     var wideMargins: Bool
     /// The field's border/background style.
     var style: FieldStyle
+    /// Imported HyperCard line height in points (nil = the font's natural
+    /// height). Lets tightly-set stacks (the Tour packs 12 lines of 18pt
+    /// Palatino into 250px at textHeight 20) keep their vertical layout.
+    var textHeight: Double?
 
     init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain, lockText: Bool = false, showLines: Bool = false, wideMargins: Bool = false, style: FieldStyle = .rectangle) {
         self.text = text
@@ -427,7 +431,7 @@ nonisolated struct FieldPart: Hashable {
 /// Manual Codable so older manifests without the newer fields still decode.
 extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
-        case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins, style
+        case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins, style, textHeight
     }
 
     init(from decoder: Decoder) throws {
@@ -441,6 +445,7 @@ extension FieldPart: Codable {
         showLines = try container.decodeIfPresent(Bool.self, forKey: .showLines) ?? false
         wideMargins = try container.decodeIfPresent(Bool.self, forKey: .wideMargins) ?? false
         style = try container.decodeIfPresent(FieldStyle.self, forKey: .style) ?? .rectangle
+        textHeight = try container.decodeIfPresent(Double.self, forKey: .textHeight)
     }
 }
 

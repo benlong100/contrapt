@@ -248,6 +248,13 @@ enum LegacyStackImporter {
             // Shared-text fields are background labels (copyright, "Home"), so
             // they're locked too — static text, no editable caret in browse.
             field.lockText = raw.lockText || raw.sharedText
+            // HyperCard's per-field line height, scaled with the same width
+            // calibration as the size so line boxes track their glyphs. This
+            // is how the Tour packs 12 lines of 18pt Palatino into 250px.
+            if raw.textHeight > 0 {
+                let mapping = Self.classicFontMap[raw.fontID] ?? (.standard, proportionalFontScale)
+                field.textHeight = Double(raw.textHeight) * mapping.scale
+            }
             kind = .field(field)
         }
         var part = Part(id: UUID(), name: raw.name, frame: frame,
@@ -345,6 +352,8 @@ private extension LegacyStackImporter {
         var fontID: Int
         var textSize: Int
         var textStyleBits: Int
+        /// Field line height in pixels (HyperCard's textHeight; 0 = default).
+        var textHeight: Int
         /// HyperCard button style (low nibble of the style byte) → Contrapt.
         var buttonStyle: ButtonStyleKind {
             switch styleByte {
@@ -679,7 +688,8 @@ private extension LegacyStackImporter {
                            iconID: i16(o + 0x12),
                            visible: (d[o + 5] & 0x80) == 0,
                            textAlign: i16(o + 0x14), fontID: i16(o + 0x16),
-                           textSize: i16(o + 0x18), textStyleBits: Int(d[o + 0x1A]))
+                           textSize: i16(o + 0x18), textStyleBits: Int(d[o + 0x1A]),
+                           textHeight: i16(o + 0x1C))
         }
 
         // MARK: string helpers

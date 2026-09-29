@@ -846,17 +846,32 @@ struct PartView: View {
             if properties.lockText {
                 // Locked text is display-only and dispatches presses like a
                 // label, so a field can drive a script. It renders ALL its
-                // text (no tail-truncation "…"); overflow is clipped by the
-                // field's clipShape, as a HyperCard field clips silently.
-                Text(highlightedText(properties.text))
-                    .font(properties.format.font)
-                    .underline(properties.format.isUnderline)
-                    .multilineTextAlignment(properties.format.align.swiftUI)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: preformatted, vertical: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
-                    .contentShape(Rectangle())
-                    .gesture(lockedFieldPressGesture(properties, preformatted: preformatted))
+                // text (no tail-truncation "…"); overflow clips at the part
+                // frame, as a HyperCard field clips silently. Imported fields
+                // with a HyperCard textHeight render at that exact line
+                // height (SwiftUI Text can't shrink line boxes), keeping
+                // tightly-set stacks' vertical layout.
+                Group {
+                    if let exactLineHeight = properties.textHeight {
+                        LockedFieldLabel(
+                            text: properties.text,
+                            format: properties.format,
+                            textHeight: exactLineHeight,
+                            preformatted: preformatted,
+                            highlightRange: highlightRange
+                        )
+                    } else {
+                        Text(highlightedText(properties.text))
+                            .font(properties.format.font)
+                            .underline(properties.format.isUnderline)
+                            .multilineTextAlignment(properties.format.align.swiftUI)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: preformatted, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
+                .contentShape(Rectangle())
+                .gesture(lockedFieldPressGesture(properties, preformatted: preformatted))
             } else if effectivelyMultiline {
                 TextEditor(text: fieldText)
                     .focused($fieldFocused)
@@ -1031,7 +1046,8 @@ struct PartView: View {
                     at: value.location,
                     textWidth: part.frame.width - margin * 2,
                     format: properties.format,
-                    wraps: !preformatted
+                    wraps: !preformatted,
+                    textHeight: properties.textHeight
                 )
                 ClickRecord.shared.recordPending(line: hit.line, text: hit.text)
                 onTap()

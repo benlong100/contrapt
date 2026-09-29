@@ -286,6 +286,9 @@ extension WebsiteExporter {
           const f = p.field || {};
           d.className += ' field ' + (f.style || 'rectangle');
           styleText(d, f.format);
+          // Imported HyperCard per-field line height — how tightly-set
+          // stacks (the Tour) keep their vertical layout.
+          if (f.textHeight) d.style.lineHeight = f.textHeight + 'px';
           d.textContent = f.text || '';
           // Unlocked plain fields become editable once the engine is live.
           if (f.kind !== 'rich' && !f.lockText) d.dataset.editable = '1';
