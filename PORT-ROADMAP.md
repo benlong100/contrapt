@@ -28,6 +28,18 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
 4. **Script error line numbers** — reported lines drift from the editor's
    (likely `¬` continuation counting). Makes every other debugging loop
    cheaper; fix first for leverage.
+4b. **XCMD/XFCN native shims** — the #1 beta-tester request. Full support
+   (executing 68K code resources) is explicitly OUT OF SCOPE: it means
+   emulating the 68K ISA plus the Toolbox ABI the XCMDs call back into.
+   Instead: a shim registry — calls to a recorded external name route through
+   the host (`callExternal(name, params)`); registered names run native Swift,
+   unregistered keep today's no-op. Pick the list with data, not folklore:
+   (a) scan the corpus stacks' resource forks for XCMD/XFCN names, rank by
+   frequency; (b) have RuntimeAudit log externals hit at runtime. Expected
+   first shims: pop-up menu (Pop/HPopUpMenu — returns the chosen item),
+   Flash, FileName/FileExists/NewFileName (panels), SpeakText (AVSpeech),
+   sound players (alias to our engine), maybe AddColor (visual, Color Tools).
+   Each shim is small; the registry + ranking scan is the real deliverable.
 5. **Per-chunk `set the textStyle/textFont/textSize of <chunk> of field`** —
    read side done; write side doesn't parse. StyleRun split/merge exists for
    import, needs script plumbing (both hosts). Backlog has the design.
