@@ -1,0 +1,63 @@
+# Contrapt → Complete HyperCard Port: Gap Roadmap
+
+Status inventory (2026-10-07), from the code's own no-op/absent-object records,
+the backlog, and the oracle work (`Scripts/ORACLE.md`). Statuses:
+**done** (oracle/test-verified where possible) · **partial** · **no-op**
+(accepted & ignored, invisible to scripts) · **missing** (errors or absent).
+
+## Language core — DONE
+Handlers/functions/messages & path (+Home library, `start using`), control
+flow, chunks (read/write/delete, oracle-verified), containers, globals/`it`,
+operators & precedence (oracle-verified), numberFormat semantics, 1904-epoch
+dates & convert, sort (containers + cards), find (word modes), select,
+mark/unmark, lock/unlock screen, visual effects, play (incl. bare notes),
+ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
+
+## Priority 1 — real scripts break or silently misbehave without these
+1. **`the scroll of field`** — get stubbed 0 / set no-op; scrolling fields are
+   everywhere (The Hacker Crackdown scrolls its body per page). Needs model
+   (per-part scroll offset) + CardView/RichText plumbing + web parity.
+2. **File I/O: `open file` / `read from file` / `write to file` / `close file`**
+   — missing entirely; utility stacks im/export data with it. Sandbox-safe
+   design: map classic paths to user-granted folders (the oracle probe itself
+   is the test case!).
+3. **Custom menus** — all menu verbs no-op; games build File/game menus
+   (Adventures of Sean 2). Needs session menu model + in-window menu strip
+   (stacks hide the menubar) + `doMenu` routing + read-side properties.
+   Scoped in backlog.
+4. **Script error line numbers** — reported lines drift from the editor's
+   (likely `¬` continuation counting). Makes every other debugging loop
+   cheaper; fix first for leverage.
+5. **Per-chunk `set the textStyle/textFont/textSize of <chunk> of field`** —
+   read side done; write side doesn't parse. StyleRun split/merge exists for
+   import, needs script plumbing (both hosts). Backlog has the design.
+6. **Runtime icon re-resolution** — `set the icon of btn to N` round-trips the
+   id but can't change the glyph (icon library isn't loaded at runtime).
+   Animation/toggle buttons look static.
+
+## Priority 2 — fidelity & authoring depth
+7. Background fields as true shared parts (today: per-card copies; property
+   edits don't propagate, counts lie). Architectural; backlog notes.
+8. Scripted painting (`choose <paint> tool` + `drag`/`click` drawing, paint
+   globals currently ignored). PaintEditor exists; wire the tool verbs to it.
+9. `picture`/`show card picture` layer control beyond the no-op; `the
+   showPict` is modeled, per-layer hide/show of paint isn't rendered.
+10. Icon import breadth: `cicn`/`ICN#`, Home-stack icon search path.
+11. Web-player parity batch: `enabled` graying, missing-icon fallback,
+    card-window viewport, scroll of field (once native lands).
+12. Printing (`print card/field`, `open/close report printing`) — decide
+    no-op-with-dialog vs real PDF printing.
+13. `type`/`drag` as real input synthesis in browse mode (now no-ops).
+
+## Priority 3 — long tail / environment
+14. Palettes & external windows (`palette`, tool/pattern windows, `the
+    windows`), `answer file` on iOS, AppleEvents beyond no-op, XCMD shims for
+    common ones (flash, speak?), debugger/`trace`, `dial`, serial. Deliberate
+    divergences stay (documented in ORACLE.md): permissive comparisons,
+    container-sort superset, HC 2.3 quirks.
+
+## Method
+Work top-down; for each feature: implement → unit tests → add oracle corpus
+lines where the guest can exercise it (file I/O and menus partially can) →
+real-stack smoke test → commit. The oracle keeps semantics honest; this list
+keeps coverage honest.
