@@ -147,6 +147,54 @@ import HyperTalk
 }
 
 @MainActor
+@Test func hideCardPictureBlanksThePaintLayer() async throws {
+    // Adventures of Sean covers its title art with an all-black CARD paint
+    // layer and lifts it with `hide picture of card 1`. The property must be
+    // real: hide → showPicture false (CardView skips the layer), show → true,
+    // reads via `the showPict`.
+    var stack = Stack.makeNew()
+    var index = 0
+    var shown: [String] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { shown.append($0) },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("probePict", along: [ScriptLayer(name: "t", source: """
+    on probePict
+      hide picture of this card
+      put the showPict of this card into a
+      show picture of this card
+      hide background picture
+      put a & "|" & the showPict of this card & "|" & the showPict of this background
+    end probePict
+    """, object: .thisCard)] + layers, host: host)
+    #expect(shown.last == "false|true|false")
+    #expect(stack.cards[0].showPicture == true)
+    #expect(stack.backgrounds[0].showPicture == false)
+}
+
+@MainActor
+@Test func dumpSeanPaint() async throws {
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
+    guard let path = classicStackFiles(under: root).first else { return }
+    let imported = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path))
+    let stack = imported.stack
+    let card0 = stack.cards[0]
+    let bg = stack.backgrounds.first { $0.id == card0.backgroundID }
+    print("SEANPAINT card0 paint=\(card0.paintImageAsset ?? "nil") bgPaint=\(bg?.paintImageAsset ?? "nil") cardSize=\(stack.cardSize) parts=\(card0.parts.count)")
+    for (name, data) in imported.assets where name == card0.paintImageAsset || name == bg?.paintImageAsset {
+        let out = NSTemporaryDirectory() + "sean-\(name)"
+        try data.write(to: URL(fileURLWithPath: out))
+        print("SEANPAINT wrote \(out) bytes=\(data.count)")
+    }
+}
+
+@MainActor
 @Test func seanOpenStackBuildsCustomMenus() async throws {
     // Adventures of Sean 2's openStack runs setUpMenus (`create menu "File"`,
     // `put "About…,Quit" into menu …`). Running the REAL stack's openStack
@@ -167,9 +215,14 @@ import HyperTalk
     )
     let layers = try #require(host.scriptLayers(for: .thisCard))
     try? await HyperTalk.send("openStack", along: layers, host: host)
+    try? await HyperTalk.send("openCard", along: layers, host: host)
     print("SEAN-MENUS: \(menus.map { "\($0.name)[\($0.items.count)]" }.joined(separator: " "))")
     #expect(!menus.isEmpty)
     #expect(menus.contains { !$0.items.isEmpty })
+    // The title card's all-black CARD paint curtain must be lifted by the
+    // stack's own scripts (`hide picture of card 1`), revealing the bg art.
+    print("SEAN-PICT: card0.showPicture=\(stack.cards[0].showPicture)")
+    #expect(stack.cards[0].showPicture == false)
 }
 
 @MainActor

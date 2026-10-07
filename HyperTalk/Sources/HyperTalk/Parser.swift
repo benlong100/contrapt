@@ -1461,6 +1461,35 @@ struct Parser {
     /// break. `show <object> at <loc>` accepts and ignores the location.
     private mutating func parseShowHide(visible: Bool, line: Int) throws -> Stmt {
         _ = consumeWord("the")
+        // The paint layer: `show/hide [card|bkgnd] picture`, `hide picture of
+        // card 1`, `show picture of this card` — a real property write
+        // (Adventures of Sean toggles card pictures for its dark rooms).
+        if let w = peekIdentifier(), w == "picture" || w == "pict" {
+            advance()
+            let object: ObjectExpr
+            if consumeWord("of") || consumeWord("in") {
+                object = try parseObjectExpr()
+            } else {
+                object = .thisCard
+            }
+            try expectNewline()
+            return Stmt(kind: .set(property: "showpict", object: object,
+                                   value: .stringLiteral(visible ? "true" : "false")), line: line)
+        }
+        if let w = peekIdentifier(),
+           Self.cardWords.contains(w) || Self.backgroundWords.contains(w),
+           let next = peekIdentifier(1), next == "picture" || next == "pict" {
+            let isBackground = Self.backgroundWords.contains(w)
+            advance(); advance()
+            // `hide bg picture of card 3` — an explicit owner.
+            var object: ObjectExpr = isBackground ? .thisBackground : .thisCard
+            if consumeWord("of") || consumeWord("in") {
+                object = try parseObjectExpr()
+            }
+            try expectNewline()
+            return Stmt(kind: .set(property: isBackground ? "showbgpict" : "showpict", object: object,
+                                   value: .stringLiteral(visible ? "true" : "false")), line: line)
+        }
         // Ignorable targets.
         let ignorable = ["menubar", "menu", "titlebar", "message", "msg", "tool",
                          "pattern", "patterns", "picture", "pict", "background",

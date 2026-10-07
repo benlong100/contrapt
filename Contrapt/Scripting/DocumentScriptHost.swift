@@ -1474,6 +1474,7 @@ final class DocumentScriptHost: HyperTalkHost {
             case "name": return background.name
             case "longname": return "bkgnd \"\(background.name)\""
             case "longid": return "bkgnd id \(background.scriptID)"
+            case "showpict", "showbgpict": return background.showPicture ? "true" : "false"
             case "id": return String(background.scriptID)
             case "number":
                 // The background's 1-based position among the stack's
@@ -1529,6 +1530,8 @@ final class DocumentScriptHost: HyperTalkHost {
             case "name": stackBinding.wrappedValue.backgrounds[index].name = value
             case "cantdelete": stackBinding.wrappedValue.backgrounds[index].cantDelete = try boolean(value, for: property)
             case "dontsearch": stackBinding.wrappedValue.backgrounds[index].dontSearch = try boolean(value, for: property)
+            case "showpict", "showbgpict":
+                stackBinding.wrappedValue.backgrounds[index].showPicture = try boolean(value, for: property)
             default: throw Self.noSuchProperty(property, of: "this background")
             }
         case .thisStack:
@@ -1974,9 +1977,13 @@ final class DocumentScriptHost: HyperTalkHost {
         case "marked": return card.isMarked ? "true" : "false"
         case "cantdelete": return card.cantDelete ? "true" : "false"
         case "dontsearch": return card.dontSearch ? "true" : "false"
-        // The card picture is always shown (Contrapt doesn't model hiding the
-        // paint layer); `showPict` reads true and setting it is a no-op.
-        case "showpict": return "true"
+        case "showpict": return card.showPicture ? "true" : "false"
+        case "showbgpict":
+            // The showPict of this card's BACKGROUND (`hide bg picture of cd 3`).
+            if let bg = stack.backgrounds.first(where: { $0.id == card.backgroundID }) {
+                return bg.showPicture ? "true" : "false"
+            }
+            return "true"
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }
@@ -1997,7 +2004,12 @@ final class DocumentScriptHost: HyperTalkHost {
         case "highlightcolor":
             // Empty clears it back to the app accent.
             stackBinding.wrappedValue.cards[index].highlightColor = value.isEmpty ? nil : value
-        case "showpict": break // the paint layer is always shown — no-op
+        case "showpict": stackBinding.wrappedValue.cards[index].showPicture = try flag()
+        case "showbgpict":
+            let bgID = stack.cards[index].backgroundID
+            if let bgIndex = stack.backgrounds.firstIndex(where: { $0.id == bgID }) {
+                stackBinding.wrappedValue.backgrounds[bgIndex].showPicture = try flag()
+            }
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }

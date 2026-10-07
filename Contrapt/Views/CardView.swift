@@ -81,12 +81,18 @@ struct CardView: View {
             if includeBackground {
                 cardSurface
                 if let backgroundIndex {
-                    paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset)
+                    // `hide background picture` blanks the paint layer only.
+                    if stack.backgrounds[backgroundIndex].showPicture {
+                        paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset)
+                    }
                     partViews(for: $stack.backgrounds[backgroundIndex].parts)
                 }
             }
             if includeCard {
-                paintLayer(assetName: stack.cards[cardIndex].paintImageAsset)
+                // `hide [card] picture` — the dark-room/curtain idiom.
+                if stack.cards[cardIndex].showPicture {
+                    paintLayer(assetName: stack.cards[cardIndex].paintImageAsset)
+                }
                 partViews(for: $stack.cards[cardIndex].parts)
                 guideLines
             }

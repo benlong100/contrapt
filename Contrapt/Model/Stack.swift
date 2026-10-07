@@ -163,12 +163,14 @@ nonisolated struct Background: Identifiable, Hashable {
     /// HyperCard's Background Info checkboxes, also script properties.
     var cantDelete: Bool = false
     var dontSearch: Bool = false
+    /// `show/hide background picture` — whether the paint layer draws.
+    var showPicture: Bool = true
 }
 
 extension Background: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, script, parts, paintDrawingAsset, paintImageAsset, scriptID
-        case cantDelete, dontSearch
+        case cantDelete, dontSearch, showPicture
     }
 
     init(from decoder: Decoder) throws {
@@ -182,6 +184,7 @@ extension Background: Codable {
         scriptID = try container.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
         cantDelete = try container.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try container.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
+        showPicture = try container.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
     }
 }
 
@@ -206,12 +209,16 @@ nonisolated struct Card: Identifiable, Hashable {
     /// text on this card. A color name or #RRGGBB hex; nil follows the app
     /// accent. Scriptable as `the highlightColor of this card`.
     var highlightColor: String? = nil
+    /// `show/hide [card] picture` — whether the card's paint layer draws
+    /// (Adventures of Sean hides an all-black card layer over its title art,
+    /// and toggles pictures for dark rooms).
+    var showPicture: Bool = true
 }
 
 extension Card: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, backgroundID, script, parts, paintDrawingAsset, paintImageAsset, scriptID
-        case isMarked, cantDelete, dontSearch, highlightColor
+        case isMarked, cantDelete, dontSearch, highlightColor, showPicture
     }
 
     init(from decoder: Decoder) throws {
@@ -228,6 +235,7 @@ extension Card: Codable {
         cantDelete = try container.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try container.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
         highlightColor = try container.decodeIfPresent(String.self, forKey: .highlightColor)
+        showPicture = try container.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
     }
 }
 
