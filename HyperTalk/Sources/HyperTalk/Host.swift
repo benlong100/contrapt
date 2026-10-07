@@ -14,6 +14,37 @@ public enum ClockField: Sendable, Equatable {
     case seconds, ticks
 }
 
+/// One item of a scripted custom menu (`create menu` / `put … into menu`).
+public struct HyperTalkMenuItem: Sendable, Equatable {
+    public var name: String
+    public var enabled: Bool
+    public var checkMark: Bool
+    /// Sent instead of `doMenu <name>` when the item is chosen, if nonempty.
+    public var menuMessage: String
+
+    public init(name: String, enabled: Bool = true, checkMark: Bool = false, menuMessage: String = "") {
+        self.name = name
+        self.enabled = enabled
+        self.checkMark = checkMark
+        self.menuMessage = menuMessage
+    }
+}
+
+/// A scripted custom menu. The host stores the menu bar (it outlives any one
+/// handler dispatch) and renders it; the interpreter owns the semantics of
+/// the menu verbs and mutates the bar through the snapshot/update pair.
+public struct HyperTalkMenu: Sendable, Equatable {
+    public var name: String
+    public var enabled: Bool
+    public var items: [HyperTalkMenuItem]
+
+    public init(name: String, enabled: Bool = true, items: [HyperTalkMenuItem] = []) {
+        self.name = name
+        self.enabled = enabled
+        self.items = items
+    }
+}
+
 /// Where `write … to file` lands: the file's current mark (a fresh open
 /// writes from the top), the end (`at eof`/`at end` appends), or an absolute
 /// 1-based character position (`at 100`).
@@ -236,6 +267,11 @@ public protocol HyperTalkHost: AnyObject {
     /// (`visible` false, everything else empty); the setter defaults to no-op.
     func windowProperty(_ property: String, window: String) -> String?
     func setWindowProperty(_ property: String, window: String, to value: String) throws
+    /// The scripted menu bar (`create menu`, `put … into menu`, …). The host
+    /// STORES it (menus outlive a dispatch) and renders it; the interpreter
+    /// reads the snapshot, applies a verb, and writes the result back.
+    func menuBarSnapshot() -> [HyperTalkMenu]
+    func updateMenuBar(_ menus: [HyperTalkMenu])
     /// A native shim for an XCMD/XFCN the stack recorded at import. Return
     /// the external's value (functions) / its `the result` text (commands,
     /// empty = success) — or nil when the host has no shim, which keeps the
@@ -455,6 +491,10 @@ public extension HyperTalkHost {
     /// Hosts without window objects fall back to the absent-object defaults.
     func windowProperty(_ property: String, window: String) -> String? { nil }
     func setWindowProperty(_ property: String, window: String, to value: String) throws {}
+
+    /// Hosts without a menu bar: verbs no-op, reads see no menus.
+    func menuBarSnapshot() -> [HyperTalkMenu] { [] }
+    func updateMenuBar(_ menus: [HyperTalkMenu]) {}
 
     /// Hosts without native XCMD/XFCN shims leave externals as no-ops.
     func callExternal(_ name: String, arguments: [String]) async throws -> String? { nil }

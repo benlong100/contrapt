@@ -213,6 +213,44 @@ final class Runtime {
     /// The value of the last `return`, read by `the result`.
     private var lastResult = ""
 
+    // MARK: - Custom menus
+
+    private func menuIndex(named name: String, in menus: [HyperTalkMenu]) -> Int? {
+        menus.firstIndex { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    private func menuItemIndex(_ selector: MenuItemSelector, in menu: HyperTalkMenu, line: Int) async throws -> Int? {
+        switch selector {
+        case .expr(let expression):
+            let value = try await evaluate(expression, line: line)
+            if let n = Int(value) { return (1...menu.items.count).contains(n) ? n - 1 : nil }
+            return menu.items.firstIndex { $0.name.caseInsensitiveCompare(value) == .orderedSame }
+        case .ordinal(let ordinal):
+            guard !menu.items.isEmpty else { return nil }
+            switch ordinal {
+            case .last: return menu.items.count - 1
+            case .middle: return menu.items.count / 2
+            default: return 0
+            }
+        }
+    }
+
+    /// Splits a `put … into menu` item list: one item per line, or commas
+    /// when it's a single line (both classic forms).
+    private func menuItems(from list: String, messages: String?) -> [HyperTalkMenuItem] {
+        let names = list.contains("\n") ? list.components(separatedBy: "\n")
+                                         : list.components(separatedBy: ",")
+        let messageList = messages.map {
+            $0.contains("\n") ? $0.components(separatedBy: "\n") : $0.components(separatedBy: ",")
+        } ?? []
+        return names.enumerated().compactMap { index, raw in
+            let name = raw.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return nil }
+            let message = index < messageList.count ? messageList[index].trimmingCharacters(in: .whitespaces) : ""
+            return HyperTalkMenuItem(name: name, menuMessage: message)
+        }
+    }
+
     /// Runs a file-I/O host call; HyperCard reports file failures via
     /// `the result` (scripts probe it) rather than aborting the handler.
     private func fileCall(_ body: () throws -> Void) {
@@ -636,10 +674,35 @@ final class Runtime {
                 try host.setWindowProperty(property, window: windowName, to: value)
                 return .normal
             }
-            if case .menu = objectExpression {
-                // No menus either; `set enabled of menuItem 2 of menu "X"`
-                // (Power Tools) is a no-op. Evaluate the value, ignore it.
-                _ = try await evaluate(valueExpression, line: statement.line)
+            if case .menu(let nameExpression) = objectExpression {
+                let name = try await evaluate(nameExpression, line: statement.line)
+                let value = try await evaluate(valueExpression, line: statement.line)
+                var menus = host.menuBarSnapshot()
+                if let index = menuIndex(named: name, in: menus) {
+                    switch property {
+                    case "enabled": menus[index].enabled = (try? Value.bool(from: value, line: statement.line)) ?? true
+                    case "name": menus[index].name = value
+                    default: break // unmodeled menu properties stay ignored
+                    }
+                    host.updateMenuBar(menus)
+                }
+                return .normal
+            }
+            if case .menuItem(let selector, let menuExpression) = objectExpression {
+                let name = try await evaluate(menuExpression, line: statement.line)
+                let value = try await evaluate(valueExpression, line: statement.line)
+                var menus = host.menuBarSnapshot()
+                if let menuIdx = menuIndex(named: name, in: menus),
+                   let itemIdx = try await menuItemIndex(selector, in: menus[menuIdx], line: statement.line) {
+                    switch property {
+                    case "enabled": menus[menuIdx].items[itemIdx].enabled = (try? Value.bool(from: value, line: statement.line)) ?? true
+                    case "checkmark": menus[menuIdx].items[itemIdx].checkMark = (try? Value.bool(from: value, line: statement.line)) ?? false
+                    case "menumessage", "menumsg": menus[menuIdx].items[itemIdx].menuMessage = value
+                    case "name": menus[menuIdx].items[itemIdx].name = value
+                    default: break
+                    }
+                    host.updateMenuBar(menus)
+                }
                 return .normal
             }
             // Stack properties Contrapt doesn't model (`set cantAbort of this
@@ -764,6 +827,55 @@ final class Runtime {
                 try host.setTextRunProperty(property, ofField: resolved.reference,
                                             domain: resolved.domain, range: resolved.range, to: value)
             }
+            return .normal
+
+        case .menuCommand(let command):
+            var menus = host.menuBarSnapshot()
+            switch command {
+            case .createMenu(let nameExpression):
+                let name = try await evaluate(nameExpression, line: statement.line)
+                if menuIndex(named: name, in: menus) == nil {
+                    menus.append(HyperTalkMenu(name: name))
+                }
+            case .deleteMenu(let nameExpression):
+                let name = try await evaluate(nameExpression, line: statement.line)
+                if let index = menuIndex(named: name, in: menus) { menus.remove(at: index) }
+            case .deleteMenuItem(let selector, let menuExpression):
+                let name = try await evaluate(menuExpression, line: statement.line)
+                if let menuIdx = menuIndex(named: name, in: menus),
+                   let itemIdx = try await menuItemIndex(selector, in: menus[menuIdx], line: statement.line) {
+                    menus[menuIdx].items.remove(at: itemIdx)
+                }
+            case .putIntoMenu(let menuExpression, let itemsExpression, let mode, let messagesExpression):
+                let name = try await evaluate(menuExpression, line: statement.line)
+                let list = try await evaluate(itemsExpression, line: statement.line)
+                let messages: String? = if let messagesExpression {
+                    try await evaluate(messagesExpression, line: statement.line)
+                } else { nil }
+                let incoming = menuItems(from: list, messages: messages)
+                let menuIdx: Int
+                if let existing = menuIndex(named: name, in: menus) { menuIdx = existing }
+                else { menus.append(HyperTalkMenu(name: name)); menuIdx = menus.count - 1 }
+                switch mode {
+                case .into: menus[menuIdx].items = incoming
+                case .after: menus[menuIdx].items.append(contentsOf: incoming)
+                case .before: menus[menuIdx].items.insert(contentsOf: incoming, at: 0)
+                }
+            case .setEnabled(let menuExpression, let selector, let enabled):
+                let name = try await evaluate(menuExpression, line: statement.line)
+                if let menuIdx = menuIndex(named: name, in: menus) {
+                    if let selector {
+                        if let itemIdx = try await menuItemIndex(selector, in: menus[menuIdx], line: statement.line) {
+                            menus[menuIdx].items[itemIdx].enabled = enabled
+                        }
+                    } else {
+                        menus[menuIdx].enabled = enabled
+                    }
+                }
+            case .resetMenuBar:
+                menus = []
+            }
+            host.updateMenuBar(menus)
             return .normal
 
         case .openFile(let pathExpression):
@@ -941,6 +1053,19 @@ final class Runtime {
             // none does (or it passes), perform the built-in menu action.
             let trapped = try await send("doMenu", arguments: [item], fromLayer: currentLayerIndex, line: statement.line)
             if !trapped {
+                // A custom menu item with a menuMessage sends that message
+                // instead of the built-in action (the `put … into menu … with
+                // menuMessages …` idiom).
+                for menu in host.menuBarSnapshot() {
+                    if let found = menu.items.first(where: { $0.name.caseInsensitiveCompare(item) == .orderedSame }),
+                       !found.menuMessage.isEmpty {
+                        let (command, rawArguments) = Self.splitMessage(found.menuMessage)
+                        if !command.isEmpty {
+                            _ = try await send(command, arguments: rawArguments, fromLayer: currentLayerIndex, line: statement.line)
+                        }
+                        return .normal
+                    }
+                }
                 try hostCall(line: statement.line) { try host.performMenu(item) }
             }
             return .normal
@@ -1549,10 +1674,37 @@ final class Runtime {
                 if let value = host.windowProperty(property, window: windowName) { return value }
                 return property == "visible" ? "false" : ""
             }
-            if case .menu = objectExpression {
-                // Menus (and menuItems) aren't modeled — their `text` (the
-                // item list) and every other property read empty.
-                return property == "visible" ? "false" : ""
+            if case .menu(let nameExpression) = objectExpression {
+                let name = try await evaluate(nameExpression, line: line)
+                let menus = host.menuBarSnapshot()
+                guard let index = menuIndex(named: name, in: menus) else {
+                    return property == "visible" ? "false" : ""
+                }
+                let menu = menus[index]
+                switch property {
+                case "text", "": return menu.items.map(\.name).joined(separator: "\n")
+                case "name", "short name": return menu.name
+                case "enabled": return menu.enabled ? "true" : "false"
+                case "visible": return "true"
+                default: return ""
+                }
+            }
+            if case .menuItem(let selector, let menuExpression) = objectExpression {
+                let name = try await evaluate(menuExpression, line: line)
+                let menus = host.menuBarSnapshot()
+                guard let menuIdx = menuIndex(named: name, in: menus),
+                      let itemIdx = try await menuItemIndex(selector, in: menus[menuIdx], line: line) else {
+                    return property == "visible" ? "false" : ""
+                }
+                let item = menus[menuIdx].items[itemIdx]
+                switch property {
+                case "name", "short name", "text", "": return item.name
+                case "enabled": return item.enabled ? "true" : "false"
+                case "checkmark": return item.checkMark ? "true" : "false"
+                case "menumessage", "menumsg": return item.menuMessage
+                case "visible": return "true"
+                default: return ""
+                }
             }
             if case .stackNamed(let nameExpression) = objectExpression {
                 // Contrapt doesn't model other stacks as property-bearing
@@ -1603,6 +1755,15 @@ final class Runtime {
                 return builtin
             }
             return try await callFunction(name, arguments: arguments, line: line)
+
+        case .menuCount:
+            return String(host.menuBarSnapshot().count)
+
+        case .menuItemCount(let nameExpression):
+            let name = try await evaluate(nameExpression, line: line)
+            let menus = host.menuBarSnapshot()
+            guard let index = menuIndex(named: name, in: menus) else { return "0" }
+            return String(menus[index].items.count)
 
         case .result:
             return lastResult
@@ -1712,10 +1873,18 @@ final class Runtime {
             return (negated ? !matches : matches) ? "true" : "false"
 
         case .exists(let objectExpression, let negated):
-            if case .menu = objectExpression {
-                // Contrapt has no HyperCard menus, so `there is a menu …` is
-                // always false (and `there is not a menu …` always true).
-                return negated ? "true" : "false"
+            if case .menu(let nameExpression) = objectExpression {
+                let name = try await evaluate(nameExpression, line: line)
+                let exists = menuIndex(named: name, in: host.menuBarSnapshot()) != nil
+                return (negated ? !exists : exists) ? "true" : "false"
+            }
+            if case .menuItem(let selector, let menuExpression) = objectExpression {
+                let name = try await evaluate(menuExpression, line: line)
+                let menus = host.menuBarSnapshot()
+                var exists = false
+                if let menuIdx = menuIndex(named: name, in: menus),
+                   let _ = try await menuItemIndex(selector, in: menus[menuIdx], line: line) { exists = true }
+                return (negated ? !exists : exists) ? "true" : "false"
             }
             if case .window = objectExpression {
                 // Contrapt has no window objects, so `there is a window …` is
@@ -2050,10 +2219,10 @@ final class Runtime {
             // The object the current message was dispatched to — layer 0 for a
             // clicked part, the send target for `send <msg> to <object>`.
             return try layerObject(at: frames.last?.targetLayerIndex ?? 0, keyword: "the target", line: line)
-        case .menu:
-            // Reached only if a menu is used somewhere other than `there is a
-            // menu …` (which short-circuits) — Contrapt has no menus.
-            throw ScriptError(line: line, message: "Contrapt doesn't have HyperCard menus.")
+        case .menu, .menuItem:
+            // Menus are interpreter/host state, not message-path objects —
+            // property reads/sets and existence short-circuit before this.
+            throw ScriptError(line: line, message: "A menu can't be used as a message target.")
         case .messageBox:
             // Reached only if the message box is used somewhere other than a
             // property get/set (both short-circuit) — Contrapt doesn't model it.

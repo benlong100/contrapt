@@ -234,6 +234,12 @@ final class MockHost: HyperTalkHost {
     var answerFilePrompts: [String] = []
     var answerFileTypes: [String?] = []
 
+    // Scripted custom menus (the host stores the bar; semantics live in the
+    // interpreter).
+    var menus: [HyperTalkMenu] = []
+    func menuBarSnapshot() -> [HyperTalkMenu] { menus }
+    func updateMenuBar(_ menus: [HyperTalkMenu]) { self.menus = menus }
+
     // In-memory file system for `open/read/write/close file` tests.
     var diskFiles: [String: String] = [:]
     var openFiles: [String: Int] = [:] // path -> read/write mark

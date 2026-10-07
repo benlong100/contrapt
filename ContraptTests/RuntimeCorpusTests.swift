@@ -147,6 +147,32 @@ import HyperTalk
 }
 
 @MainActor
+@Test func seanOpenStackBuildsCustomMenus() async throws {
+    // Adventures of Sean 2's openStack runs setUpMenus (`create menu "File"`,
+    // `put "About…,Quit" into menu …`). Running the REAL stack's openStack
+    // must populate the scripted menu bar the strip renders.
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
+    guard let path = classicStackFiles(under: root).first else { return }
+    var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
+    var index = 0
+    var menus: [HyperTalkMenu] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i },
+        menuBar: Binding(get: { menus }, set: { menus = $0 })
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try? await HyperTalk.send("openStack", along: layers, host: host)
+    print("SEAN-MENUS: \(menus.map { "\($0.name)[\($0.items.count)]" }.joined(separator: " "))")
+    #expect(!menus.isEmpty)
+    #expect(menus.contains { !$0.items.isEmpty })
+}
+
+@MainActor
 @Test func perChunkTextStyleWritesSplitAndMergeRuns() async throws {
     // `set the textStyle of word 2 of card field 1 to bold` — the write side
     // of styled text. Reads confirm the span (bold), its neighbors (plain),

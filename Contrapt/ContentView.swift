@@ -126,6 +126,10 @@ struct ContentView: View {
     @State private var runningScriptCount = 0
     /// The visual effect for the current scripted card transition, if any.
     @State private var cardTransition: ScreenEffect?
+    /// The stack's scripted custom menus (`create menu` / `put … into menu`),
+    /// rendered as an in-window strip (game stacks hide the real menubar).
+    /// Session state, reset whenever a stack opens in this window.
+    @State private var stackMenus: [HyperTalkMenu] = []
     /// `set the rect of card window` viewport — the classic big-card-small-
     /// window crop (the Hacker Crackdown trims its card's blank right/bottom
     /// margins this way). nil = show the whole card. Runtime-only state; a
@@ -196,6 +200,65 @@ struct ContentView: View {
     }
 
     private var cardStage: some View {
+        VStack(spacing: 0) {
+            // The scripted custom-menu strip (`create menu` / `put … into
+            // menu`). In-window because game stacks hide the real menubar;
+            // an item click runs `doMenu "<item>"` so handlers can trap it
+            // and menuMessages route, exactly like a real menu choice.
+            if !stackMenus.isEmpty, !isEditing {
+                customMenuStrip
+            }
+            cardStageBody
+        }
+    }
+
+    /// One SwiftUI Menu per scripted menu; separators and disabled items honor
+    /// the script's state.
+    private var customMenuStrip: some View {
+        HStack(spacing: 14) {
+            ForEach(stackMenus, id: \.name) { menu in
+                Menu(menu.name) {
+                    ForEach(Array(menu.items.enumerated()), id: \.offset) { _, item in
+                        if item.name == "-" {
+                            Divider()
+                        } else {
+                            Button {
+                                performCustomMenuItem(item.name)
+                            } label: {
+                                if item.checkMark { Label(item.name, systemImage: "checkmark") }
+                                else { Text(item.name) }
+                            }
+                            .disabled(!item.enabled)
+                        }
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(!menu.enabled)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(.bar)
+    }
+
+    /// Runs the clicked item as a `doMenu` statement in the current card's
+    /// context — trapping handlers and menuMessages behave as in HyperCard.
+    private func performCustomMenuItem(_ itemName: String) {
+        let host = makeHost()
+        let path = scriptPath(cardAt: cardIndex, part: nil)
+        let quoted = itemName.replacingOccurrences(of: "\"", with: "")
+        Task { @MainActor in
+            do {
+                _ = try await HyperTalk.execute(messageLine: "doMenu \"\(quoted)\"", along: path, host: host)
+            } catch {
+                scriptErrorText = error.localizedDescription
+            }
+        }
+    }
+
+    private var cardStageBody: some View {
         Group {
             if document.stack.cards.isEmpty {
                 ContentUnavailableView("No Cards", systemImage: "rectangle.on.rectangle.slash")
@@ -939,7 +1002,9 @@ struct ContentView: View {
             // `play` reads its imported sound (WAV) bytes from the document.
             assetData: { document.assets[$0] },
             // `set the rect of card window` — the big-card-small-window crop.
-            cardWindowViewport: $cardWindowViewport
+            cardWindowViewport: $cardWindowViewport,
+            // `create menu` … — the scripted menu bar strip.
+            menuBar: $stackMenus
         )
     }
 
@@ -1048,9 +1113,10 @@ struct ContentView: View {
     /// the second; this runs both inside one guarded task.)
     private func sendOpenSequence(toCardAt index: Int) {
         guard !isEditing, !isSendingSystemMessage else { return }
-        // A stale viewport from the previous stack mustn't crop the new one;
-        // its openStack re-establishes a crop if the stack wants one.
+        // Stale per-stack session state mustn't leak into the next stack; its
+        // openStack re-establishes what it wants (crop, custom menus).
         cardWindowViewport = nil
+        stackMenus = []
         isSendingSystemMessage = true
         let host = makeHost()
         let path = scriptPath(cardAt: index, part: nil)

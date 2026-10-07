@@ -19,6 +19,22 @@ struct Handler {
     let line: Int
 }
 
+/// The scripted-menu statements (see StmtKind.menuCommand).
+enum MenuCommand {
+    case createMenu(Expr)
+    case deleteMenu(Expr)
+    case deleteMenuItem(MenuItemSelector, menu: Expr)
+    case putIntoMenu(menu: Expr, items: Expr, mode: PutMode, messages: Expr?)
+    case setEnabled(menu: Expr, item: MenuItemSelector?, enabled: Bool)
+    case resetMenuBar
+}
+
+/// How a menu item is addressed: by name/number expression or an ordinal.
+enum MenuItemSelector {
+    case expr(Expr)
+    case ordinal(Ordinal)
+}
+
 struct Stmt {
     let kind: StmtKind
     let line: Int
@@ -87,6 +103,10 @@ indirect enum StmtKind {
     /// `delete <chunk> of <container>` — removes the chunk and its
     /// delimiter (delete item 2 of "a,b,c" is "a,c"). Always a `.chunk`.
     case deleteChunk(Container)
+    /// Custom menus: `create menu X`, `delete menu X`, `delete menuItem I of
+    /// menu X`, `put <items> into menu X [with menuMessages <msgs>]`,
+    /// `enable/disable menu X / menuItem I of menu X`, `reset menubar`.
+    case menuCommand(MenuCommand)
     /// File I/O — `open file f`, `read from file f until d / for n`,
     /// `write x to file f [at eof/N]`, `close file f`. Failures report via
     /// `the result` (not script errors), as in HyperCard. `read` fills `it`.
@@ -291,6 +311,10 @@ indirect enum RepeatKind {
 }
 
 indirect enum Expr {
+    /// `the number of menus` / `the number of menuItems of menu <name>` —
+    /// counted against the host's scripted menu bar.
+    case menuCount
+    case menuItemCount(Expr)
     case stringLiteral(String)
     case numberLiteral(Double)
     /// Bare identifier: a variable — or, if never assigned, its own name
@@ -391,6 +415,9 @@ indirect enum ObjectExpr {
     /// doesn't model. Parses so `there is a menu …` (false) and `delete menu …`
     /// (no-op) don't break old stacks that manage their own menus.
     case menu(Expr)
+    /// `menuItem <sel> of menu <name>` — a custom menu's item, for property
+    /// reads/sets (name, enabled, checkMark, menuMessage).
+    case menuItem(MenuItemSelector, menu: Expr)
     /// `the message box` / `msg` / `message window` — HyperCard's message box.
     /// Contrapt shows it via `put` with no destination but doesn't model its
     /// `visible` property, so `visible of msg box` reads false and setting it

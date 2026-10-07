@@ -619,6 +619,22 @@ struct Parser {
             do {
                 let saved = self
                 advance()
+                if consumeWord("menu") {
+                    let name = try parsePrimary()
+                    try expectNewline()
+                    return Stmt(kind: .menuCommand(.deleteMenu(name)), line: line)
+                }
+                if let w = peekIdentifier(),
+                   w == "menuitem" || ((Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil) && peekIdentifier(1) == "menuitem") {
+                    let selector = try parseMenuItemSelector()
+                    if consumeWord("of") || consumeWord("from") || consumeWord("in"), consumeWord("menu") {
+                        let name = try parsePrimary()
+                        try expectNewline()
+                        return Stmt(kind: .menuCommand(.deleteMenuItem(selector, menu: name)), line: line)
+                    }
+                    self = saved
+                    advance()
+                }
                 if let container = try? parseContainer(line: line),
                    case .chunk = container,
                    current.kind == .newline || current.kind == .endOfScript {
@@ -646,12 +662,21 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
         case "drag", "type", "reset", "dial", "create":
-            // Automation Contrapt doesn't model: `drag from a to b`, `type
-            // "…"`, `reset paint`. Also `dial <number> [with modem/tones]`,
-            // which needs telephony hardware, and `create menu "X"` / `create
-            // stack …` (Contrapt models neither custom menus nor runtime stack
-            // creation). Accepted and ignored so these scripts don't error.
+            // `create menu "X"` and `reset menubar` are REAL (custom menus);
+            // the rest is automation Contrapt doesn't model — `drag`, `type`,
+            // `reset paint`, `dial` (telephony), `create stack` — accepted
+            // and ignored so these scripts don't error.
+            let verb = word
             advance()
+            if verb == "create", consumeWord("menu") {
+                let name = try parsePrimary()
+                try expectNewline()
+                return Stmt(kind: .menuCommand(.createMenu(name)), line: line)
+            }
+            if verb == "reset", consumeWord("menubar") {
+                try expectNewline()
+                return Stmt(kind: .menuCommand(.resetMenuBar), line: line)
+            }
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
@@ -662,7 +687,25 @@ struct Parser {
             let enabled = word == "enable"
             advance()
             _ = consumeWord("the")
-            if let w = peekIdentifier(), w == "menu" || w == "menubar" || w == "menuitem" {
+            if peekIdentifier() == "menu" {
+                advance()
+                let name = try parsePrimary()
+                try expectNewline()
+                return Stmt(kind: .menuCommand(.setEnabled(menu: name, item: nil, enabled: enabled)), line: line)
+            }
+            if let w = peekIdentifier(),
+               w == "menuitem" || ((Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil) && peekIdentifier(1) == "menuitem") {
+                let selector = try parseMenuItemSelector()
+                guard consumeWord("of") || consumeWord("in"), consumeWord("menu") else {
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                    try expectNewline()
+                    return Stmt(kind: .noOp, line: line)
+                }
+                let name = try parsePrimary()
+                try expectNewline()
+                return Stmt(kind: .menuCommand(.setEnabled(menu: name, item: selector, enabled: enabled)), line: line)
+            }
+            if peekIdentifier() == "menubar" {
                 while current.kind != .newline, current.kind != .endOfScript { advance() }
                 try expectNewline()
                 return Stmt(kind: .noOp, line: line)
@@ -933,12 +976,24 @@ struct Parser {
             return Stmt(kind: .put(value, .into, nil), line: line)
         }
 
-        // `put … into menu "X" [with menuMsgs …]` / `put … into last menuItem
-        // of menu 3 with menuMsg …` populates a HyperCard menu or menu item,
-        // which Contrapt doesn't model — accept and ignore the whole line.
+        // `put … into menu "X" [with menuMessages …]` populates a custom
+        // menu. (`put … into <sel> menuItem of menu N` renames one item.)
+        if peekIdentifier() == "menu" {
+            advance()
+            let menuName = try parsePrimary()
+            var messages: Expr? = nil
+            if consumeWord("with") {
+                _ = consumeWord("menumessages"); _ = consumeWord("menumessage"); _ = consumeWord("menumsgs"); _ = consumeWord("menumsg")
+                messages = try parseExpression()
+            }
+            try expectNewline()
+            return Stmt(kind: .menuCommand(.putIntoMenu(menu: menuName, items: value, mode: mode ?? .into, messages: messages)), line: line)
+        }
         if let w = peekIdentifier(),
-           w == "menu" || w == "menuitem" || w == "menubar"
+           w == "menuitem" || w == "menubar"
            || ((Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil) && peekIdentifier(1) == "menuitem") {
+            // Renaming one item / writing the menu bar — accept and ignore
+            // (rare forms; `set the name of menuItem …` is the modeled path).
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
@@ -947,6 +1002,26 @@ struct Parser {
         let container = try parseContainer(line: line)
         try expectNewline()
         return Stmt(kind: .put(value, mode, container), line: line)
+    }
+
+    /// `[the] <ordinal>|<expr> menuItem` selector for menu-item addressing.
+    private mutating func parseMenuItemSelector() throws -> MenuItemSelector {
+        _ = consumeWord("the")
+        if let w = peekIdentifier(), let n = Self.ordinals[w] {
+            // Exact ordinals (`first`…`tenth`) resolve to their number.
+            advance()
+            _ = consumeWord("menuitem")
+            return .expr(.numberLiteral(Double(n)))
+        }
+        if let w = peekIdentifier(), let ordinal = Self.ordinalKeyword(w) {
+            // Positional ordinals (last/middle/any).
+            advance()
+            _ = consumeWord("menuitem")
+            return .ordinal(ordinal)
+        }
+        _ = consumeWord("menuitem")
+        let value = try parsePrimary()
+        return .expr(value)
     }
 
     /// A put destination: a chunk of a container (`word 2 of field "X"`),
@@ -2084,15 +2159,20 @@ struct Parser {
         }
 
         // A leading ordinal before `menuItem` — `last menuItem of menu 3`,
-        // `first menuItem of menu "File"`. Menus aren't modeled, so these
-        // resolve to an absent menu object (property reads empty, existence
-        // false), like the bare `menuItem …` form in the menu branch below.
+        // `first menuItem of menu "File"` — a custom menu's item object.
         if let w = peekIdentifier(), Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil,
            peekIdentifier(1) == "menuitem" {
+            let selector: MenuItemSelector
+            if let n = Self.ordinals[w] { selector = .expr(.numberLiteral(Double(n))) }
+            else { selector = .ordinal(Self.ordinalKeyword(w) ?? .last) }
             advance() // ordinal
             advance() // menuitem
-            if case .number = current.kind { advance() }
-            if consumeWord("of") || consumeWord("in") { _ = consumeWord("menu"); _ = try? parsePrimary() }
+            if consumeWord("of") || consumeWord("in") {
+                _ = consumeWord("menu")
+                if let menuName = try? parsePrimary() {
+                    return .menuItem(selector, menu: menuName)
+                }
+            }
             return .menu(.stringLiteral(""))
         }
         // A leading ordinal: `last cd btn`, `first card`, `middle field`,
@@ -2186,18 +2266,20 @@ struct Parser {
             _ = consumeWord("box") || consumeWord("window")
             return .messageBox
         }
-        // Menus aren't modeled in Contrapt; `menu "X"`, `menuItem N of menu
-        // "X"`, and `menuBar` still parse so old stacks that test for or delete
-        // their own menus don't break. They resolve to an absent object.
+        // Custom menus: `menu "X"` (the menu object), `menuItem <sel> of menu
+        // "X"` (an item), `menuBar` (absent — the bar itself isn't an object).
         if let w = peekIdentifier(), w == "menu" || w == "menuitem" || w == "menubar" {
             advance()
             if w == "menubar" { return .menu(.stringLiteral("")) }
             _ = consumeWord("id")
             let name: Expr = (current.kind == .newline || current.kind == .endOfScript)
                 ? .stringLiteral("") : try parsePrimary()
-            // `menuItem N of menu "X"` / `menuItem N in menu "X"` — consume and
-            // ignore the owning menu (`there is a menuItem 6 in menu X`).
-            if consumeWord("of") || consumeWord("in") { _ = consumeWord("menu"); _ = try? parsePrimary() }
+            if w == "menuitem", consumeWord("of") || consumeWord("in") {
+                _ = consumeWord("menu")
+                if let menuName = try? parsePrimary() {
+                    return .menuItem(.expr(name), menu: menuName)
+                }
+            }
             return .menu(name)
         }
         // A parenthesized expression builds the object's descriptor inline —
@@ -2438,13 +2520,13 @@ struct Parser {
     private mutating func parseUnmodeledCount() -> Expr? {
         let saved = index
         let noun = peekIdentifier()
-        if noun == "menus" { advance(); return .numberLiteral(0) }
+        if noun == "menus" { advance(); return .menuCount }
         guard noun == "menuitems" || noun == "menuitem" else { return nil }
         advance()
-        // The owning menu: `of menu "File"` — consumed and ignored.
+        // The owning menu: `of menu "File"`.
         if consumeWord("of") || consumeWord("in") {
             guard consumeWord("menu") else { index = saved; return nil }
-            _ = try? parsePrimary()
+            if let name = try? parsePrimary() { return .menuItemCount(name) }
         }
         return .numberLiteral(0)
     }

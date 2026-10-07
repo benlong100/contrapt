@@ -196,7 +196,8 @@ final class DocumentScriptHost: HyperTalkHost {
         onGoStack: @escaping (String, GoDestination?) -> Void = { _, _ in },
         onCardMenu: @escaping (String) -> Void = { _ in },
         assetData: @escaping (String) -> Data? = { _ in nil },
-        cardWindowViewport: Binding<CGSize?> = .constant(nil)
+        cardWindowViewport: Binding<CGSize?> = .constant(nil),
+        menuBar: Binding<[HyperTalkMenu]> = .constant([])
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
@@ -213,7 +214,15 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onCardMenu = onCardMenu
         self.assetData = assetData
         self.cardWindowViewport = cardWindowViewport
+        self.menuBar = menuBar
     }
+
+    /// The scripted menu bar (`create menu` …) — stored in the document view's
+    /// state so it outlives this transient host and renders as a strip.
+    private let menuBar: Binding<[HyperTalkMenu]>
+
+    func menuBarSnapshot() -> [HyperTalkMenu] { menuBar.wrappedValue }
+    func updateMenuBar(_ menus: [HyperTalkMenu]) { menuBar.wrappedValue = menus }
 
     /// The card-window viewport (nil = show the whole card). A stack that
     /// "resizes" its card window (`set the rect of card window to …`) really
