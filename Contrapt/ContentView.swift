@@ -126,6 +126,9 @@ struct ContentView: View {
     @State private var runningScriptCount = 0
     /// The visual effect for the current scripted card transition, if any.
     @State private var cardTransition: ScreenEffect?
+    /// Stops the idle loop after an idle handler errors (else the error
+    /// dialog would re-fire every tick); navigation re-arms it.
+    @State private var idleSuspended = false
     /// The stack's scripted custom menus (`create menu` / `put … into menu`),
     /// rendered as an in-window strip (game stacks hide the real menubar).
     /// Session state, reset whenever a stack opens in this window.
@@ -487,6 +490,7 @@ struct ContentView: View {
             // A cross-stack swap drives its own openStack+openCard in order;
             // don't double-fire openCard for the index change it causes.
             if suppressNextOpenCard { suppressNextOpenCard = false; return }
+            idleSuspended = false // a new card re-arms the idle loop
             sendCloseThenOpenCard(from: oldIndex, to: newIndex)
         }
         #if os(macOS)
@@ -510,6 +514,29 @@ struct ContentView: View {
             window.setFrame(frame, display: true, animate: false)
         }
         #endif
+        // HyperCard's `idle` message: sent repeatedly while nothing else runs
+        // (alarm buzzers, cursor resets, the nocheat optionKey trap). Paused
+        // in edit mode, while any handler/dialog is active, and after an idle
+        // error (navigation re-arms).
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard !isEditing, !isSendingSystemMessage, runningScriptCount == 0,
+                      scriptDialog == nil, !idleSuspended,
+                      !document.stack.cards.isEmpty else { continue }
+                let host = makeHost()
+                let path = scriptPath(cardAt: cardIndex, part: nil)
+                isSendingSystemMessage = true
+                do {
+                    try await HyperTalk.send("idle", along: path, host: host)
+                } catch {
+                    // One report, then stop idling until the next navigation.
+                    idleSuspended = true
+                    scriptErrorText = error.localizedDescription
+                }
+                isSendingSystemMessage = false
+            }
+        }
         .task {
             // Remember this stack so other stacks' `go stack "<name>"` can
             // find it later.

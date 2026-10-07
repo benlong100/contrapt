@@ -92,3 +92,17 @@ import Testing
     """, handler: "p")
     #expect(host.messages.last == "3c")
 }
+
+@Test func theMenusListsNamesAndModifiersReadUp() async throws {
+    // `the menus` is the return-separated name list; modifier keys read
+    // through the host ("up" on a host without a keyboard).
+    let host = try await run("""
+    on p
+      create menu "A"
+      create menu "B"
+      put the number of lines in (the menus) & "|" & line 2 of the menus ¬
+        & "|" & the optionKey & the shiftKey & the commandKey
+    end p
+    """, handler: "p")
+    #expect(host.messages.last == "2|B|upupup")
+}

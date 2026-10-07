@@ -267,6 +267,9 @@ public protocol HyperTalkHost: AnyObject {
     /// (`visible` false, everything else empty); the setter defaults to no-op.
     func windowProperty(_ property: String, window: String) -> String?
     func setWindowProperty(_ property: String, window: String, to value: String) throws
+    /// `the optionKey` / `shiftKey` / `commandKey` / `controlKey` — "down"
+    /// or "up". The nocheat/easter-egg idiom (`if the optionKey is down`).
+    func modifierKey(_ name: String) -> String
     /// The scripted menu bar (`create menu`, `put … into menu`, …). The host
     /// STORES it (menus outlive a dispatch) and renders it; the interpreter
     /// reads the snapshot, applies a verb, and writes the result back.
@@ -491,6 +494,9 @@ public extension HyperTalkHost {
     /// Hosts without window objects fall back to the absent-object defaults.
     func windowProperty(_ property: String, window: String) -> String? { nil }
     func setWindowProperty(_ property: String, window: String, to value: String) throws {}
+
+    /// Hosts without a keyboard read every modifier as up.
+    func modifierKey(_ name: String) -> String { "up" }
 
     /// Hosts without a menu bar: verbs no-op, reads see no menus.
     func menuBarSnapshot() -> [HyperTalkMenu] { [] }

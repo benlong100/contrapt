@@ -926,6 +926,22 @@ final class DocumentScriptHost: HyperTalkHost {
         stack.externalCommands.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
 
+    func modifierKey(_ name: String) -> String {
+        #if canImport(AppKit)
+        let flags = NSEvent.modifierFlags
+        let down = switch name {
+        case "optionkey": flags.contains(.option)
+        case "shiftkey": flags.contains(.shift)
+        case "commandkey", "cmdkey": flags.contains(.command)
+        case "controlkey": flags.contains(.control)
+        default: false
+        }
+        return down ? "down" : "up"
+        #else
+        return "up"
+        #endif
+    }
+
     func beep() {
         Beeper.shared.beep()
     }

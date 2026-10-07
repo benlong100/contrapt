@@ -1803,6 +1803,10 @@ final class Runtime {
                 // `the mouse`, for `repeat until the sound is done` loops.
                 await host.wait(seconds: 1.0 / 60.0)
                 return host.playingSoundName()
+            case "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey":
+                return host.modifierKey(property)
+            case "menus":
+                return host.menuBarSnapshot().map(\.name).joined(separator: "\n")
             case "numberformat":
                 // The default format (oracle-verified, HC 2.3). Setting it is
                 // an ignorable global; the read must still answer the default.
