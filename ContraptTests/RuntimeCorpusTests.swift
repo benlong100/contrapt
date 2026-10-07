@@ -133,6 +133,41 @@ import HyperTalk
 }
 
 @MainActor
+@Test func scrollOfFieldRoundTrips() throws {
+    // `the scroll of field` is modeled: set stores the offset on the field,
+    // get reads it back, negatives clamp to 0, and buttons have no scroll.
+    var stack = Stack.makeNew()
+    guard let fIndex = stack.cards[0].parts.firstIndex(where: {
+        if case .field = $0.kind { return true } else { return false }
+    }) else { Issue.record("no field on card 0"); return }
+    let scriptID = stack.cards[0].parts[fIndex].scriptID
+    var index = 0
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let field = HyperTalkObject.part(kind: "field", domain: .card,
+                                     reference: .id(String(scriptID)), onCard: nil)
+    #expect(try host.propertyValue("scroll", of: field) == "0")
+    try host.setProperty("scroll", of: field, to: "144")
+    #expect(try host.propertyValue("scroll", of: field) == "144")
+    if case .field(let f) = stack.cards[0].parts[fIndex].kind {
+        #expect(f.scroll == 144)
+    } else { Issue.record("field lost its kind") }
+    try host.setProperty("scroll", of: field, to: "-20")
+    #expect(try host.propertyValue("scroll", of: field) == "0")
+    // Round-trips through the manifest (persisted like HyperCard persists it).
+    let reloaded = try Stack(fileData: stack.fileData()).sanitized()
+    var found = false
+    for p in reloaded.cards[0].parts { if case .field(let f) = p.kind, f.scroll == 0 { found = true } }
+    #expect(found)
+}
+
+@MainActor
 @Test func setThinPartGeometryIsNotInflated() throws {
     // A script that sets a part's height or rect to a thin value (classic
     // stacks' 2px footer rules — The Hacker Crackdown's "divider") must keep

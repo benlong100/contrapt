@@ -490,6 +490,9 @@ nonisolated struct FieldPart: Hashable {
     var autoSelect: Bool = false
     var multipleLines: Bool = false
     var fixedLineHeight: Bool = false
+    /// The scroll offset (points) of a scrolling field — HyperCard's
+    /// `the scroll of field`. Persisted like HyperCard persists it.
+    var scroll: Double = 0
     /// Per-run character styling — HyperCard's styled text (a field whose text
     /// mixes fonts/sizes/styles). Empty means the whole field uses `format`.
     /// Each run styles from its `start` (a Character offset into `text`) until
@@ -515,7 +518,7 @@ nonisolated struct FieldPart: Hashable {
 extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
         case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins, style, textHeight
-        case dontWrap, autoTab, autoSelect, multipleLines, fixedLineHeight, styleRuns
+        case dontWrap, autoTab, autoSelect, multipleLines, fixedLineHeight, styleRuns, scroll
     }
 
     init(from decoder: Decoder) throws {
@@ -536,6 +539,7 @@ extension FieldPart: Codable {
         multipleLines = try container.decodeIfPresent(Bool.self, forKey: .multipleLines) ?? false
         fixedLineHeight = try container.decodeIfPresent(Bool.self, forKey: .fixedLineHeight) ?? false
         styleRuns = try container.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
+        scroll = try container.decodeIfPresent(Double.self, forKey: .scroll) ?? 0
     }
 }
 

@@ -1439,10 +1439,9 @@ final class DocumentScriptHost: HyperTalkHost {
             // `the enabled of button X` — false after `disable`.
             return part.isEnabled ? "true" : "false"
         case "scroll":
-            // The field's scroll offset in pixels; Contrapt doesn't track it, so
-            // it reads 0 (`the scroll of field X`, Version 1.2.5 Release Notes).
-            guard case .field = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            return "0"
+            // `the scroll of field X` — the field's scroll offset in points.
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return String(Int(properties.scroll))
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -1574,10 +1573,10 @@ final class DocumentScriptHost: HyperTalkHost {
             // live on the background); per-card bg text isn't modeled, so
             // setting sharedText is accepted and ignored.
             _ = try boolean(value, for: property)
-        case "scroll", "enabled":
-            // Not modeled (a field's scroll offset; a disabled part) — accept
-            // and ignore so setup handlers run (reads give 0 / true).
-            break
+        case "scroll":
+            // `set the scroll of field X to N` — scrolls the field's text.
+            let offset = max(0, try number(value, for: property))
+            try withField(&part, kind: kind) { $0.scroll = offset }
         default:
             throw Self.noSuchProperty(property, of: kind)
         }

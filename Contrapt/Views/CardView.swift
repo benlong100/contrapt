@@ -853,6 +853,11 @@ struct PartView: View {
 
     @Environment(\.stackAssets) private var stackAssets
     @State private var isPressed = false
+    /// `the scroll of field` plumbing for a locked scrolling field: the
+    /// position the script sets, and the live offset while the user scrolls
+    /// (written back to the model when the gesture settles).
+    @State private var fieldScrollPosition = ScrollPosition()
+    @State private var liveScrollOffset: CGFloat = 0
     /// Editable-field focus, for the openField/closeField messages.
     @FocusState private var fieldFocused: Bool
     /// The field's text when it gained focus — closeField only fires when the
@@ -991,8 +996,30 @@ struct PartView: View {
                 }
                 Group {
                     if properties.style == .scrolling {
+                        // `the scroll of field`: the model's scroll offset
+                        // drives the view; a user scroll writes back when the
+                        // gesture settles (not per-tick — the stack binding
+                        // registers undo on every write).
                         ScrollView(.vertical, showsIndicators: true) {
                             lockedText.frame(maxWidth: .infinity, alignment: lockedAlignment(properties.format.align))
+                        }
+                        .scrollPosition($fieldScrollPosition)
+                        .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, offset in
+                            liveScrollOffset = offset
+                        }
+                        .onScrollPhaseChange { _, newPhase in
+                            guard newPhase == .idle,
+                                  case .field(var f) = part.kind,
+                                  abs(f.scroll - liveScrollOffset) > 0.5 else { return }
+                            f.scroll = max(0, liveScrollOffset)
+                            part.kind = .field(f)
+                        }
+                        .onAppear {
+                            if properties.scroll > 0 { fieldScrollPosition.scrollTo(y: properties.scroll) }
+                        }
+                        .onChange(of: properties.scroll) { _, newOffset in
+                            guard abs(newOffset - liveScrollOffset) > 0.5 else { return }
+                            fieldScrollPosition.scrollTo(y: newOffset)
                         }
                     } else {
                         lockedText
