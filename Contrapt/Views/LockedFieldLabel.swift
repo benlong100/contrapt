@@ -23,6 +23,11 @@ struct LockedFieldLabel {
     var preformatted: Bool
     /// A character range to show inverted (find box / script selection).
     var highlightRange: Range<Int>?
+    /// The width (points) the text must wrap at — the field's interior. Set
+    /// explicitly by the caller because a wrapping NSTextField/UILabel inside
+    /// SwiftUI otherwise picks its own ~square wrap width (the Hacker Crackdown
+    /// body field wrapped at ~⅔). nil = wrap at the proposed/intrinsic width.
+    var wrapWidth: CGFloat?
     /// Per-run styling (HyperCard styled text); empty = uniform `format`.
     var styleRuns: [StyleRun] = []
 
@@ -118,6 +123,24 @@ extension LockedFieldLabel: NSViewRepresentable {
     func updateNSView(_ label: NSTextField, context: Context) {
         label.attributedStringValue = attributedText()
         label.lineBreakMode = preformatted ? .byClipping : .byWordWrapping
+        // Wrap at the field's interior width (not AppKit's own guess).
+        label.preferredMaxLayoutWidth = (!preformatted && (wrapWidth ?? 0) > 0) ? wrapWidth! : 0
+    }
+
+    /// Wrap at the width SwiftUI proposes (the field's frame), not AppKit's own
+    /// guess. Without this a wrapping NSTextField picks an arbitrary ~square
+    /// width, so a wide prose field (The Hacker Crackdown's 572px body) wrapped
+    /// at ~⅔ width with a big right/bottom margin. When unwrapped (preformatted)
+    /// there's no proposed width, so fall back to the single-line intrinsic size.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView label: NSTextField, context: Context) -> CGSize? {
+        label.attributedStringValue = attributedText()
+        label.lineBreakMode = preformatted ? .byClipping : .byWordWrapping
+        guard !preformatted, let width = proposal.width, width > 0, width != .infinity else {
+            return nil
+        }
+        label.preferredMaxLayoutWidth = width
+        let fitting = label.sizeThatFits(NSSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: fitting.height)
     }
 }
 
@@ -140,6 +163,20 @@ extension LockedFieldLabel: UIViewRepresentable {
     func updateUIView(_ label: UILabel, context: Context) {
         label.attributedText = attributedText()
         label.lineBreakMode = preformatted ? .byClipping : .byWordWrapping
+        label.preferredMaxLayoutWidth = (!preformatted && (wrapWidth ?? 0) > 0) ? wrapWidth! : 0
+    }
+
+    /// Wrap at the width SwiftUI proposes (the field's frame), not UIKit's own
+    /// guess — see the AppKit note above.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView label: UILabel, context: Context) -> CGSize? {
+        label.attributedText = attributedText()
+        label.lineBreakMode = preformatted ? .byClipping : .byWordWrapping
+        guard !preformatted, let width = proposal.width, width > 0, width != .infinity else {
+            return nil
+        }
+        label.preferredMaxLayoutWidth = width
+        let fitting = label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: fitting.height)
     }
 }
 

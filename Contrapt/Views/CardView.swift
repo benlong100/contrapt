@@ -895,7 +895,7 @@ struct PartView: View {
                     onFollowLink: onFollowLink
                 )
             } else {
-                plainField(properties, fieldHeight: part.frame.height)
+                plainField(properties, fieldHeight: part.frame.height, fieldWidth: part.frame.width)
             }
             // (highlightRange is consumed by the locked branch of plainField)
         case .label(let properties):
@@ -928,7 +928,7 @@ struct PartView: View {
     /// text that sends mouseUp to its script. Honors Show Lines (baseline
     /// rules) and Wide Margins (extra inset).
     @ViewBuilder
-    private func plainField(_ properties: FieldPart, fieldHeight: CGFloat = 0) -> some View {
+    private func plainField(_ properties: FieldPart, fieldHeight: CGFloat = 0, fieldWidth: CGFloat = 0) -> some View {
         // Locked (display-only, e.g. imported) fields use tight HyperCard-like
         // margins so text fills the field as it did originally; editable
         // fields keep roomier insets for entry.
@@ -975,6 +975,7 @@ struct PartView: View {
                             textHeight: exactLineHeight,
                             preformatted: unwrapped,
                             highlightRange: highlightRange,
+                            wrapWidth: fieldWidth > 0 ? max(1, fieldWidth - 2 * margin) : nil,
                             styleRuns: properties.styleRuns
                         )
                         // Ideal height, so a last line that only partially
