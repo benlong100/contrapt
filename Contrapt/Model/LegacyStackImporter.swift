@@ -43,11 +43,38 @@ enum LegacyStackImporter {
         guard reader.tag(at: 0) == "STAK" else {
             throw ImportError(message: "This doesn't look like a HyperCard stack (no STAK header). If it came as a .hqx or .sit, unpack it first.")
         }
+        // Fonts the stack embeds (FOND/NFNT in its fork), resolved to a design
+        // + width calibration — by name when recognized, else by strike
+        // metrics. These extend classicFontMap for this stack's custom IDs.
+        var embeddedFonts: [Int: FontResource.Resolution] = [:]
+        if let stackFork {
+            for family in FontResource.families(from: stackFork) {
+                guard classicFontMap[family.id] == nil,
+                      let resolution = FontResource.resolve(family, proportionalScale: proportionalFontScale) else { continue }
+                embeddedFonts[family.id] = resolution
+            }
+        }
         // HyperCard 2.x block headers carry 4 extra bytes; shift the fixed
         // offsets so bitmap ids, owner-background ids, and WOBA art all read.
         reader.headerDelta = reader.formatVersion >= 9 ? 4 : 0
         let blocks = reader.walkBlocks()
-        let cardWidth = 512, cardHeight = 342 // HC 1.x screen
+        // The stack's style table (STBL): decoration id → font/style/size, for
+        // resolving fields' styled-text runs. Absent in 1.x stacks.
+        let styleTable = blocks.first { $0.type == "STBL" }.map { reader.parseStyleTable($0) } ?? [:]
+        // HyperCard 1.x cards are a fixed 512×342 (the 9" screen). HyperCard 2.x
+        // stores the card rectangle in the STAK block: height at 0x1b8, width at
+        // 0x1ba. Honor it so a resized stack (The Hacker Crackdown is 640×480)
+        // isn't squished into 512×342 — which jammed every footer part into the
+        // bottom strip and fattened a 2px rule into a bar. Guard against a
+        // misread with sane bounds; fall back to 1.x dimensions otherwise.
+        var cardWidth = 512, cardHeight = 342
+        if reader.formatVersion >= 9, data.count > 0x1bb {
+            let height = reader.u16(0x1b8), width = reader.u16(0x1ba)
+            if (64...4096).contains(width), (64...4096).contains(height) {
+                cardWidth = width
+                cardHeight = height
+            }
+        }
         var assets: [String: Data] = [:]
         let bmapByID = Dictionary(blocks.filter { $0.type == "BMAP" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         // Icons come from the HyperCard app's fork plus the stack's own
@@ -91,6 +118,11 @@ enum LegacyStackImporter {
                           cardSize: CardSize(width: Double(cardWidth), height: Double(cardHeight)),
                           script: "", backgrounds: [], cards: [])
         stack.presentAtActualSize = presentAtActualSize
+        // Record how each embedded font resolved — provenance, and the table a
+        // future user-editable font mapping would re-apply.
+        for (id, resolution) in embeddedFonts {
+            stack.fonts[String(id)] = StackFont(name: resolution.name, design: resolution.design, scale: resolution.scale)
+        }
         // The stack script (handlers like `on goAddress`) lives in the STAK
         // block. Without it, buttons that call stack-level commands fail.
         if let stakBlock = blocks.first(where: { $0.type == "STAK" }) {
@@ -114,12 +146,13 @@ enum LegacyStackImporter {
             // in the background block. Other fields become per-card copies.
             background.parts = parsed.parts.compactMap { raw -> Part? in
                 if raw.type == .button {
-                    return part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID))
+                    return part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID), fonts: embeddedFonts)
                 }
                 guard raw.sharedText else { return nil }
-                var fieldPart = part(from: raw, in: &stack)
-                if case .field(var props) = fieldPart.kind {
-                    props.text = parsed.contents[raw.id] ?? ""
+                var fieldPart = part(from: raw, in: &stack, fonts: embeddedFonts)
+                if case .field(var props) = fieldPart.kind, let content = parsed.contents[raw.id] {
+                    props.text = content.text
+                    props.styleRuns = resolveStyleRuns(raw, content: content, decorations: styleTable, baseFormat: props.format, fonts: embeddedFonts)
                     fieldPart.kind = .field(props)
                 }
                 return fieldPart
@@ -152,9 +185,10 @@ enum LegacyStackImporter {
             // Background fields, copied onto the card and filled with this
             // card's text (mapped by HyperCard part id).
             for template in templateFields {
-                var fieldPart = part(from: template, in: &stack)
-                if case .field(var props) = fieldPart.kind {
-                    props.text = parsed.contents[template.id] ?? ""
+                var fieldPart = part(from: template, in: &stack, fonts: embeddedFonts)
+                if case .field(var props) = fieldPart.kind, let content = parsed.contents[template.id] {
+                    props.text = content.text
+                    props.styleRuns = resolveStyleRuns(template, content: content, decorations: styleTable, baseFormat: props.format, fonts: embeddedFonts)
                     fieldPart.kind = .field(props)
                 }
                 card.parts.append(fieldPart)
@@ -162,9 +196,10 @@ enum LegacyStackImporter {
             // Any card-layer parts (rare in these samples) come across too,
             // with their own content.
             for raw in parsed.parts {
-                var cardPart = part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID))
-                if case .field(var props) = cardPart.kind, let text = parsed.contents[raw.id] {
-                    props.text = text
+                var cardPart = part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID), fonts: embeddedFonts)
+                if case .field(var props) = cardPart.kind, let content = parsed.contents[raw.id] {
+                    props.text = content.text
+                    props.styleRuns = resolveStyleRuns(raw, content: content, decorations: styleTable, baseFormat: props.format, fonts: embeddedFonts)
                     cardPart.kind = .field(props)
                 }
                 card.parts.append(cardPart)
@@ -180,11 +215,14 @@ enum LegacyStackImporter {
         return Imported(stack: stack.sanitized(), assets: assets)
     }
 
-    /// Imports the classic stack at `source` and writes it as a `.contrapt`
-    /// file in the temporary directory, returning that URL to open. `iconApp`,
+    /// Imports the classic stack at `source` fully into memory — structure,
+    /// parts, text, scripts, button icons, embedded sounds, recorded XCMD/XFCN
+    /// names, and reindented scripts. The same processing `importedContraptFile`
+    /// does before zipping, factored out so cross-stack navigation can swap a
+    /// classic sibling into the live document in place (no temp file). `iconApp`,
     /// if given, is a HyperCard application whose ICON resources resolve the
     /// stack's button icons (embedded per-use; nothing Apple ships in Contrapt).
-    static func importedContraptFile(from source: URL, iconApp: URL? = nil, presentAtActualSize: Bool = false) throws -> URL {
+    static func importedStack(from source: URL, iconApp: URL? = nil, presentAtActualSize: Bool = false) throws -> Imported {
         let didAccess = source.startAccessingSecurityScopedResource()
         defer { if didAccess { source.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: source)
@@ -199,16 +237,44 @@ enum LegacyStackImporter {
         }
         let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, stackFork: stackFork, presentAtActualSize: presentAtActualSize)
         var importedStack = imported.stack
+        var importedAssets = imported.assets
         // Record the stack's XCMD/XFCN names so the interpreter can no-op
         // calls to them (Contrapt can't run compiled externals) instead of
         // raising "Can't understand" every time a script invokes one.
         if let stackFork {
             importedStack.externalCommands = ResourceFork.externalNames(from: stackFork).sorted()
         }
+        // Sounds for `play`: every named `snd ` the stack carries, plus the
+        // classic voices from the user's HyperCard app (they ship in the app,
+        // not in stacks — same arrangement as button icons). Stack sounds win
+        // a name clash. Undecodable (e.g. MACE-compressed) sounds are skipped;
+        // `play` then falls back to a synthesized tone.
+        func embedSounds(from fork: Data, keeping wanted: Set<String>?) {
+            for resource in ResourceFork.namedResources(ofType: "snd ", from: fork) {
+                let key = resource.name.lowercased()
+                guard !key.isEmpty, importedStack.sounds[key] == nil else { continue }
+                if let wanted, !wanted.contains(key) { continue }
+                guard let decoded = SndSound.decode(resource.data) else { continue }
+                let assetName = UUID().uuidString.lowercased() + ".wav"
+                importedAssets[assetName] = SndSound.wavData(decoded)
+                importedStack.sounds[key] = StackSound(asset: assetName, baseNote: decoded.baseNote)
+            }
+        }
+        if let stackFork { embedSounds(from: stackFork, keeping: nil) }
+        if let iconFork { embedSounds(from: iconFork, keeping: ["boing", "flute", "harpsichord"]) }
         // HyperCard derived indentation in its script editor and stored the
         // text flat — recompute it so imported scripts read properly here.
         reindentScripts(of: &importedStack)
-        var entries: [String: Data] = ["stack.json": try importedStack.fileData()]
+        return Imported(stack: importedStack, assets: importedAssets)
+    }
+
+    /// Imports the classic stack at `source` and writes it as a `.contrapt`
+    /// file in the temporary directory, returning that URL to open. `iconApp`,
+    /// if given, is a HyperCard application whose ICON resources resolve the
+    /// stack's button icons (embedded per-use; nothing Apple ships in Contrapt).
+    static func importedContraptFile(from source: URL, iconApp: URL? = nil, presentAtActualSize: Bool = false) throws -> URL {
+        let imported = try importedStack(from: source, iconApp: iconApp, presentAtActualSize: presentAtActualSize)
+        var entries: [String: Data] = ["stack.json": try imported.stack.fileData()]
         for (assetName, bytes) in imported.assets { entries["assets/\(assetName)"] = bytes }
         let archive = ZipArchive.archive(entries)
         // A unique subdirectory per import keeps the friendly filename while
@@ -246,11 +312,14 @@ enum LegacyStackImporter {
 
     // MARK: - Raw → Contrapt part
 
-    private static func part(from raw: RawPart, in stack: inout Stack, iconAsset: String? = nil) -> Part {
+    private static func part(from raw: RawPart, in stack: inout Stack, iconAsset: String? = nil, fonts: [Int: FontResource.Resolution] = [:]) -> Part {
+        // Honor the authored size down to a 1px floor (only guarding against a
+        // zero/negative rect) — classic stacks use thin parts as rules/dividers
+        // (The Hacker Crackdown's 2px "divider"); an 8px floor fattened those.
         let frame = PartFrame(x: Double(raw.left), y: Double(raw.top),
-                              width: Double(max(8, raw.right - raw.left)),
-                              height: Double(max(8, raw.bottom - raw.top)))
-        let format = textFormat(from: raw)
+                              width: Double(max(1, raw.right - raw.left)),
+                              height: Double(max(1, raw.bottom - raw.top)))
+        let format = textFormat(from: raw, fonts: fonts)
         let kind: PartKind
         switch raw.type {
         case .button:
@@ -258,20 +327,37 @@ enum LegacyStackImporter {
             button.style = raw.buttonStyle
             button.showName = raw.showName
             button.autoHilite = raw.autoHilite
+            // A persistent hilite draws an opaque button inverse — classic
+            // stacks use a thin hilited opaque button as a black rule (The
+            // Hacker Crackdown's 2px "divider"). This is faithful once the part
+            // keeps its real (thin) size; see the card-size / 1px-floor fixes.
             button.hilite = raw.hilite
             button.format = format
             button.iconAsset = iconAsset
+            // The button wanted an icon but its ICON resource wasn't found (e.g.
+            // the stack's resource fork was stripped in transfer) — mark it so
+            // the view shows a label/placeholder rather than nothing.
+            button.iconMissing = raw.iconID != 0 && iconAsset == nil
+            button.iconID = raw.iconID
             kind = .button(button)
         case .field:
             var field = FieldPart(text: "", placeholder: "", isMultiline: true, format: format)
             field.style = raw.fieldStyle
             field.showLines = raw.showLines
+            field.wideMargins = raw.wideMargins
+            field.dontWrap = raw.dontWrap
+            field.autoTab = raw.autoTab
+            field.fixedLineHeight = raw.fixedLineHeight
+            field.autoSelect = raw.autoSelect
+            field.multipleLines = raw.multipleLines
             // Honor the field's real Lock Text flag: display/label fields import
             // locked (static text that still dispatches taps to scripts), while
             // input fields import editable — as the stack author intended.
             // Shared-text fields are background labels (copyright, "Home"), so
             // they're locked too — static text, no editable caret in browse.
-            field.lockText = raw.lockText || raw.sharedText
+            // Auto-select list fields are locked by nature — a click selects,
+            // it doesn't edit.
+            field.lockText = raw.lockText || raw.sharedText || raw.autoSelect
             // HyperCard's per-field line height — an absolute pixel grid
             // against an absolute frame, so it imports UNSCALED (scaling it
             // overflows exactly-full fields: the Tour packs 12 lines into
@@ -333,24 +419,69 @@ enum LegacyStackImporter {
 
     /// Map a part's HyperCard font/size/style/alignment to a TextFormat, so
     /// imported text matches the original rather than Contrapt's defaults.
-    private static func textFormat(from raw: RawPart) -> TextFormat {
+    private static func textFormat(from raw: RawPart, fonts: [Int: FontResource.Resolution] = [:]) -> TextFormat {
+        makeFormat(fontID: raw.fontID, textSize: raw.textSize, textAlign: raw.textAlign,
+                   styleBits: raw.textStyleBits, fonts: fonts)
+    }
+
+    /// Build a TextFormat from raw HyperCard font id / size / alignment / style
+    /// bits — shared by a field's base format and its per-run styled text.
+    private static func makeFormat(fontID: Int, textSize: Int, textAlign: Int, styleBits: Int,
+                                   fonts: [Int: FontResource.Resolution]) -> TextFormat {
         var format = TextFormat()
         // HyperCard's default text size (textSize 0 = "use default") was 12 —
         // icon-button names like Topics/Next depend on it to fit their tiles.
-        format.size = raw.textSize > 0 ? Double(min(max(raw.textSize, 6), 96)) : 12
-        format.align = raw.textAlign == 1 ? .center : (raw.textAlign < 0 ? .right : .left)
-        // Classic Mac font ids → family + width calibration; anything
-        // unlisted is a sans (Geneva, Chicago, Helvetica, Avant Garde…).
-        let mapping = Self.classicFontMap[raw.fontID] ?? (.standard, proportionalFontScale)
+        format.size = textSize > 0 ? Double(min(max(textSize, 6), 96)) : 12
+        format.align = textAlign == 1 ? .center : (textAlign < 0 ? .right : .left)
+        // Classic Mac font ids → family + width calibration; embedded fonts
+        // (the stack's own FONDs) resolve by name/metrics; anything else is a
+        // sans (Geneva, Chicago, Helvetica, Avant Garde…).
+        let embedded = fonts[fontID].map { ($0.design, $0.scale) }
+        let mapping = Self.classicFontMap[fontID] ?? embedded ?? (.standard, proportionalFontScale)
         format.fontDesign = mapping.design
         format.size *= mapping.scale
-        format.isBold = raw.textStyleBits & 0x01 != 0
-        format.isItalic = raw.textStyleBits & 0x02 != 0
-        format.isUnderline = raw.textStyleBits & 0x04 != 0
+        format.isBold = styleBits & 0x01 != 0
+        format.isItalic = styleBits & 0x02 != 0
+        format.isUnderline = styleBits & 0x04 != 0
         // Outline (and shadow, which reads similarly at 1-bit): white glyph
         // interiors — the Tour's white titles over black paint bars.
-        format.isOutline = raw.textStyleBits & 0x08 != 0 || raw.textStyleBits & 0x10 != 0
+        format.isOutline = styleBits & 0x08 != 0 || styleBits & 0x10 != 0
+        // Group (0x80): no glyph effect, but makes the run click as a unit —
+        // `the clickText` returns the whole phrase (navigation fields).
+        format.isGroup = styleBits & 0x80 != 0
         return format
+    }
+
+    /// Resolve a field's raw style runs (offset + STBL decoration id) into
+    /// `StyleRun`s. A decoration's font/size of -1 inherits the field's; a run
+    /// id of -1 is the field default. Consecutive runs that resolve to the same
+    /// format collapse; a lone run equal to the field's base format yields []
+    /// (a uniform field), keeping the common case cheap.
+    private static func resolveStyleRuns(_ raw: RawPart, content: ParsedObject.FieldContent,
+                                         decorations: [Int: LegacyStackImporter.Reader.RawDecoration],
+                                         baseFormat: TextFormat,
+                                         fonts: [Int: FontResource.Resolution]) -> [StyleRun] {
+        guard !content.runs.isEmpty else { return [] }
+        var runs: [StyleRun] = []
+        for rawRun in content.runs {
+            let format: TextFormat
+            if let decoration = decorations[rawRun.decorationID] {
+                format = makeFormat(
+                    fontID: decoration.fontID == -1 ? raw.fontID : decoration.fontID,
+                    textSize: decoration.size == -1 ? raw.textSize : decoration.size,
+                    textAlign: raw.textAlign,
+                    styleBits: decoration.styleBits == -1 ? raw.textStyleBits : decoration.styleBits,
+                    fonts: fonts
+                )
+            } else {
+                format = baseFormat // id -1 or unknown → the field's own style
+            }
+            if let last = runs.last, last.format == format { continue } // collapse
+            runs.append(StyleRun(start: rawRun.start, format: format))
+        }
+        // A single run at the start matching the base means uniform text.
+        if runs.count == 1, runs[0].start == 0, runs[0].format == baseFormat { return [] }
+        return runs
     }
 }
 
@@ -380,6 +511,19 @@ private extension LegacyStackImporter {
         /// the background block (flag +0x05, 0x08). Background labels like a
         /// copyright notice. Imported onto the background, not per-card.
         var sharedText: Bool
+        /// Field "Don't Wrap" (+0x05, 0x20) — long lines clip, never soft-wrap.
+        var dontWrap: Bool
+        /// Field "Auto Tab" (+0x05, 0x02).
+        var autoTab: Bool
+        /// Field "Fixed Line Height" (+0x05, 0x04 — the bit means NOT fixed).
+        var fixedLineHeight: Bool
+        /// Field "Auto Select" (+0x0E, 0x80 — a button's showName bit): the
+        /// list idiom, a click selects the whole line.
+        var autoSelect: Bool
+        /// Field "Multiple Lines" (+0x0E, 0x10).
+        var multipleLines: Bool
+        /// Field "Wide Margins" (+0x0E, 0x20 — a button's autoHilite bit).
+        var wideMargins: Bool
         var iconID: Int
         var visible: Bool
         var textAlign: Int
@@ -401,13 +545,13 @@ private extension LegacyStackImporter {
             default: return .roundRect
             }
         }
-        /// HyperCard field style (low nibble) → Contrapt field style
-        /// (scrolling/other fall back to rectangle).
+        /// HyperCard field style (low nibble) → Contrapt field style.
         var fieldStyle: FieldStyle {
             switch styleByte {
             case 0: return .transparent
             case 1: return .opaque
-            case 3: return .shadow
+            case 3, 4: return .shadow // 4 per the format spec; 3 pinned earlier
+            case 7: return .scrolling
             default: return .rectangle
             }
         }
@@ -419,9 +563,18 @@ private extension LegacyStackImporter {
         var ownerBackgroundID: Int
         var bitmapID: Int
         var parts: [RawPart]
-        /// Field text keyed by the field's HyperCard part id — how card
+        /// Field content keyed by the field's HyperCard part id — how card
         /// contents are stored, so mapping is exact rather than positional.
-        var contents: [Int: String]
+        var contents: [Int: FieldContent]
+
+        /// One field's imported content: its text, and any styled-text runs
+        /// (a Character offset into the text + the STBL decoration id that
+        /// styles from there). Runs are empty for plain (uniform) text.
+        struct FieldContent {
+            var text: String
+            var runs: [RawRun] = []
+        }
+        struct RawRun { var start: Int; var decorationID: Int }
     }
 
     struct BlockInfo { let type: String; let offset: Int; let size: Int; let id: Int }
@@ -455,6 +608,35 @@ private extension LegacyStackImporter {
                 o += size
             }
             return blocks
+        }
+
+        /// One STBL decoration: the classic font id, style flags, and size a
+        /// style run references. `fontID`/`size` of -1 inherit the field's;
+        /// `styleBits` of -1 inherits the field's style, else it's the low-byte
+        /// flag set (bold 0x01, italic 0x02, underline 0x04, …) — the file
+        /// stores these in the HIGH byte of a 16-bit word (0xFFFF = inherit).
+        struct RawDecoration { var fontID: Int; var styleBits: Int; var size: Int }
+
+        /// The stack's STBL style table: decoration id → its font/style/size.
+        /// Entries are 24 bytes from block+0x18; count at block+0x10. (2.x
+        /// only; 1.x stacks have no STBL and no styled text.)
+        func parseStyleTable(_ block: BlockInfo) -> [Int: RawDecoration] {
+            var table: [Int: RawDecoration] = [:]
+            let contentStart = block.offset + 0x18
+            guard block.offset + 0x14 <= d.count else { return table }
+            let count = u32(block.offset + 0x10)
+            var o = contentStart
+            let limit = min(block.offset + block.size, d.count)
+            for _ in 0..<min(count, 100_000) {
+                guard o + 24 <= limit else { break }
+                // Style flags live in the high byte of the 16-bit word; 0xFFFF
+                // is the inherit sentinel (-1), distinct from "no flags" (0).
+                let styleWord = u16(o + 0x0E)
+                let styleBits = styleWord == 0xFFFF ? -1 : (styleWord >> 8)
+                table[u32(o)] = RawDecoration(fontID: i16(o + 0x0C), styleBits: styleBits, size: i16(o + 0x10))
+                o += 24
+            }
+            return table
         }
 
         /// Ordered card IDs from the PAGE block(s): the known card IDs in the
@@ -526,12 +708,22 @@ private extension LegacyStackImporter {
             let afterParts = parts.last?.recordEnd ?? (base + 0x24)
             let ownFieldIDs = Set(parts.map(\.part).filter { $0.type == .field }.map(\.id))
 
-            let (contents, contentsEnd): ([Int: String], Int)
+            let (contents, contentsEnd): ([Int: ParsedObject.FieldContent], Int)
             if headerDelta > 0 {
                 let known = knownPartIDs.union(parts.map(\.part.id))
                 (contents, contentsEnd) = parseContentsV2(from: afterParts, end: end, knownIDs: known)
             } else {
-                (contents, contentsEnd) = parseContents(from: afterParts, end: end, fieldIDs: knownFieldIDs.union(ownFieldIDs))
+                let fieldIDs = knownFieldIDs.union(ownFieldIDs)
+                // 1.x stores contents as consecutive `[i16 partID][NUL text]`
+                // entries right after the parts (card-field ids negative), keyed
+                // by absolute id. Some stacks instead carry a leading size word
+                // (the older scan) — try the direct form first, fall back if it
+                // finds nothing.
+                var direct = parseContentsV1(from: afterParts, end: end, fieldIDs: fieldIDs)
+                if direct.contents.isEmpty {
+                    direct = parseContents(from: afterParts, end: end, fieldIDs: fieldIDs)
+                }
+                (contents, contentsEnd) = direct
             }
             // After the content section come the object's name and script as
             // C-strings (name first). Scan there for both.
@@ -558,12 +750,34 @@ private extension LegacyStackImporter {
             WobaBitmap.paintPNG(block: d, at: block.offset, cardWidth: cardWidth, cardHeight: cardHeight, headerDelta: headerDelta)
         }
 
+        /// HyperCard 1.x part-content section: consecutive `[i16 partID][NUL
+        /// text]` entries directly after the parts, with no leading size word.
+        /// A card field's id is stored negative (a background field's positive),
+        /// so key by absolute id — matching how parts are filled and the 2.x
+        /// path. Entries run until a word isn't a known field id, which is where
+        /// the object's name and script C-strings begin.
+        private func parseContentsV1(from start: Int, end: Int, fieldIDs: Set<Int>) -> (contents: [Int: ParsedObject.FieldContent], sectionEnd: Int) {
+            var result: [Int: ParsedObject.FieldContent] = [:]
+            var o = start
+            while o + 2 <= end {
+                let absID = abs(i16(o))
+                guard absID != 0, fieldIDs.contains(absID) else { break }
+                o += 2
+                let textStart = o
+                while o < end, d[o] != 0 { o += 1 }
+                let text = contentText(from: textStart, to: o)
+                if result[absID] == nil, !text.isEmpty { result[absID] = .init(text: text) }
+                o += 1 // skip the NUL terminator
+            }
+            return (result, o)
+        }
+
         /// Parse the field-content section: `[u16 sectionSize]` followed by a
         /// run of `[i16 partID][NUL-terminated text]` entries. Anchors on the
         /// first offset whose size is sane and whose first entry names a known
         /// field, then reads entries until the section is consumed.
-        private func parseContents(from afterParts: Int, end: Int, fieldIDs: Set<Int>) -> (contents: [Int: String], sectionEnd: Int) {
-            var result: [Int: String] = [:]
+        private func parseContents(from afterParts: Int, end: Int, fieldIDs: Set<Int>) -> (contents: [Int: ParsedObject.FieldContent], sectionEnd: Int) {
+            var result: [Int: ParsedObject.FieldContent] = [:]
             var sectionStart = -1
             for o in stride(from: afterParts, to: min(afterParts + 0x24, end - 4), by: 2) where isContentSection(o, end: end, fieldIDs: fieldIDs) {
                 sectionStart = o; break
@@ -578,7 +792,8 @@ private extension LegacyStackImporter {
                 let textStart = p
                 while p < sectionEnd, d[p] != 0 { p += 1 }
                 let text = contentText(from: textStart, to: p)
-                if result[partID] == nil, !text.isEmpty { result[partID] = text }
+                // 1.x stacks store no style runs (STBL is a 2.x block).
+                if result[partID] == nil, !text.isEmpty { result[partID] = .init(text: text) }
                 p += 1 // skip the NUL terminator
             }
             return (result, sectionEnd)
@@ -594,8 +809,8 @@ private extension LegacyStackImporter {
         /// avoids leaking a style byte into the text as a stray leading return.
         /// Entries run until the next word isn't a known field id — that's
         /// where the object's name and script C-strings begin.
-        private func parseContentsV2(from start: Int, end: Int, knownIDs: Set<Int>) -> (contents: [Int: String], sectionEnd: Int) {
-            var result: [Int: String] = [:]
+        private func parseContentsV2(from start: Int, end: Int, knownIDs: Set<Int>) -> (contents: [Int: ParsedObject.FieldContent], sectionEnd: Int) {
+            var result: [Int: ParsedObject.FieldContent] = [:]
             var o = start
             while o + 4 <= end {
                 let absID = abs(i16(o))
@@ -604,22 +819,39 @@ private extension LegacyStackImporter {
                 guard length >= 1, o + 4 + length <= end else { break }
                 let contentStart = o + 4, contentEnd = o + 4 + length
                 var textStart = contentStart
+                var rawRuns: [(byteOffset: Int, decorationID: Int)] = []
                 if length >= 2, d[contentStart] & 0x80 != 0 {
-                    // Styled: a u16 whose low 15 bits are the TOTAL header
-                    // length (the u16 itself plus its style-run bytes); the
-                    // text follows immediately after.
-                    textStart = min(contentStart + (u16(contentStart) & 0x7FFF), contentEnd)
+                    // Styled: a u16 whose low 15 bits are the TOTAL run-list
+                    // length (the u16 itself plus its 4-byte run entries); the
+                    // text follows immediately after. Each run is
+                    // [u16 byte-offset-in-text][i16 decoration id], -1 = field.
+                    let runListSize = u16(contentStart) & 0x7FFF
+                    textStart = min(contentStart + runListSize, contentEnd)
+                    var r = contentStart + 2
+                    while r + 4 <= contentStart + runListSize, r + 4 <= contentEnd {
+                        rawRuns.append((byteOffset: u16(r), decorationID: i16(r + 2)))
+                        r += 4
+                    }
                 } else if d[contentStart] == 0 {
                     textStart = contentStart + 1 // a lone 0 style flag
                 }
-                // The header is already skipped, so take the text verbatim —
-                // keep printable + Mac Roman high bytes (®, —, curly quotes) and
-                // carriage returns; drop only NUL/other control. (No leading
-                // skip, which would eat a leading high byte like ®.)
+                // Take the text verbatim — keep printable + Mac Roman high bytes
+                // (®, —, curly quotes) and carriage returns; drop NUL/control.
+                // Track how many retained bytes precede each source byte so a
+                // run's byte offset maps to a Character index in the kept text.
                 var textBytes: [UInt8] = []
-                for i in textStart..<contentEnd where d[i] == 0x0D || d[i] >= 0x20 { textBytes.append(d[i]) }
+                var retainedBefore = [Int](repeating: 0, count: contentEnd - textStart + 1)
+                for i in textStart..<contentEnd {
+                    retainedBefore[i - textStart] = textBytes.count
+                    if d[i] == 0x0D || d[i] >= 0x20 { textBytes.append(d[i]) }
+                }
+                retainedBefore[contentEnd - textStart] = textBytes.count
                 let text = roman(textBytes)
-                if result[absID] == nil, !text.isEmpty { result[absID] = text }
+                let runs: [ParsedObject.RawRun] = rawRuns.compactMap { run in
+                    guard run.byteOffset >= 0, run.byteOffset <= contentEnd - textStart else { return nil }
+                    return ParsedObject.RawRun(start: retainedBefore[run.byteOffset], decorationID: run.decorationID)
+                }
+                if result[absID] == nil, !text.isEmpty { result[absID] = .init(text: text, runs: runs) }
                 o += 4 + length
                 if o & 1 != 0 { o += 1 } // entries pad to an even boundary
             }
@@ -719,6 +951,12 @@ private extension LegacyStackImporter {
                            autoHilite: (d[o + 0x0E] & 0x20) != 0,
                            lockText: (d[o + 5] & 0x01) != 0,
                            sharedText: (d[o + 5] & 0x08) != 0,
+                           dontWrap: (d[o + 5] & 0x20) != 0,
+                           autoTab: (d[o + 5] & 0x02) != 0,
+                           fixedLineHeight: (d[o + 5] & 0x04) == 0,
+                           autoSelect: (d[o + 0x0E] & 0x80) != 0,
+                           multipleLines: (d[o + 0x0E] & 0x10) != 0,
+                           wideMargins: (d[o + 0x0E] & 0x20) != 0,
                            iconID: i16(o + 0x12),
                            visible: (d[o + 5] & 0x80) == 0,
                            textAlign: i16(o + 0x14), fontID: i16(o + 0x16),

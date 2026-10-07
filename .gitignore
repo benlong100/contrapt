@@ -7,6 +7,16 @@ HyperCard Stacks/
 HyperCard 2 Stacks/
 HyperCard apps/
 
+# Imported HyperCard stack corpus (local test fixtures; tests reference by path)
+New Stacks*/
+Tour Stack/
+Word Companion
+/How to Import HyperCard Stacks.contrapt
+
+# Generated reports & exported artifacts
+corpus-audit.txt
+Web Site/Screenshots/
+
 # Wasm web engine: build artifacts (rebuild with Scripts/build-web-engine.sh)
 WasmPlayer/.build/
 WasmPlayer/Package.resolved

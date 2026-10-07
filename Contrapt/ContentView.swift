@@ -63,6 +63,10 @@ struct ContentView: View {
     /// so transparent or hidden parts are findable. Remembered across sessions.
     @AppStorage("revealButtons") private var revealButtons = false
     @AppStorage("revealFields") private var revealFields = false
+    /// Transient part peek (browse mode, macOS): ⌘⌥ outlines buttons, ⌘⌥⇧
+    /// outlines fields. Held only while the keys are down.
+    @State private var peekingButtons = false
+    @State private var peekingFields = false
     /// Temporarily lets locked parts be selected, so a locked one can be
     /// picked and unlocked. Transient per session.
     @State private var selectLocked = false
@@ -103,10 +107,23 @@ struct ContentView: View {
     /// while the locate picker is shown, so the pick can open it.
     @State private var pendingGoStack: PendingGoStack?
     @State private var isStackLocatorPresented = false
+    /// True once a cross-stack `go stack "X"` has swapped a different stack
+    /// into this window in place. Editing is blocked while it's set, so an
+    /// edit can't be autosaved back over the document's own on-disk file.
+    @State private var displayingForeignStack = false
+    /// Set just before a programmatic cross-stack landing so the resulting
+    /// `cardIndex` change doesn't also fire `openCard` — the swap sends its
+    /// own `openStack`/`openCard` pair in order (see `openResolvedStack`).
+    @State private var suppressNextOpenCard = false
     @State private var isGuidePresented = false
     /// A pending `answer` / `ask` dialog and its text field's contents.
     @State private var scriptDialog: ScriptDialog?
     @State private var askFieldText = ""
+    /// How many mouse-driven handlers are running. HyperCard runs one at a
+    /// time; while one is active, further browse clicks are absorbed (they feed
+    /// `the mouseClick` / `the clickLine`) rather than launching competing
+    /// handlers.
+    @State private var runningScriptCount = 0
     /// The visual effect for the current scripted card transition, if any.
     @State private var cardTransition: ScreenEffect?
     /// Editing habit, not document data — persists across stacks.
@@ -151,6 +168,8 @@ struct ContentView: View {
             selectionRange: scriptSelection?.range,
             revealButtons: revealButtons,
             revealFields: revealFields,
+            peekButtons: peekingButtons && !isEditing,
+            peekFields: peekingFields && !isEditing,
             selectLocked: selectLocked,
             includeBackground: includeBackground,
             includeCard: includeCard,
@@ -378,6 +397,9 @@ struct ContentView: View {
                 scriptSelection = nil
                 SelectionSession.shared.clear()
             }
+            // A cross-stack swap drives its own openStack+openCard in order;
+            // don't double-fire openCard for the index change it causes.
+            if suppressNextOpenCard { suppressNextOpenCard = false; return }
             sendSystemMessage("openCard", toCardAt: newIndex)
         }
         .task {
@@ -386,22 +408,37 @@ struct ContentView: View {
             if let fileURL {
                 StackLibrary.shared.register(url: fileURL)
                 // If we were opened by `go card N of stack "<name>"`, land on
-                // that card before the openCard message fires.
+                // that card before the open messages fire.
                 if let card = PendingStackNavigation.shared.consume(name: StackLibrary.name(for: fileURL)),
                    let index = cardIndexFor(card) {
+                    suppressNextOpenCard = (index != cardIndex)
                     currentCardIndex = index
                 }
             }
-            sendSystemMessage("openStack", toCardAt: cardIndex)
-            sendSystemMessage("openCard", toCardAt: cardIndex)
+            // openStack then openCard in order, as one task. Two separate
+            // sendSystemMessage calls would drop the second (the guard against
+            // overlapping system messages), so the opening card's openCard —
+            // e.g. the Manhole's wait/dissolve/`go next` — never ran on open.
+            sendOpenSequence(toCardAt: cardIndex)
         }
         // A `go stack "X"` whose stack isn't in the library yet: locate it once.
-        .fileImporter(isPresented: $isStackLocatorPresented, allowedContentTypes: [.contraptStack]) { result in
-            guard case .success(let url) = result, let pending = pendingGoStack else { return }
+        // Accepts a classic HyperCard stack too (often extension-less, hence
+        // `.data`), so a multi-file game's sibling can be granted access by hand
+        // when the sandbox blocked auto-discovering it.
+        // A `go stack "X"` whose stack isn't known yet: ask for the FOLDER that
+        // contains it. Under the App Sandbox, a folder grant (unlike a single
+        // file) lets us enumerate and register every stack inside, so a
+        // multi-file game resolves all its rooms from one prompt — and the
+        // grant persists across launches.
+        .fileImporter(isPresented: $isStackLocatorPresented, allowedContentTypes: [.folder]) { result in
+            guard case .success(let folder) = result, let pending = pendingGoStack else { return }
             pendingGoStack = nil
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            openResolvedStack(url, card: pending.card)
+            StackLibrary.shared.grantFolder(folder)
+            if let url = StackLibrary.shared.url(forName: pending.name) {
+                openResolvedStack(url, card: pending.card)
+            } else {
+                scriptErrorText = "Couldn't find a stack named \"\(pending.name)\" in that folder."
+            }
         }
         .toolbar { mainToolbar }
         // ⌘↑ also jumps to the first card (the Go menu advertises ⌘1); a hidden
@@ -422,6 +459,8 @@ struct ContentView: View {
         // Cmd-M arrives via the AppDelegate's key monitor (not menu dispatch —
         // see contraptToggleMessageBox); only the key window's stack responds.
         .background(WindowBinder { hostWindow = $0 })
+        // ⌘⌥ outlines buttons, ⌘⌥⇧ outlines fields (classic HyperCard's peek).
+        .background(ModifierPeekReader { peekingButtons = $0; peekingFields = $1 })
         .onReceive(NotificationCenter.default.publisher(for: .contraptToggleMessageBox)) { _ in
             guard hostWindow?.isKeyWindow == true else { return }
             isMessageBoxVisible.toggle()
@@ -430,6 +469,17 @@ struct ContentView: View {
         .focusedSceneValue(\.websiteExport, WebsiteExport { directory, actualSize in
             try WebsiteExporter.export(stack: document.stack, assets: document.assets, into: directory, actualSize: actualSize)
         })
+        .focusedSceneValue(\.stackBitmaps, StackBitmaps(
+            export: { directory in
+                try BitmapExporter.export(stack: document.stack, assets: document.assets, into: directory)
+            },
+            replace: { directory in
+                let replacement = try BitmapExporter.replacements(for: document.stack, from: directory)
+                for (name, data) in replacement.newAssets { document.assets[name] = data }
+                document.replaceStack(replacement.stack, undoManager: undoManager)
+                return replacement
+            }
+        ))
         // Full-screen (presentation) mode: hide the app chrome and let the
         // padding color own the space around the card.
         .toolbar(isPresentingFullScreen ? .hidden : .automatic)
@@ -639,6 +689,10 @@ struct ContentView: View {
                 }
                 isEditing.toggle()
             }
+            // Editing is blocked while a cross-stack `go` has swapped a foreign
+            // stack into this window — an edit would be autosaved over this
+            // document's own file.
+            .disabled(displayingForeignStack)
         }
         ToolbarItemGroup(placement: cardNavigationPlacement) {
             Button("Previous Card", systemImage: "chevron.left") {
@@ -792,6 +846,11 @@ struct ContentView: View {
                     }
                 }
             },
+            // `answer file` presents an open panel and suspends the script
+            // until the user picks a file or cancels.
+            onAnswerFile: { prompt, type in
+                await presentOpenPanel(prompt: prompt, type: type)
+            },
             // A scripted `go`: play the first queued effect as an animated
             // card swap, or cut instantly when there's none.
             onNavigate: { index, effects in
@@ -819,7 +878,18 @@ struct ContentView: View {
             // `click at h,v` routes a mouseUp to the part under the point.
             onClickPart: { part in sendMouseMessage("mouseUp", to: part) },
             // `go stack "X"` resolves via the Stack Library and opens it.
-            onGoStack: { name, card in goToStack(named: name, card: card) }
+            onGoStack: { name, card in goToStack(named: name, card: card) },
+            // `doMenu "Copy/Cut/Paste Card"` shares the Edit menu's actions.
+            onCardMenu: { item in
+                switch item {
+                case "copy card": copyCard()
+                case "cut card": cutCard()
+                case "paste card": pasteCard()
+                default: break
+                }
+            },
+            // `play` reads its imported sound (WAV) bytes from the document.
+            assetData: { document.assets[$0] }
         )
     }
 
@@ -834,20 +904,83 @@ struct ContentView: View {
         }
     }
 
-    /// Opens a resolved stack file, remembering it in the library. macOS opens
-    /// a document window; iOS layers it over Home via the injected handler.
+    /// Navigates to a resolved stack file. In browse mode it swaps the target
+    /// into THIS window in place — faithful to HyperCard's single window, and
+    /// essential for multi-file games (the Manhole's rooms span six files that
+    /// link with `go … of stack "X"`). In edit mode it opens a separate
+    /// document/layer instead, so an edit can't be autosaved over this file.
     private func openResolvedStack(_ url: URL, card: GoDestination?) {
         StackLibrary.shared.register(url: url)
-        // Stash the target card so the opened stack lands on it (both the
-        // macOS window and the iOS layer start a fresh ContentView at card 0).
-        if let card {
-            PendingStackNavigation.shared.set(name: StackLibrary.name(for: url), card: card)
+
+        // Editing: keep the old behavior — a separate window (macOS) or layer
+        // (iOS) — so the displayed-vs-saved document stays one and the same.
+        guard !isEditing else {
+            if let card {
+                PendingStackNavigation.shared.set(name: StackLibrary.name(for: url), card: card)
+            }
+            #if os(macOS)
+            Task { try? await openDocument(at: url) }
+            #else
+            onOpenStackFile?(url, card)
+            #endif
+            return
         }
-        #if os(macOS)
-        Task { try? await openDocument(at: url) }
-        #else
-        onOpenStackFile?(url, card)
-        #endif
+
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else { return }
+
+        // Load the target into the live document, in place. A classic STAK is
+        // imported on the fly (same processing as a file import); a `.contrapt`
+        // (or legacy JSON) is decoded directly. Both bypass undo, so autosave
+        // won't write the swapped stack back over this document's own file.
+        let head = Array(data.prefix(8))
+        let isClassic = head.count >= 8 && String(bytes: head[4..<8], encoding: .ascii) == "STAK"
+        if isClassic {
+            let actualSize = StackLibrary.shared.actualSize(forName: StackLibrary.name(for: url))
+            guard let imported = try? LegacyStackImporter.importedStack(
+                from: url, iconApp: HyperCardAppReference.url(), presentAtActualSize: actualSize) else { return }
+            document.present(stack: imported.stack, assets: imported.assets)
+        } else {
+            document.load(data)
+        }
+        displayingForeignStack = (fileURL == nil) || (url != fileURL)
+
+        // Register the new stack's siblings so onward room-to-room navigation
+        // resolves, and drop the previous stack's back trail (its card ids are
+        // meaningless here).
+        StackLibrary.shared.registerSiblings(of: url, actualSize: StackLibrary.shared.actualSize(forName: StackLibrary.name(for: url)))
+        CardBackStack.shared.ids.removeAll()
+        VisitHistory.shared.ids.removeAll()
+
+        // Land on the requested card (first card when unspecified) and send the
+        // open messages in order. Suppress the openCard that the index change
+        // would otherwise trigger, so it fires exactly once, after openStack.
+        let newCount = document.stack.cards.count
+        let target = min(max(0, card.flatMap(cardIndexFor) ?? 0), max(0, newCount - 1))
+        suppressNextOpenCard = (target != cardIndex)
+        currentCardIndex = target
+        sendOpenSequence(toCardAt: target)
+    }
+
+    /// Sends `openStack` then `openCard` to a card as one ordered task — used
+    /// when a cross-stack swap lands on a card. (`sendSystemMessage` guards
+    /// against overlapping system messages, so two separate calls would drop
+    /// the second; this runs both inside one guarded task.)
+    private func sendOpenSequence(toCardAt index: Int) {
+        guard !isEditing, !isSendingSystemMessage else { return }
+        isSendingSystemMessage = true
+        let host = makeHost()
+        let path = scriptPath(cardAt: index, part: nil)
+        Task { @MainActor in
+            defer { isSendingSystemMessage = false }
+            do {
+                try await HyperTalk.send("openStack", along: path, host: host)
+                try await HyperTalk.send("openCard", along: path, host: host)
+            } catch {
+                scriptErrorText = error.localizedDescription
+            }
+        }
     }
 
     struct PendingGoStack {
@@ -928,21 +1061,58 @@ struct ContentView: View {
         // A click on a locked field records `the clickLine`/`the clickText`
         // before its mouseUp runs. The gesture computed the raw hit; the
         // layer qualifier (card vs bkgnd) is decided here.
-        if message == "mouseUp", let part, case .field = part.kind,
+        if message == "mouseUp", let part, case .field(let field) = part.kind,
            let pending = ClickRecord.shared.takePending() {
             let layer = stack.cards[cardIndex].parts.contains(where: { $0.id == part.id }) ? "card" : "bkgnd"
             ClickRecord.shared.line = "line \(pending.line) of \(layer) field id \(part.scriptID)"
             ClickRecord.shared.text = pending.text
+            // Auto Select (the list-field idiom): the click selects its whole
+            // line — visible highlight plus the selected* readers — before the
+            // field's mouseUp handler runs (which typically reads
+            // `the selectedText` / `the selectedLine`).
+            if field.autoSelect, let range = Self.rangeOfLine(pending.line, in: field.text) {
+                let session = SelectionSession.shared
+                session.partID = part.id
+                session.scriptID = part.scriptID
+                session.layer = layer
+                session.range = range
+                scriptSelection = FindHighlight(partID: part.id, range: range)
+            }
         }
+        // HyperCard runs one handler at a time. If a script is already running,
+        // this click is absorbed: its clickLine/clickLoc are recorded above and
+        // `the mouseClick` is armed, so a `repeat until the mouseClick` loop in
+        // the running handler (deleteHCLine's list idiom) sees it — but no
+        // competing handler is dispatched.
+        guard runningScriptCount == 0 else {
+            if message == "mouseUp" { ClickRecord.shared.clickPending = true }
+            return
+        }
+        // Launching a fresh handler: the launching click must not satisfy its
+        // own mouseClick loop, so leave the flag clear.
+        ClickRecord.shared.clickPending = false
         let host = makeHost()
         let path = scriptPath(cardAt: cardIndex, part: part)
+        runningScriptCount += 1
         Task { @MainActor in
+            defer { runningScriptCount -= 1 }
             do {
                 try await HyperTalk.send(message, along: path, host: host)
             } catch {
                 scriptErrorText = error.localizedDescription
             }
         }
+    }
+
+    /// The character range of 1-based line `number` in `text` (newline
+    /// excluded), for Auto Select's line selection. Nil when out of range.
+    private static func rangeOfLine(_ number: Int, in text: String) -> Range<Int>? {
+        guard number >= 1 else { return nil }
+        let lines = text.components(separatedBy: "\n")
+        guard number <= lines.count else { return nil }
+        var start = 0
+        for index in 0..<(number - 1) { start += lines[index].count + 1 }
+        return start..<(start + lines[number - 1].count)
     }
 
     /// System messages go to the card and up. Suppressed while editing,
@@ -1518,8 +1688,15 @@ struct ContentView: View {
             let wanted = id.trimmingCharacters(in: .whitespaces)
             return cards.firstIndex { String($0.scriptID) == wanted }
         case .inBackground(let inner, let background):
-            let indices = cards.indices.filter {
-                backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
+            let indices: [Int]
+            if let background {
+                indices = cards.indices.filter {
+                    backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
+                }
+            } else {
+                // Unnamed (`of bkgnd` / `of this bkgnd`) — the current card's.
+                let wanted = cards[cardIndex].backgroundID
+                indices = cards.indices.filter { cards[$0].backgroundID == wanted }
             }
             guard !indices.isEmpty else { return nil }
             switch inner {
@@ -1559,6 +1736,26 @@ struct ContentView: View {
         #if os(macOS)
         let url = HomeStack.ensureSeeded()
         Task { try? await openDocument(at: url) }
+        #endif
+    }
+
+    /// Presents `answer file`'s open panel and returns the chosen file's path,
+    /// or nil on cancel. macOS only; other platforms have no NSOpenPanel, so
+    /// the script sees a cancelled dialog. The classic `type` (e.g. "STAK") is
+    /// advisory — the panel accepts any file, as the import flow does, and the
+    /// handler validates afterwards.
+    @MainActor
+    private func presentOpenPanel(prompt: String, type: String?) async -> String? {
+        #if os(macOS)
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        if !prompt.isEmpty { panel.message = prompt }
+        panel.prompt = "Choose"
+        return panel.runModal() == .OK ? panel.url?.path : nil
+        #else
+        return nil
         #endif
     }
 
@@ -1711,6 +1908,21 @@ struct WebsiteExportKey: FocusedValueKey {
     typealias Value = WebsiteExport
 }
 
+/// The focused stack's bitmap round trip — export the card/background paint
+/// images as named PNGs, and replace them from an (externally upscaled)
+/// folder of the same names. Carried as a focused value so the File menu can
+/// drive it for whichever stack window is frontmost.
+struct StackBitmaps {
+    /// Writes the bitmaps into the given directory; returns the created folder.
+    let export: (URL) throws -> URL
+    /// Replaces bitmaps from files in the given directory; returns what matched.
+    let replace: (URL) throws -> BitmapExporter.Replacement
+}
+
+struct StackBitmapsKey: FocusedValueKey {
+    typealias Value = StackBitmaps
+}
+
 
 extension FocusedValues {
     var cardNavigation: CardNavigation? {
@@ -1746,6 +1958,11 @@ extension FocusedValues {
     var websiteExport: WebsiteExport? {
         get { self[WebsiteExportKey.self] }
         set { self[WebsiteExportKey.self] = newValue }
+    }
+
+    var stackBitmaps: StackBitmaps? {
+        get { self[StackBitmapsKey.self] }
+        set { self[StackBitmapsKey.self] = newValue }
     }
 }
 

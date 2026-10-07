@@ -26,6 +26,11 @@ struct CardView: View {
     /// Edit-mode reveal overlays (HyperCard's button/field tool highlighting).
     var revealButtons = false
     var revealFields = false
+    /// Transient browse-mode "peek": outline every button (⌘⌥) or field (⌘⌥⇧)
+    /// on the card, the way classic HyperCard did, so hidden/transparent parts
+    /// are findable. Drawn over everything and never hittable.
+    var peekButtons = false
+    var peekFields = false
     /// When true, locked parts can still be selected (to unlock them).
     var selectLocked = false
     /// Which layers to draw. Splitting them lets a card-transition animate the
@@ -85,7 +90,38 @@ struct CardView: View {
                 partViews(for: $stack.cards[cardIndex].parts)
                 guideLines
             }
+            if peekButtons { peekOverlay(frames: peekFrames(buttons: true), color: .blue) }
+            if peekFields { peekOverlay(frames: peekFrames(buttons: false), color: .green) }
         }
+    }
+
+    /// Outlines the given frames — the ⌘⌥ (buttons) / ⌘⌥⇧ (fields) peek.
+    /// Distinct tints echo HyperCard's separate button/field tools.
+    private func peekOverlay(frames: [PartFrame], color: Color) -> some View {
+        ForEach(frames.indices, id: \.self) { i in
+            let frame = frames[i]
+            Rectangle()
+                .stroke(color.opacity(0.9), lineWidth: 1)
+                .frame(width: frame.width, height: frame.height)
+                .position(x: frame.x + frame.width / 2, y: frame.y + frame.height / 2)
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// Frames of every button (or field) part on this card (background first,
+    /// then card), regardless of visibility — what the peek outlines.
+    private func peekFrames(buttons: Bool) -> [PartFrame] {
+        func matches(_ part: Part) -> Bool {
+            switch part.kind {
+            case .button: return buttons
+            case .field: return !buttons
+            default: return false
+            }
+        }
+        var frames: [PartFrame] = []
+        if let backgroundIndex { frames += stack.backgrounds[backgroundIndex].parts.filter(matches).map(\.frame) }
+        frames += stack.cards[cardIndex].parts.filter(matches).map(\.frame)
+        return frames
     }
 
     /// A rendered paint layer, if the object has one.
@@ -123,14 +159,19 @@ struct CardView: View {
     /// but only if released inside the card, as in HyperCard.
     private var cardPressGesture: some Gesture {
         DragGesture(minimumDistance: 0)
-            .onChanged { _ in
+            .onChanged { value in
+                MouseState.shared.location = value.location
                 if !isCardPressed {
                     isCardPressed = true
+                    MouseState.shared.isDown = true
+                    ClickRecord.shared.clickLocation = value.location
                     onMouseMessage("mouseDown", nil)
                 }
             }
             .onEnded { value in
                 isCardPressed = false
+                MouseState.shared.isDown = false
+                MouseState.shared.location = value.location
                 if (0...stack.cardSize.width).contains(value.location.x),
                    (0...stack.cardSize.height).contains(value.location.y) {
                     onMouseMessage("mouseUp", nil)
@@ -256,16 +297,30 @@ struct CardView: View {
                         onFollowLink: onFollowLink,
                         onFieldMessage: { onMouseMessage($0, part) }
                     )
+                    // A disabled part (HyperCard's `disable`) grays out and
+                    // takes no clicks in browse mode.
+                    .disabled(!part.isEnabled)
+                    .opacity(part.isEnabled ? 1 : 0.5)
                 }
             }
-            // The `find` box. When the match is boxed inside the field text
-            // (a locked plain field), skip the whole-field outline.
-            .overlay {
+            // The `find` box. A locked plain field highlights the match inside
+            // its text; an editable plain field gets a box positioned over the
+            // exact matched substring (laid out the way the field renders);
+            // anything else falls back to the whole-field outline.
+            .overlay(alignment: .topLeading) {
                 if findHighlightPartID == part.id, !substringHighlight(for: part) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.accentColor, lineWidth: 2)
-                        .padding(-2)
-                        .allowsHitTesting(false)
+                    if let box = editableFindBox(for: part) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(Color.accentColor, lineWidth: 2)
+                            .frame(width: box.width + 6, height: box.height + 4)
+                            .offset(x: box.minX - 3, y: box.minY - 2)
+                            .allowsHitTesting(false)
+                    } else {
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.accentColor, lineWidth: 2)
+                            .padding(-2)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             // Top-aligned, and clipped to the part's frame: a locked field
@@ -288,6 +343,39 @@ struct CardView: View {
         guard part.id == findHighlightPartID, findHighlightRange != nil else { return false }
         guard case .field(let field) = part.kind else { return false }
         return field.lockText && field.kind == .plain
+    }
+
+    /// The find box's frame over an *editable* plain field's matched
+    /// substring, in part coordinates — computed with the same CoreText
+    /// layout the click hit-test uses, then offset by the field's insets
+    /// (mirroring plainField's margin/padding math). Nil falls back to the
+    /// whole-field outline.
+    private func editableFindBox(for part: Part) -> CGRect? {
+        guard let range = findHighlightRange,
+              case .field(let field) = part.kind,
+              field.kind == .plain, !field.lockText else { return nil }
+        let margin: CGFloat = field.wideMargins ? 18 : 8
+        // The same no-wrap heuristic plainField applies (short hard lines
+        // render preformatted), plus the Don't Wrap option.
+        let preformatted = field.text.split(separator: "\n", omittingEmptySubsequences: false)
+            .allSatisfy { $0.count <= 40 }
+        guard var box = FieldClickHitTest.matchRect(
+            of: range, in: field.text,
+            textWidth: part.frame.width - margin * 2,
+            format: field.format,
+            wraps: !(preformatted || field.dontWrap),
+            textHeight: field.textHeight
+        ) else { return nil }
+        box.origin.x += margin
+        let lineHeight = CGFloat(field.format.size) * 1.3
+        if field.isMultiline && part.frame.height > lineHeight * 2 {
+            // Top-aligned editor: the same top inset plainField applies.
+            box.origin.y += min(8, max(2, part.frame.height * 0.18))
+        } else {
+            // A compact single-line control centers its text vertically.
+            box.origin.y = (part.frame.height - box.height) / 2
+        }
+        return box
     }
 
     @ViewBuilder
@@ -586,37 +674,44 @@ struct CardButtonStyle: ButtonStyle {
     var hilite: Bool = false
     /// The button's icon/label color — the card's highlight (app accent default).
     var tint: Color = .accentColor
+    /// An icon button fills its frame with the icon and gets no title padding —
+    /// classic icon buttons are often tiny hot-zones (17×16) whose 8pt padding
+    /// would otherwise squeeze the icon to nothing.
+    var hasIcon: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = autoHilite && configuration.isPressed && !style.isToggle
         let inverted = !style.isToggle && (hilite || pressed)
         return configuration.label
             .font(.body)
-            .foregroundStyle(tint)
+            // Inverse video flips ink↔paper: a hilited button shows light label
+            // on a black fill (and vice versa), classic 1-bit HyperCard.
+            .foregroundStyle(inverted ? Color.cardSurface : tint)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, style == .transparent ? 0 : 8)
-            .background(background)
+            .padding(.horizontal, (style == .transparent || hasIcon) ? 0 : 8)
+            .background(background(inverted: inverted))
             .overlay(border)
             .compositingGroup()
             .shadow(color: style == .shadow ? .black.opacity(0.45) : .clear, radius: 0, x: 3, y: 3)
-            // Inverse video: `.difference` against white flips every pixel in
-            // the button's rect — its chrome, its label, and whatever shows
-            // through behind it — the way a hilited HyperCard button inverts
-            // the screen region it covers.
-            .overlay { if inverted { shape.fill(.white).blendMode(.difference) } }
             .contentShape(Rectangle())
     }
 
-    /// The un-inverted fill; the `.difference` overlay flips it when hilited.
+    /// The fill. Hilited (inverse video) fills solid ink — a direct fill rather
+    /// than a `.difference` blend, which escaped the part's clip and inflated a
+    /// thin hilited "divider" button to its content height.
     @ViewBuilder
-    private var background: some View {
-        switch style {
-        case .transparent, .checkbox, .radio:
-            Color.clear
-        case .roundRect:
-            shape.fill(Color.accentColor.opacity(0.12))
-        case .opaque, .rectangle, .shadow:
-            shape.fill(Color.cardSurface)
+    private func background(inverted: Bool) -> some View {
+        if inverted {
+            shape.fill(Color.cardInk)
+        } else {
+            switch style {
+            case .transparent, .checkbox, .radio:
+                Color.clear
+            case .roundRect:
+                shape.fill(Color.accentColor.opacity(0.12))
+            case .opaque, .rectangle, .shadow:
+                shape.fill(Color.cardSurface)
+            }
         }
     }
 
@@ -706,7 +801,7 @@ extension View {
                 }
             }
             .overlay {
-                if style == .rectangle || style == .shadow {
+                if style == .rectangle || style == .shadow || style == .scrolling {
                     RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
                 }
             }
@@ -775,7 +870,17 @@ struct PartView: View {
             } label: {
                 buttonLabel(properties)
             }
-            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite, hilite: properties.hilite, tint: highlight))
+            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite, hilite: properties.hilite, tint: highlight, hasIcon: properties.iconAsset != nil || !(properties.iconSymbol ?? "").isEmpty))
+            // Pin the button to its exact part size and clip, so a thin part
+            // (a 2px hilited "divider" rule) can't inflate to the button's
+            // intrinsic/min content height. The compositingGroup flattens the
+            // styled button BEFORE the frame+clip, which is what actually
+            // bounds it under the card's scaleEffect — verified by preview:
+            // a plain .clipped() here leaks at upscale (Fill Window) and the
+            // divider renders fat.
+            .compositingGroup()
+            .frame(width: part.frame.width, height: part.frame.height)
+            .clipShape(Rectangle())
             .simultaneousGesture(pressDetector)
         case .field(let properties):
             if properties.kind == .rich {
@@ -855,35 +960,46 @@ struct PartView: View {
                 // Locked text is display-only and dispatches presses like a
                 // label, so a field can drive a script. It renders ALL its
                 // text (no tail-truncation "…"); overflow clips at the part
-                // frame, as a HyperCard field clips silently. Imported fields
-                // with a HyperCard textHeight render at that exact line
-                // height (SwiftUI Text can't shrink line boxes), keeping
-                // tightly-set stacks' vertical layout.
-                Group {
+                // frame, as a HyperCard field clips silently (a scrolling
+                // field scrolls it instead). Imported fields with a HyperCard
+                // textHeight render at that exact line height (SwiftUI Text
+                // can't shrink line boxes), keeping tightly-set stacks'
+                // vertical layout. Don't Wrap keeps each hard line whole and
+                // clips it, like the preformatted heuristic.
+                let unwrapped = preformatted || properties.dontWrap
+                let lockedText = Group {
                     if let exactLineHeight = properties.textHeight {
                         LockedFieldLabel(
                             text: properties.text,
                             format: properties.format,
                             textHeight: exactLineHeight,
-                            preformatted: preformatted,
-                            highlightRange: highlightRange
+                            preformatted: unwrapped,
+                            highlightRange: highlightRange,
+                            styleRuns: properties.styleRuns
                         )
                         // Ideal height, so a last line that only partially
                         // fits still draws (the part frame clips it) rather
                         // than the label dropping it whole.
-                        .fixedSize(horizontal: preformatted, vertical: true)
+                        .fixedSize(horizontal: unwrapped, vertical: true)
                     } else {
-                        Text(highlightedText(properties.text))
-                            .font(properties.format.font)
-                            .underline(properties.format.isUnderline)
+                        Text(styledText(properties))
                             .multilineTextAlignment(properties.format.align.swiftUI)
                             .lineLimit(nil)
-                            .fixedSize(horizontal: preformatted, vertical: true)
+                            .fixedSize(horizontal: unwrapped, vertical: true)
+                    }
+                }
+                Group {
+                    if properties.style == .scrolling {
+                        ScrollView(.vertical, showsIndicators: true) {
+                            lockedText.frame(maxWidth: .infinity, alignment: lockedAlignment(properties.format.align))
+                        }
+                    } else {
+                        lockedText
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
                 .contentShape(Rectangle())
-                .gesture(lockedFieldPressGesture(properties, preformatted: preformatted))
+                .gesture(lockedFieldPressGesture(properties, preformatted: unwrapped))
             } else if effectivelyMultiline {
                 TextEditor(text: fieldText)
                     .focused($fieldFocused)
@@ -946,21 +1062,35 @@ struct PartView: View {
         return lines.allSatisfy { $0.count <= 40 }
     }
 
-    /// The field text as an AttributedString, with `find`'s matched range
-    /// given a highlight background — HyperCard boxes the found text; we tint
-    /// the exact characters. The base font/style come from the `.font`/etc.
-    /// modifiers, so only the background is set here.
-    private func highlightedText(_ text: String) -> AttributedString {
-        var attributed = AttributedString(text)
-        guard let range = highlightRange else { return attributed }
+    /// The field text as an AttributedString for the SwiftUI Text path (a
+    /// locked field with no imported textHeight): base font/underline over the
+    /// whole string, each styled-text run's font/underline over its span, and
+    /// `find`'s matched range tinted. Carries the font itself (not via the
+    /// `.font` modifier) so per-run fonts apply. Outline isn't expressible
+    /// here — such fields almost always carry a textHeight and take the
+    /// LockedFieldLabel path, which does render it.
+    private func styledText(_ properties: FieldPart) -> AttributedString {
+        var attributed = AttributedString(properties.text)
+        attributed.font = properties.format.font
+        if properties.format.isUnderline { attributed.underlineStyle = .single }
+
         let characters = attributed.characters
-        let count = characters.count
-        let lower = max(0, min(range.lowerBound, count))
-        let upper = max(lower, min(range.upperBound, count))
-        guard lower < upper else { return attributed }
-        let start = characters.index(characters.startIndex, offsetBy: lower)
-        let end = characters.index(characters.startIndex, offsetBy: upper)
-        attributed[start..<end].backgroundColor = .accentColor.opacity(0.35)
+        func range(_ lo: Int, _ hi: Int) -> Range<AttributedString.Index>? {
+            let count = characters.count
+            let lower = max(0, min(lo, count)), upper = max(lower, min(hi, count))
+            guard lower < upper else { return nil }
+            return characters.index(characters.startIndex, offsetBy: lower)
+                ..< characters.index(characters.startIndex, offsetBy: upper)
+        }
+        for (index, run) in properties.styleRuns.enumerated() {
+            let hi = index + 1 < properties.styleRuns.count ? properties.styleRuns[index + 1].start : characters.count
+            guard let span = range(run.start, hi) else { continue }
+            attributed[span].font = run.format.font
+            attributed[span].underlineStyle = run.format.isUnderline ? .single : nil
+        }
+        if let highlightRange, let span = range(highlightRange.lowerBound, highlightRange.upperBound) {
+            attributed[span].backgroundColor = .accentColor.opacity(0.35)
+        }
         return attributed
     }
 
@@ -989,19 +1119,33 @@ struct PartView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         default:
+            let iconImage: Image? = {
+                guard let asset = properties.iconAsset, let data = stackAssets[asset] else { return nil }
+                return Image(assetData: data)
+            }()
+            let hasSymbol = !(properties.iconSymbol ?? "").isEmpty
+            // A lost icon (iconMissing) with no replacement: label it when it has
+            // a title, else draw a placeholder glyph — so it isn't invisible.
+            let lostIcon = properties.iconMissing && iconImage == nil && !hasSymbol
+            let fallbackLabel = lostIcon && !properties.title.isEmpty
             VStack(spacing: 1) {
-                if let asset = properties.iconAsset,
-                   let data = stackAssets[asset],
-                   let image = Image(assetData: data) {
+                if let iconImage {
                     // 1-bit icons stay crisp with nearest-neighbor scaling.
-                    image.resizable().interpolation(.none).aspectRatio(contentMode: .fit)
+                    iconImage.resizable().interpolation(.none).aspectRatio(contentMode: .fit)
                 } else if let symbol = properties.iconSymbol, !symbol.isEmpty {
                     // SF Symbol icon (the authoring library) — vector, scales to fit.
                     Image(systemName: symbol)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
+                } else if lostIcon && properties.title.isEmpty {
+                    // No title to fall back on — a dashed placeholder marks the
+                    // button whose imported icon went missing.
+                    Image(systemName: "questionmark.square.dashed")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .foregroundStyle(.secondary)
                 }
-                if properties.showName {
+                if properties.showName || fallbackLabel {
                     Text(properties.title)
                         .font(properties.format.font)
                         .underline(properties.format.isUnderline)
@@ -1029,15 +1173,27 @@ struct PartView: View {
         part.kind = .button(properties)
     }
 
+    /// The pointer's card location from a part gesture's part-local point.
+    private func trackMouse(_ local: CGPoint) {
+        MouseState.shared.location = CGPoint(x: part.frame.x + local.x, y: part.frame.y + local.y)
+    }
+
     private var pressDetector: some Gesture {
         DragGesture(minimumDistance: 0)
-            .onChanged { _ in
+            .onChanged { value in
+                trackMouse(value.location)
                 if !isPressed {
                     isPressed = true
+                    MouseState.shared.isDown = true
+                    ClickRecord.shared.clickLocation = MouseState.shared.location
                     onMouseDown()
                 }
             }
-            .onEnded { _ in isPressed = false }
+            .onEnded { value in
+                isPressed = false
+                MouseState.shared.isDown = false
+                trackMouse(value.location)
+            }
     }
 
     /// The locked-field press: labelPressGesture plus, on release, recording
@@ -1047,14 +1203,19 @@ struct PartView: View {
     /// straight into the laid-out text.
     private func lockedFieldPressGesture(_ properties: FieldPart, preformatted: Bool) -> some Gesture {
         DragGesture(minimumDistance: 0)
-            .onChanged { _ in
+            .onChanged { value in
+                trackMouse(value.location)
                 if !isPressed {
                     isPressed = true
+                    MouseState.shared.isDown = true
+                    ClickRecord.shared.clickLocation = MouseState.shared.location
                     onMouseDown()
                 }
             }
             .onEnded { value in
                 isPressed = false
+                MouseState.shared.isDown = false
+                trackMouse(value.location)
                 guard (0...part.frame.width).contains(value.location.x),
                       (0...part.frame.height).contains(value.location.y) else { return }
                 let margin: CGFloat = properties.wideMargins ? 18 : 3
@@ -1064,7 +1225,8 @@ struct PartView: View {
                     textWidth: part.frame.width - margin * 2,
                     format: properties.format,
                     wraps: !preformatted,
-                    textHeight: properties.textHeight
+                    textHeight: properties.textHeight,
+                    styleRuns: properties.styleRuns
                 )
                 ClickRecord.shared.recordPending(line: hit.line, text: hit.text)
                 onTap()
@@ -1073,14 +1235,19 @@ struct PartView: View {
 
     private var labelPressGesture: some Gesture {
         DragGesture(minimumDistance: 0)
-            .onChanged { _ in
+            .onChanged { value in
+                trackMouse(value.location)
                 if !isPressed {
                     isPressed = true
+                    MouseState.shared.isDown = true
+                    ClickRecord.shared.clickLocation = MouseState.shared.location
                     onMouseDown()
                 }
             }
             .onEnded { value in
                 isPressed = false
+                MouseState.shared.isDown = false
+                trackMouse(value.location)
                 // Release inside sends mouseUp; sliding off cancels.
                 if (0...part.frame.width).contains(value.location.x),
                    (0...part.frame.height).contains(value.location.y) {

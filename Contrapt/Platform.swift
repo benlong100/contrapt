@@ -147,6 +147,48 @@ struct WindowBinder: NSViewRepresentable {
         DispatchQueue.main.async { [weak nsView] in onWindow(nsView?.window) }
     }
 }
+
+/// Reports the classic HyperCard part "peek": ⌘⌥ outlines buttons, ⌘⌥⇧
+/// outlines fields. A local `.flagsChanged` monitor tracks modifier changes
+/// while the app is active; releasing the keys clears it. `onChange` receives
+/// (showButtons, showFields).
+struct ModifierPeekReader: NSViewRepresentable {
+    var onChange: (Bool, Bool) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onChange: onChange) }
+    func makeNSView(context: Context) -> NSView { context.coordinator.install(); return NSView() }
+    func updateNSView(_ nsView: NSView, context: Context) { context.coordinator.onChange = onChange }
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.remove() }
+
+    final class Coordinator {
+        var onChange: (Bool, Bool) -> Void
+        private var monitor: Any?
+        private var state: (buttons: Bool, fields: Bool) = (false, false)
+
+        init(onChange: @escaping (Bool, Bool) -> Void) { self.onChange = onChange }
+
+        func install() {
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+                guard let self else { return event }
+                let flags = event.modifierFlags
+                let base = flags.intersection([.command, .option]) == [.command, .option]
+                // ⌘⌥⇧ peeks fields; ⌘⌥ (no shift) peeks buttons.
+                let shift = flags.contains(.shift)
+                let next = (buttons: base && !shift, fields: base && shift)
+                if next != self.state {
+                    self.state = next
+                    self.onChange(next.buttons, next.fields)
+                }
+                return event
+            }
+        }
+
+        func remove() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+    }
+}
 #endif
 
 // MARK: - Full-screen presentation (macOS)
@@ -281,12 +323,24 @@ extension ScreenEffect {
         case .dissolve:
             return .opacity
         case .iris, .barnDoor, .checkerboard, .venetianBlinds:
-            // A growing shape mask reveals the incoming card layer (and masks
-            // the outgoing one out) over the static background. Symmetric, so
-            // it reads the same as the built-in dissolve does in this setup.
-            return .modifier(
-                active: EffectRevealModifier(progress: 0, kind: kind),
-                identity: EffectRevealModifier(progress: 1, kind: kind)
+            // Complementary masks reveal one card in the shape and hold the
+            // other in its complement — the union always tiles the card exactly
+            // once, so the effect is correct regardless of z-order (as `wipe`
+            // does). `open` (the default) grows the shape from center over the
+            // incoming card; `close` is the same effect with the two cards'
+            // roles swapped — the outgoing card collapses to the center in the
+            // shrinking shape while the incoming shows around it (iris close,
+            // barn doors closing), as in HyperCard.
+            let closing = direction == .close
+            return .asymmetric(
+                insertion: .modifier(
+                    active: EffectRevealModifier(progress: 0, kind: kind, complement: closing),
+                    identity: EffectRevealModifier(progress: 1, kind: kind, complement: closing)
+                ),
+                removal: .modifier(
+                    active: EffectRevealModifier(progress: 0, kind: kind, complement: !closing),
+                    identity: EffectRevealModifier(progress: 1, kind: kind, complement: !closing)
+                )
             )
         case .wipe:
             // HyperCard's wipe is a stationary reveal, not a push: a boundary
@@ -390,11 +444,15 @@ private struct WipeBandShape: Shape {
     }
 }
 
-/// Applies an effect's reveal mask at a given progress (0 hidden → 1 shown).
-/// Animatable, so the transition system tweens `progress`.
+/// Masks a card for a shape effect at `progress` (0 → this card hidden, 1 →
+/// fully shown). `complement` false shows the growing shape itself (the
+/// center-out card); true shows its complement (the edge-in card) via an
+/// even-odd carve. The two roles are complementary at every instant, so the
+/// pair tiles the card exactly once — see the `.asymmetric` pairing above.
 private struct EffectRevealModifier: ViewModifier, Animatable {
     var progress: CGFloat
     let kind: ScreenEffect.Kind
+    var complement = false
 
     var animatableData: CGFloat {
         get { progress }
@@ -402,20 +460,28 @@ private struct EffectRevealModifier: ViewModifier, Animatable {
     }
 
     func body(content: Content) -> some View {
-        content.mask(EffectRevealShape(kind: kind, progress: progress).fill(style: FillStyle(eoFill: false)))
+        content.mask(
+            EffectRevealShape(kind: kind, progress: progress, complement: complement)
+                .fill(style: FillStyle(eoFill: complement))
+        )
     }
 }
 
 /// The revealed region for a masked effect at `progress`: an iris circle, the
 /// widening barn-door band, opening venetian slats, or growing checkerboard
-/// tiles. progress 0 → empty (nothing shown), 1 → the full card.
+/// tiles. progress 0 → empty, 1 → the full card. `complement` inverts it — the
+/// shape is evaluated at (1−p) and enclosed in the full rect so an even-odd
+/// fill shows everything *except* the (shrinking) shape.
 private struct EffectRevealShape: Shape {
     let kind: ScreenEffect.Kind
     var progress: CGFloat
+    var complement = false
 
     func path(in rect: CGRect) -> Path {
-        let p = max(0, min(1, progress))
+        let visible = max(0, min(1, progress))
+        let p = complement ? 1 - visible : visible
         var path = Path()
+        if complement { path.addRect(rect) }
         switch kind {
         case .iris:
             let radius = (hypot(rect.width, rect.height) / 2) * p
@@ -535,6 +601,16 @@ extension Color {
         Color(uiColor: .systemBackground)
         #elseif canImport(AppKit)
         Color(nsColor: .textBackgroundColor)
+        #endif
+    }
+
+    /// The card "ink" — the inverse of `cardSurface` (text on paper). A hilited
+    /// (inverse-video) button fills with this.
+    static var cardInk: Color {
+        #if canImport(UIKit)
+        Color(uiColor: .label)
+        #elseif canImport(AppKit)
+        Color(nsColor: .textColor)
         #endif
     }
 

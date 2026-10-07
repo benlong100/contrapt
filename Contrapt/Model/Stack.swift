@@ -81,6 +81,15 @@ nonisolated struct Stack: Identifiable, Hashable {
     /// code; the interpreter no-ops calls to these names (functions return
     /// empty) instead of raising "Can't understand".
     var externalCommands: [String] = []
+    /// The stack's sounds for the `play` command, by lowercased name.
+    /// Populated at import from the legacy stack's `snd ` resources (plus the
+    /// classic voices from the user's HyperCard app).
+    var sounds: [String: StackSound] = [:]
+    /// How the stack's embedded fonts (FOND resources) resolved at import,
+    /// keyed by classic font ID as a string. Informational: parts carry their
+    /// resolved TextFormat; this records what mapped where (and would back a
+    /// user-editable font mapping later).
+    var fonts: [String: StackFont] = [:]
 
     /// Claims the next permanent scriptID.
     mutating func claimScriptID() -> Int {
@@ -93,7 +102,7 @@ nonisolated struct Stack: Identifiable, Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
-        case isFullScreen, paddingColor, presentAtActualSize, externalCommands
+        case isFullScreen, paddingColor, presentAtActualSize, externalCommands, sounds, fonts
     }
 
     init(from decoder: Decoder) throws {
@@ -110,7 +119,28 @@ extension Stack: Codable {
         paddingColor = try container.decodeIfPresent(String.self, forKey: .paddingColor) ?? "black"
         presentAtActualSize = try container.decodeIfPresent(Bool.self, forKey: .presentAtActualSize) ?? false
         externalCommands = try container.decodeIfPresent([String].self, forKey: .externalCommands) ?? []
+        sounds = try container.decodeIfPresent([String: StackSound].self, forKey: .sounds) ?? [:]
+        fonts = try container.decodeIfPresent([String: StackFont].self, forKey: .fonts) ?? [:]
     }
+}
+
+/// A sound the `play` command can voice: its WAV asset, and the MIDI note the
+/// sample plays as recorded (classic `snd ` base frequency — Harpsichord is
+/// 67, Boing 74 — the reference notes are pitched against).
+nonisolated struct StackSound: Codable, Hashable {
+    var asset: String
+    var baseNote: Int = 60
+}
+
+/// How an embedded classic font resolved at import: the family's name, the
+/// design it renders as, and the point-size calibration applied so its line
+/// breaks hold. Keyed in Stack.fonts by the classic font ID (as a string) —
+/// provenance today, and the table a future "Font Mapping" editor would edit
+/// and re-apply.
+nonisolated struct StackFont: Codable, Hashable {
+    var name: String
+    var design: FontDesign
+    var scale: Double
 }
 
 nonisolated struct Background: Identifiable, Hashable {
@@ -209,6 +239,10 @@ nonisolated struct Part: Identifiable, Hashable {
     /// Hidden parts don't render or take taps in browse mode (scriptable
     /// via `set the visible of … to false`); edit mode shows them ghosted.
     var isVisible: Bool = true
+    /// A disabled part (HyperCard's `disable`, `set the enabled to false`)
+    /// renders grayed and doesn't respond to clicks in browse mode. Buttons and
+    /// fields carry it; true by default.
+    var isEnabled: Bool = true
     /// Permanent short ID for scripts (`button id 6`); assigned by the
     /// stack's allocator, stable across renames, never reused.
     var scriptID: Int = 0
@@ -292,10 +326,21 @@ nonisolated struct ButtonPart: Hashable {
     /// alternative to a bundled bitmap. `iconAsset` (an imported PNG) wins when
     /// both are set. Nil for no symbol.
     var iconSymbol: String?
+    /// The button had a HyperCard icon at import, but its ICON resource wasn't
+    /// available (commonly the stack's resource fork was stripped in transfer).
+    /// Lets the view fall back to a label/placeholder instead of rendering an
+    /// invisible dead zone — distinguishing a lost icon from an intentional
+    /// nameless hot-zone button (which has no icon id at all).
+    var iconMissing: Bool = false
+    /// The HyperCard icon resource id the button carries — what `the icon of
+    /// button` reads and `set the icon of button to N` writes. 0 means no icon.
+    /// Kept so icon get/set round-trips even though Contrapt draws from the
+    /// rendered `iconAsset` rather than re-resolving the id at run time.
+    var iconID: Int = 0
 
     init(title: String, showName: Bool = true, autoHilite: Bool = true,
          style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat(),
-         iconAsset: String? = nil, iconSymbol: String? = nil) {
+         iconAsset: String? = nil, iconSymbol: String? = nil, iconMissing: Bool = false, iconID: Int = 0) {
         self.title = title
         self.showName = showName
         self.autoHilite = autoHilite
@@ -304,12 +349,14 @@ nonisolated struct ButtonPart: Hashable {
         self.format = format
         self.iconAsset = iconAsset
         self.iconSymbol = iconSymbol
+        self.iconMissing = iconMissing
+        self.iconID = iconID
     }
 }
 
 /// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol, iconMissing, iconID }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -321,6 +368,8 @@ extension ButtonPart: Codable {
         format = try container.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
         iconAsset = try container.decodeIfPresent(String.self, forKey: .iconAsset)
         iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol)
+        iconMissing = try container.decodeIfPresent(Bool.self, forKey: .iconMissing) ?? false
+        iconID = try container.decodeIfPresent(Int.self, forKey: .iconID) ?? 0
     }
 }
 
@@ -355,12 +404,19 @@ nonisolated struct TextFormat: Hashable {
     /// HyperCard's outline text style: white glyph interiors with a black
     /// stroke — the classic trick for white titles over black paint bars.
     var isOutline = false
+    /// HyperCard's "group" text style — no visual effect, but a click anywhere
+    /// in a grouped run makes `the clickText` return the whole run (the classic
+    /// clickable-phrase idiom: a multi-word card name in a navigation field
+    /// comes back as one string). Kept on the run's format so it survives
+    /// import and round-trips; it deliberately keeps grouped runs from
+    /// collapsing into visually identical neighbors.
+    var isGroup = false
     var align: TextAlign = .left
 }
 
 extension TextFormat: Codable {
     private enum CodingKeys: String, CodingKey {
-        case fontDesign, size, isBold, isItalic, isUnderline, isOutline, align
+        case fontDesign, size, isBold, isItalic, isUnderline, isOutline, isGroup, align
     }
 
     init(from decoder: Decoder) throws {
@@ -371,6 +427,7 @@ extension TextFormat: Codable {
         isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
         isUnderline = try container.decodeIfPresent(Bool.self, forKey: .isUnderline) ?? false
         isOutline = try container.decodeIfPresent(Bool.self, forKey: .isOutline) ?? false
+        isGroup = try container.decodeIfPresent(Bool.self, forKey: .isGroup) ?? false
         align = try container.decodeIfPresent(TextAlign.self, forKey: .align) ?? .left
     }
 }
@@ -392,6 +449,9 @@ nonisolated enum FieldStyle: String, Codable, CaseIterable, Hashable {
     case opaque
     case rectangle
     case shadow
+    /// HyperCard's scrolling field: a rectangle whose overflow scrolls
+    /// instead of clipping (list fields, text viewers).
+    case scrolling
 
     var label: String { rawValue.capitalized }
 }
@@ -418,6 +478,25 @@ nonisolated struct FieldPart: Hashable {
     /// height). Lets tightly-set stacks (the Tour packs 12 lines of 18pt
     /// Palatino into 250px at textHeight 20) keep their vertical layout.
     var textHeight: Double?
+    /// HyperCard's remaining Field Info options. `dontWrap` clips long lines
+    /// instead of soft-wrapping (list fields). `autoSelect` makes a click in
+    /// the (locked) field select its whole line — the list idiom; the script
+    /// selection and highlight follow. `multipleLines` and `autoTab` are
+    /// stored and scriptable; multi-line drag-selection and tabbing behavior
+    /// aren't modeled. `fixedLineHeight` is stored; rendering already honors
+    /// the imported textHeight grid.
+    var dontWrap: Bool = false
+    var autoTab: Bool = false
+    var autoSelect: Bool = false
+    var multipleLines: Bool = false
+    var fixedLineHeight: Bool = false
+    /// Per-run character styling — HyperCard's styled text (a field whose text
+    /// mixes fonts/sizes/styles). Empty means the whole field uses `format`.
+    /// Each run styles from its `start` (a Character offset into `text`) until
+    /// the next run's start; the base `format` covers any gap before the first
+    /// run. Imported from the stack's STBL decorations; the renderers build an
+    /// attributed string from it.
+    var styleRuns: [StyleRun] = []
 
     init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain, lockText: Bool = false, showLines: Bool = false, wideMargins: Bool = false, style: FieldStyle = .rectangle) {
         self.text = text
@@ -436,6 +515,7 @@ nonisolated struct FieldPart: Hashable {
 extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
         case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins, style, textHeight
+        case dontWrap, autoTab, autoSelect, multipleLines, fixedLineHeight, styleRuns
     }
 
     init(from decoder: Decoder) throws {
@@ -450,7 +530,21 @@ extension FieldPart: Codable {
         wideMargins = try container.decodeIfPresent(Bool.self, forKey: .wideMargins) ?? false
         style = try container.decodeIfPresent(FieldStyle.self, forKey: .style) ?? .rectangle
         textHeight = try container.decodeIfPresent(Double.self, forKey: .textHeight)
+        dontWrap = try container.decodeIfPresent(Bool.self, forKey: .dontWrap) ?? false
+        autoTab = try container.decodeIfPresent(Bool.self, forKey: .autoTab) ?? false
+        autoSelect = try container.decodeIfPresent(Bool.self, forKey: .autoSelect) ?? false
+        multipleLines = try container.decodeIfPresent(Bool.self, forKey: .multipleLines) ?? false
+        fixedLineHeight = try container.decodeIfPresent(Bool.self, forKey: .fixedLineHeight) ?? false
+        styleRuns = try container.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
     }
+}
+
+/// One styled-text run: the styling from `start` (a Character offset into the
+/// field's text) until the next run begins. `format`'s alignment is ignored —
+/// runs vary font/size/bold/italic/underline/outline; alignment is field-wide.
+nonisolated struct StyleRun: Codable, Hashable {
+    var start: Int
+    var format: TextFormat
 }
 
 nonisolated struct LabelPart: Codable, Hashable {
@@ -472,7 +566,7 @@ nonisolated struct ImagePart: Codable, Hashable {
 /// so older builds refuse newer stacks instead of failing mid-decode.
 extension Part: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, name, frame, script, type, button, field, label, image, visible, scriptID, locked
+        case id, name, frame, script, type, button, field, label, image, visible, scriptID, locked, enabled
     }
 
     init(from decoder: Decoder) throws {
@@ -482,6 +576,7 @@ extension Part: Codable {
         frame = try container.decode(PartFrame.self, forKey: .frame)
         script = try container.decode(String.self, forKey: .script)
         isVisible = try container.decodeIfPresent(Bool.self, forKey: .visible) ?? true
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         scriptID = try container.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
         isLocked = try container.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         let type = try container.decode(String.self, forKey: .type)
@@ -510,6 +605,7 @@ extension Part: Codable {
         try container.encode(frame, forKey: .frame)
         try container.encode(script, forKey: .script)
         try container.encode(isVisible, forKey: .visible)
+        if !isEnabled { try container.encode(false, forKey: .enabled) }
         try container.encode(scriptID, forKey: .scriptID)
         if isLocked { try container.encode(true, forKey: .locked) }
         switch kind {
@@ -590,27 +686,38 @@ nonisolated extension Stack {
             stack.backgrounds[index].script = Self.cappedScript(stack.backgrounds[index].script)
         }
 
-        // Permanent scriptIDs: keep valid unique ones, then assign the
-        // missing or duplicated from above the maximum. This also migrates
-        // stacks from before scriptIDs existed.
-        var usedScriptIDs = Set<Int>()
+        // Permanent scriptIDs are unique PER LAYER, as in HyperCard — a card's
+        // parts among themselves, a background's parts among themselves, card
+        // ids among cards, background ids among backgrounds — NOT globally. A
+        // non-shared background field imports as a per-card copy on every card,
+        // all legitimately keeping one id (e.g. "Reader's Notes" id 122);
+        // global uniqueness would rename all but the first and break
+        // `bg fld id 122` lookups (while by-name still worked). Keep valid
+        // ids unique within their layer; zero duplicates/invalid for
+        // reassignment below. `nextID` still rises above the global max so
+        // newly authored parts never collide with any existing id.
         var maxScriptID = 0
-        func validated(_ id: Int) -> Int {
-            guard id > 0, !usedScriptIDs.contains(id) else { return 0 }
-            usedScriptIDs.insert(id)
+        func keep(_ id: Int, _ seen: inout Set<Int>) -> Int {
+            guard id > 0, seen.insert(id).inserted else { return 0 }
             maxScriptID = max(maxScriptID, id)
             return id
         }
+        var cardScriptIDs = Set<Int>()
+        for index in stack.cards.indices {
+            stack.cards[index].scriptID = keep(stack.cards[index].scriptID, &cardScriptIDs)
+        }
+        var backgroundScriptIDs = Set<Int>()
         for index in stack.backgrounds.indices {
-            stack.backgrounds[index].scriptID = validated(stack.backgrounds[index].scriptID)
+            stack.backgrounds[index].scriptID = keep(stack.backgrounds[index].scriptID, &backgroundScriptIDs)
+            var seen = Set<Int>()
             for partIndex in stack.backgrounds[index].parts.indices {
-                stack.backgrounds[index].parts[partIndex].scriptID = validated(stack.backgrounds[index].parts[partIndex].scriptID)
+                stack.backgrounds[index].parts[partIndex].scriptID = keep(stack.backgrounds[index].parts[partIndex].scriptID, &seen)
             }
         }
         for index in stack.cards.indices {
-            stack.cards[index].scriptID = validated(stack.cards[index].scriptID)
+            var seen = Set<Int>()
             for partIndex in stack.cards[index].parts.indices {
-                stack.cards[index].parts[partIndex].scriptID = validated(stack.cards[index].parts[partIndex].scriptID)
+                stack.cards[index].parts[partIndex].scriptID = keep(stack.cards[index].parts[partIndex].scriptID, &seen)
             }
         }
         var nextAssignable = maxScriptID + 1
@@ -645,10 +752,14 @@ nonisolated extension Stack {
             if !frame.y.isFinite { frame.y = 0 }
             if !frame.width.isFinite { frame.width = 100 }
             if !frame.height.isFinite { frame.height = 44 }
-            frame.width = min(max(frame.width, 16), cardSize.width)
-            frame.height = min(max(frame.height, 16), cardSize.height)
-            frame.x = min(max(frame.x, 0), cardSize.width - 16)
-            frame.y = min(max(frame.y, 0), cardSize.height - 16)
+            // Honor thin parts down to 1px: classic stacks use them as rules/
+            // dividers (The Hacker Crackdown's 2px "divider"). A 16px floor
+            // fattened those into bars. Still clamp to the card and keep a 16px
+            // sliver of the origin reachable.
+            frame.width = min(max(frame.width, 1), cardSize.width)
+            frame.height = min(max(frame.height, 1), cardSize.height)
+            frame.x = min(max(frame.x, 0), max(0, cardSize.width - 16))
+            frame.y = min(max(frame.y, 0), max(0, cardSize.height - 16))
             part.frame = frame
             return part
         }
@@ -656,7 +767,7 @@ nonisolated extension Stack {
 
     /// A script longer than any plausible hand-written one is truncated
     /// rather than fed to the tokenizer wholesale.
-    private static func cappedScript(_ script: String) -> String {
+    static func cappedScript(_ script: String) -> String {
         script.count > 1_000_000 ? String(script.prefix(1_000_000)) : script
     }
 }
@@ -685,6 +796,7 @@ nonisolated extension Stack {
             if let paint = background.paintImageAsset { names.insert(paint) }
             background.parts.forEach(collect)
         }
+        names.formUnion(sounds.values.map(\.asset))
         return names
     }
 }

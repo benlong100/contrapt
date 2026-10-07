@@ -23,6 +23,26 @@ struct LockedFieldLabel {
     var preformatted: Bool
     /// A character range to show inverted (find box / script selection).
     var highlightRange: Range<Int>?
+    /// Per-run styling (HyperCard styled text); empty = uniform `format`.
+    var styleRuns: [StyleRun] = []
+
+    /// Font/underline/outline/foreground for one run's format — everything
+    /// except the whole-string paragraph style and baseline lift.
+    private func glyphAttributes(_ format: TextFormat) -> [NSAttributedString.Key: Any] {
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: FieldClickHitTest.platformFont(for: format),
+            .foregroundColor: PlatformColor.labelColor,
+            .underlineStyle: format.isUnderline ? NSUnderlineStyle.single.rawValue : 0,
+        ]
+        if format.isOutline {
+            // HyperCard's outline style: white interiors, black stroke — how
+            // the Tour draws white titles over its black paint bars.
+            attributes[.foregroundColor] = PlatformColor.white
+            attributes[.strokeColor] = PlatformColor.black
+            attributes[.strokeWidth] = -2.5
+        }
+        return attributes
+    }
 
     fileprivate func attributedText() -> NSAttributedString {
         let font = FieldClickHitTest.platformFont(for: format)
@@ -41,21 +61,28 @@ struct LockedFieldLabel {
         case .right: .right
         default: .left
         }
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .paragraphStyle: paragraph,
-            .foregroundColor: PlatformColor.labelColor,
-        ]
-        if format.isUnderline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        // Whole-string base: the field's format plus paragraph + baseline.
+        var attributes = glyphAttributes(format)
+        attributes[.paragraphStyle] = paragraph
         if baselineLift > 0 { attributes[.baselineOffset] = baselineLift }
-        if format.isOutline {
-            // HyperCard's outline style: white interiors, black stroke — how
-            // the Tour draws white titles over its black paint bars.
-            attributes[.foregroundColor] = PlatformColor.white
-            attributes[.strokeColor] = PlatformColor.black
-            attributes[.strokeWidth] = -2.5
-        }
         let attributed = NSMutableAttributedString(string: text, attributes: attributes)
+
+        // Styled text: overlay each run's glyph attributes on its span. Stroke
+        // keys are cleared first so a non-outline run drops the base's outline.
+        if !styleRuns.isEmpty {
+            let characters = Array(text)
+            for (index, run) in styleRuns.enumerated() {
+                let lo = max(0, min(run.start, characters.count))
+                let hi = index + 1 < styleRuns.count ? min(styleRuns[index + 1].start, characters.count) : characters.count
+                guard hi > lo else { continue }
+                let utf16Start = String(characters[0..<lo]).utf16.count
+                let utf16Length = String(characters[lo..<hi]).utf16.count
+                let nsRange = NSRange(location: utf16Start, length: utf16Length)
+                attributed.removeAttribute(.strokeColor, range: nsRange)
+                attributed.removeAttribute(.strokeWidth, range: nsRange)
+                attributed.addAttributes(glyphAttributes(run.format), range: nsRange)
+            }
+        }
         if let range = highlightRange {
             // Clamp character offsets into the string and invert the span.
             let characters = Array(text)

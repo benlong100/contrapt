@@ -235,6 +235,8 @@ struct PartInspector: View {
                         VStack(spacing: 8) {
                             Toggle("Show Lines", isOn: fieldShowLines)
                             Toggle("Wide Margins", isOn: fieldWideMargins)
+                            Toggle("Don't Wrap", isOn: fieldDontWrap)
+                            Toggle("Auto Select", isOn: fieldAutoSelect)
                         }
                     }
                     VStack(alignment: .leading, spacing: 4) {
@@ -440,6 +442,8 @@ struct PartInspector: View {
     private var fieldLockText: Binding<Bool> { fieldFlag(\.lockText) }
     private var fieldShowLines: Binding<Bool> { fieldFlag(\.showLines) }
     private var fieldWideMargins: Binding<Bool> { fieldFlag(\.wideMargins) }
+    private var fieldDontWrap: Binding<Bool> { fieldFlag(\.dontWrap) }
+    private var fieldAutoSelect: Binding<Bool> { fieldFlag(\.autoSelect) }
 
     /// A binding to one Bool on the field's FieldPart.
     private func fieldFlag(_ keyPath: WritableKeyPath<FieldPart, Bool>) -> Binding<Bool> {

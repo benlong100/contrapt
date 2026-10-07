@@ -150,6 +150,17 @@ nonisolated final class StackDocument: ReferenceFileDocument {
         return entries
     }
 
+    /// Swaps the displayed stack and assets in place for cross-stack
+    /// navigation (browse-mode `go stack "X"`) — the window becomes a player
+    /// for the target stack, as HyperCard's single window does. Deliberately
+    /// does NOT register undo: that's what marks the document dirty, so a
+    /// navigated-to stack can't be autosaved back over this document's own
+    /// file. (The caller also blocks editing while a foreign stack is shown.)
+    func present(stack newStack: Stack, assets newAssets: [String: Data]) {
+        stack = newStack
+        assets = newAssets
+    }
+
     // MARK: - Mutation choke point
 
     /// Every edit flows through here: assigns the new stack and arranges

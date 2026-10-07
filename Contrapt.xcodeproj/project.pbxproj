@@ -8,10 +8,25 @@
 
 /* Begin PBXBuildFile section */
 		481EF61830647B7100A417DA /* HyperTalk in Frameworks */ = {isa = PBXBuildFile; productRef = 481EF61730647B7100A417DA /* HyperTalk */; };
+		782D358A126025C9103D63CF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CE60C401441A0CD2772D3E07 /* Cocoa.framework */; };
+		959D2842B06C262899AF32A2 /* RuntimeCorpusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFDCC5EDB7D837A25EA6B909 /* RuntimeCorpusTests.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		67604846646963B2AD5F5B5D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 481EF5D2306447CB00A417DA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 481EF5D9306447CB00A417DA;
+			remoteInfo = Contrapt;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		1DE8676DAD7F2DA8F4850CCC /* ContraptTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ContraptTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		481EF5DA306447CB00A417DA /* Contrapt.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Contrapt.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AFDCC5EDB7D837A25EA6B909 /* RuntimeCorpusTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RuntimeCorpusTests.swift; sourceTree = "<group>"; };
+		CE60C401441A0CD2772D3E07 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +38,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0C7ADABD4F269D7E4671E957 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				782D358A126025C9103D63CF /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		481EF5D7306447CB00A417DA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -34,11 +57,29 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		19E643F03E81865BF5ACD8DC /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				3F65CA76BD7F0F989E342010 /* OS X */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		3F65CA76BD7F0F989E342010 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				CE60C401441A0CD2772D3E07 /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
 		481EF5D1306447CB00A417DA = {
 			isa = PBXGroup;
 			children = (
 				481EF5DC306447CB00A417DA /* Contrapt */,
 				481EF5DB306447CB00A417DA /* Products */,
+				19E643F03E81865BF5ACD8DC /* Frameworks */,
+				D706144BDB67BE3B7E7FBB6B /* ContraptTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -46,8 +87,17 @@
 			isa = PBXGroup;
 			children = (
 				481EF5DA306447CB00A417DA /* Contrapt.app */,
+				1DE8676DAD7F2DA8F4850CCC /* ContraptTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D706144BDB67BE3B7E7FBB6B /* ContraptTests */ = {
+			isa = PBXGroup;
+			children = (
+				AFDCC5EDB7D837A25EA6B909 /* RuntimeCorpusTests.swift */,
+			);
+			path = ContraptTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -75,6 +125,24 @@
 			productName = HyperPad;
 			productReference = 481EF5DA306447CB00A417DA /* Contrapt.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C9FF7AB41A828DCED90082C0 /* ContraptTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C8E537B02B91B940367101CE /* Build configuration list for PBXNativeTarget "ContraptTests" */;
+			buildPhases = (
+				CAFBA5981CA6D1590F472258 /* Sources */,
+				0C7ADABD4F269D7E4671E957 /* Frameworks */,
+				CB6D26CD6B0E97963B753FB6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A066F75A6827529E6EC06352 /* PBXTargetDependency */,
+			);
+			name = ContraptTests;
+			productName = ContraptTests;
+			productReference = 1DE8676DAD7F2DA8F4850CCC /* ContraptTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -109,12 +177,20 @@
 			projectRoot = "";
 			targets = (
 				481EF5D9306447CB00A417DA /* Contrapt */,
+				C9FF7AB41A828DCED90082C0 /* ContraptTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		481EF5D8306447CB00A417DA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB6D26CD6B0E97963B753FB6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -131,7 +207,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CAFBA5981CA6D1590F472258 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				959D2842B06C262899AF32A2 /* RuntimeCorpusTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A066F75A6827529E6EC06352 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Contrapt;
+			target = 481EF5D9306447CB00A417DA /* Contrapt */;
+			targetProxy = 67604846646963B2AD5F5B5D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		481EF5E3306447CD00A417DA /* Debug */ = {
@@ -261,7 +354,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 58KR4XUF9K;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -314,7 +407,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 58KR4XUF9K;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -361,6 +454,40 @@
 			};
 			name = Release;
 		};
+		6FCE5C77C4E8D611C69268B5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trompingmarmots.contraptTests;
+				PRODUCT_MODULE_NAME = ContraptTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Contrapt.app/Contents/MacOS/Contrapt";
+			};
+			name = Release;
+		};
+		E7C328CB56ED420D10B8BC75 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trompingmarmots.contraptTests;
+				PRODUCT_MODULE_NAME = ContraptTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Contrapt.app/Contents/MacOS/Contrapt";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -378,6 +505,15 @@
 			buildConfigurations = (
 				481EF5E6306447CD00A417DA /* Debug */,
 				481EF5E7306447CD00A417DA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C8E537B02B91B940367101CE /* Build configuration list for PBXNativeTarget "ContraptTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6FCE5C77C4E8D611C69268B5 /* Release */,
+				E7C328CB56ED420D10B8BC75 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -27,6 +27,41 @@ import HyperTalk
     var ids: [String] = []
 }
 
+/// Stacks added to the message hierarchy by `start using stack "X"`, session-
+/// wide (the host is rebuilt per run). Each stack's script is resolved once,
+/// via the Stack Library, and searched after the current stack for handlers
+/// and functions. Most-recently-added first, as in HyperCard.
+@MainActor final class UsingStackStore {
+    static let shared = UsingStackStore()
+    private(set) var stacks: [(name: String, source: String)] = []
+
+    func begin(_ name: String) {
+        stacks.removeAll { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        guard let url = StackLibrary.shared.url(forName: name),
+              let data = try? Data(contentsOf: url) else { return }
+        // A classic stack's first block is the STAK block; otherwise it's a
+        // native .contrapt. (StackDocument.load never returns nil — it yields an
+        // empty stack for non-.contrapt bytes — so dispatch on the format here.)
+        let head = Array(data.prefix(8))
+        let isClassic = head.count >= 8 && String(bytes: head[4..<8], encoding: .ascii) == "STAK"
+        if isClassic {
+            if let imported = try? LegacyStackImporter.stack(
+                from: data, name: name, stackFork: ResourceFork.forkData(of: url)) {
+                stacks.insert((name, imported.stack.script), at: 0)
+            }
+        } else if let document = StackDocument.load(from: url) {
+            stacks.insert((name, document.stack.script), at: 0)
+        }
+    }
+
+    func end(_ name: String) {
+        stacks.removeAll { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    /// Clears all in-use stacks — used between independent runs (the audit).
+    func reset() { stacks.removeAll() }
+}
+
 /// Where `find` last matched, so the view can box it on the card.
 struct FindHighlight: Equatable {
     var partID: UUID
@@ -41,17 +76,45 @@ struct FindHighlight: Equatable {
 /// word clicked). The field's press gesture records the raw hit; the mouseUp
 /// dispatcher composes the descriptor (it knows the part's layer). Session
 /// state, like FindSession: kept until the next locked-field click.
+/// Whether a browse-mode press is currently down — `the mouse`. Every press
+/// gesture (button, locked field, label, card surface) flips it at touch-down
+/// and release, so a script's press-and-hold poll (`repeat until the mouse is
+/// up`) sees the release. Session state, like ClickRecord.
+@MainActor final class MouseState {
+    static let shared = MouseState()
+    var isDown = false
+    /// The pointer's card location, updated continuously while a browse press
+    /// drags — `the mouseLoc` (there's no hover tracking; between presses it
+    /// holds the last press's position).
+    var location = CGPoint.zero
+}
+
 @MainActor final class ClickRecord {
     static let shared = ClickRecord()
     /// The raw hit from the press gesture, consumed by the dispatcher.
     private var pending: (line: Int, text: String)?
     var line = ""
     var text = ""
+    /// The card point of the last press — `the clickLoc` (DateBook's month
+    /// grids compute the clicked row from it). Nil before any press.
+    var clickLocation: CGPoint?
+    /// Whether a completed click is waiting for `the mouseClick` to report it.
+    /// Armed only when a click lands while a script is already running (the
+    /// dispatcher absorbs it instead of launching a competing handler), so the
+    /// wait-for-a-click poll `repeat until the mouseClick` (deleteHCLine's list
+    /// idiom) sees the user's next click — not the one that launched it.
+    var clickPending = false
 
     func recordPending(line: Int, text: String) { pending = (line, text) }
     func takePending() -> (line: Int, text: String)? {
         defer { pending = nil }
         return pending
+    }
+
+    /// Reads and clears the pending-click flag — `the mouseClick`.
+    func consumeClick() -> Bool {
+        defer { clickPending = false }
+        return clickPending
     }
 }
 
@@ -98,12 +161,25 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onMessage: (String) -> Void
     private let onAnswer: (String, [String]) async -> String
     private let onAsk: (String, String) async -> String?
+    private let onAnswerFile: (String, String?) async -> String?
     private let onNavigate: (Int, [ScreenEffect]) -> Void
     private let onFind: (FindHighlight?) -> Void
     private let onSelection: (FindHighlight?) -> Void
     private let onGoHome: () -> Void
     private let onClickPart: (Part) -> Void
     private let onGoStack: (String, GoDestination?) -> Void
+    /// `lock screen` state, and a cross-window `go home`/`go stack` deferred
+    /// while locked (applied on unlock). Lets the classic invisible peek-and-pop
+    /// at Home net out to no window switch, so the stack stays frontmost.
+    private var isScreenLocked = false
+    private var pendingLockedDestination: GoDestination?
+    /// `doMenu "Copy/Cut/Paste Card"` — the item, lowercased. Routed to the
+    /// document's own card-clipboard actions so scripts and the Edit menu
+    /// share one implementation.
+    private let onCardMenu: (String) -> Void
+    /// Asset bytes by name — `play` reads its WAV through this (assets live on
+    /// the document, not the stack).
+    private let assetData: (String) -> Data?
 
     init(
         stack: Binding<Stack>,
@@ -111,24 +187,30 @@ final class DocumentScriptHost: HyperTalkHost {
         onMessage: @escaping (String) -> Void,
         onAnswer: @escaping (String, [String]) async -> String,
         onAsk: @escaping (String, String) async -> String?,
+        onAnswerFile: @escaping (String, String?) async -> String? = { _, _ in nil },
         onNavigate: @escaping (Int, [ScreenEffect]) -> Void,
         onFind: @escaping (FindHighlight?) -> Void = { _ in },
         onSelection: @escaping (FindHighlight?) -> Void = { _ in },
         onGoHome: @escaping () -> Void = {},
         onClickPart: @escaping (Part) -> Void = { _ in },
-        onGoStack: @escaping (String, GoDestination?) -> Void = { _, _ in }
+        onGoStack: @escaping (String, GoDestination?) -> Void = { _, _ in },
+        onCardMenu: @escaping (String) -> Void = { _ in },
+        assetData: @escaping (String) -> Data? = { _ in nil }
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
         self.onMessage = onMessage
         self.onAnswer = onAnswer
         self.onAsk = onAsk
+        self.onAnswerFile = onAnswerFile
         self.onNavigate = onNavigate
         self.onFind = onFind
         self.onSelection = onSelection
         self.onGoHome = onGoHome
         self.onClickPart = onClickPart
         self.onGoStack = onGoStack
+        self.onCardMenu = onCardMenu
+        self.assetData = assetData
     }
 
     private var stack: Stack { stackBinding.wrappedValue }
@@ -136,6 +218,11 @@ final class DocumentScriptHost: HyperTalkHost {
     /// Set during `sort` so field/property lookups resolve against each card
     /// in turn (see setSortContext); nil means the real current card.
     private var sortContextIndex: Int?
+
+    /// The part a script just created with `doMenu "New Button"/"New Field"`,
+    /// so a following `doMenu "Clear Button"/"Clear Field"` can remove it (the
+    /// object HyperCard would have left selected). Lives for the dispatch.
+    private var selectedPartID: UUID?
 
     private var cardIndex: Int {
         if let sortContextIndex { return sortContextIndex }
@@ -158,6 +245,11 @@ final class DocumentScriptHost: HyperTalkHost {
             let at = cardIndex + 1
             stackBinding.wrappedValue.cards.insert(card, at: at)
             onNavigate(at, [])
+        case "copy card", "cut card", "paste card":
+            // Card cut/copy/paste reuses the document's own clipboard actions
+            // (they carry the card's background and asset bytes across stacks),
+            // so a script and the Edit menu share one implementation.
+            onCardMenu(item.lowercased())
         case "delete card":
             guard stack.cards.count > 1 else { return } // keep at least one card
             guard !stack.cards[cardIndex].cantDelete else {
@@ -166,25 +258,132 @@ final class DocumentScriptHost: HyperTalkHost {
             let idx = cardIndex
             stackBinding.wrappedValue.cards.remove(at: idx)
             onNavigate(min(idx, stackBinding.wrappedValue.cards.count - 1), [])
+        case "new button":
+            addCardPart(makeNewButton())
+        case "new field":
+            addCardPart(makeNewField())
+        case "clear button", "cut button":
+            clearSelectedPart(where: { if case .button = $0.kind { return true }; return false })
+        case "clear field", "cut field":
+            clearSelectedPart(where: { if case .field = $0.kind { return true }; return false })
         default:
             return // menu items Contrapt doesn't model — ignore, as a no-op
         }
     }
 
+    /// Appends a freshly-identified part to the current card's card layer (the
+    /// layer `doMenu "New Button"/"New Field"` build on) and marks it the
+    /// script-selected part, so a following `set … of btn (the number of card
+    /// buttons)` addresses it and `doMenu "Clear Button"` can remove it.
+    private func addCardPart(_ part: Part) {
+        var part = part
+        part.scriptID = stackBinding.wrappedValue.claimScriptID()
+        guard stack.cards.indices.contains(cardIndex) else { return }
+        stackBinding.wrappedValue.cards[cardIndex].parts.append(part)
+        selectedPartID = part.id
+    }
+
+    /// Deletes the script-selected part when it matches (a button for "Clear
+    /// Button", a field for "Clear Field"), as HyperCard clears the selected
+    /// object. The selection is set by `doMenu "New Button"/"New Field"` (the
+    /// just-created part) or by a `click at` with the button/field tool chosen
+    /// (a pre-existing part, on the card or its background — DateBook's
+    /// extendWeekly cleans up old "Extend" buttons this way). With no matching
+    /// selection this is a no-op rather than an error.
+    private func clearSelectedPart(where matches: (Part) -> Bool) {
+        guard let id = selectedPartID, stack.cards.indices.contains(cardIndex) else { return }
+        let card = stack.cards[cardIndex]
+        if let index = card.parts.firstIndex(where: { $0.id == id }), matches(card.parts[index]) {
+            stackBinding.wrappedValue.cards[cardIndex].parts.remove(at: index)
+            selectedPartID = nil
+            return
+        }
+        if let bgIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+           let index = stack.backgrounds[bgIndex].parts.firstIndex(where: { $0.id == id }),
+           matches(stack.backgrounds[bgIndex].parts[index]) {
+            stackBinding.wrappedValue.backgrounds[bgIndex].parts.remove(at: index)
+            selectedPartID = nil
+        }
+    }
+
+    private func makeNewButton() -> Part {
+        let size = CGSize(width: 120, height: 40)
+        return Part(
+            id: UUID(),
+            name: "New Button",
+            frame: centeredFrame(size),
+            script: "",
+            kind: .button(ButtonPart(title: "New Button"))
+        )
+    }
+
+    private func makeNewField() -> Part {
+        let size = CGSize(width: 200, height: 120)
+        return Part(
+            id: UUID(),
+            name: "",
+            frame: centeredFrame(size),
+            script: "",
+            kind: .field(FieldPart(text: "", placeholder: "", isMultiline: true))
+        )
+    }
+
+    /// A frame of the given size centered on the card, clamped into bounds.
+    private func centeredFrame(_ size: CGSize) -> PartFrame {
+        let w = min(size.width, stack.cardSize.width)
+        let h = min(size.height, stack.cardSize.height)
+        return PartFrame(
+            x: max(0, (stack.cardSize.width - w) / 2),
+            y: max(0, (stack.cardSize.height - h) / 2),
+            width: w,
+            height: h
+        )
+    }
+
+    /// `choose <name> tool` — browse (the default) makes `click at` click;
+    /// the button/field tool makes it *select* the part under the point, so
+    /// HyperCard's delete idiom works without re-running the part's script:
+    ///   choose button tool / click at loc of btn "X" / doMenu "Clear Button".
+    /// Per-dispatch (the host is rebuilt per run), so a script that errors
+    /// mid-way can't leave the app stuck in a part tool. Paint tools no-op.
+    func chooseTool(_ name: String) {
+        chosenTool = name.lowercased()
+    }
+
+    func currentToolName() -> String {
+        "\(chosenTool) tool"
+    }
+
+    private var chosenTool = "browse"
+
     func click(x: Int, y: Int) {
         let px = Double(x), py = Double(y)
-        func hit(_ parts: [Part]) -> Part? {
+        func hit(_ parts: [Part], matching: ((Part) -> Bool)? = nil) -> Part? {
             // Topmost first (last in z-order).
             for part in parts.reversed() where part.isVisible {
+                if let matching, !matching(part) { continue }
                 let f = part.frame
                 if px >= f.x, px <= f.x + f.width, py >= f.y, py <= f.y + f.height { return part }
             }
             return nil
         }
         let card = stack.cards[cardIndex]
+        let background = stack.backgrounds.first { $0.id == card.backgroundID }
+        // With a part tool chosen, the click selects (arming Clear Button/
+        // Clear Field) rather than dispatching the part's mouseUp.
+        let selecting: ((Part) -> Bool)? = switch chosenTool {
+        case "button": { if case .button = $0.kind { true } else { false } }
+        case "field": { if case .field = $0.kind { true } else { false } }
+        default: nil
+        }
+        if let selecting {
+            let target = hit(card.parts, matching: selecting)
+                ?? background.flatMap { hit($0.parts, matching: selecting) }
+            selectedPartID = target?.id
+            return
+        }
         if let part = hit(card.parts) { onClickPart(part); return }
-        if let bgIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
-           let part = hit(stack.backgrounds[bgIndex].parts) { onClickPart(part) }
+        if let part = background.flatMap({ hit($0.parts) }) { onClickPart(part) }
         // Nothing under the point — a click on empty card is a no-op here.
     }
 
@@ -203,9 +402,31 @@ final class DocumentScriptHost: HyperTalkHost {
 
     // MARK: - HyperTalkHost
 
+    func setScreenLocked(_ locked: Bool) {
+        isScreenLocked = locked
+        guard !locked, let pending = pendingLockedDestination else { return }
+        pendingLockedDestination = nil
+        switch pending {
+        case .home: onGoHome()
+        case .stack(let name, let card): onGoStack(name, card)
+        default: break
+        }
+    }
+
     func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) async throws {
-        if case .home = destination { onGoHome(); return }
-        if case .stack(let name, let card) = destination { onGoStack(name, card); return }
+        // Cross-window navigation defers while the screen is locked, so a
+        // `lock screen … go home … pop card … unlock screen` peek nets to no
+        // window switch (the stack stays frontmost).
+        if case .home = destination {
+            if isScreenLocked { pendingLockedDestination = .home } else { onGoHome() }
+            return
+        }
+        if case .stack(let name, let card) = destination {
+            if isScreenLocked { pendingLockedDestination = destination } else { onGoStack(name, card) }
+            return
+        }
+        // In-stack navigation (including `pop card`) supersedes a deferred peek.
+        if isScreenLocked { pendingLockedDestination = nil }
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
         // `go back` returns to the last card the script navigated away from.
@@ -235,7 +456,13 @@ final class DocumentScriptHost: HyperTalkHost {
             target = number - 1
         case .named(let name):
             guard let index = stack.cards.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
-                throw HostError("There is no card named \"\(name)\".")
+                // No card by that name: HyperCard's `go "X"` then resolves a
+                // *stack* named X. Hand off to the Stack Library (which opens it
+                // or prompts to locate it), matching the DateBook suite's
+                // `go to "Address"` / `go to "Phone"` cross-stack jumps.
+                if isScreenLocked { pendingLockedDestination = .stack(name: name, card: nil) }
+                else { onGoStack(name, nil) }
+                return
             }
             target = index
         case .id(let id):
@@ -244,7 +471,7 @@ final class DocumentScriptHost: HyperTalkHost {
                 throw HostError("There is no card with id \(id).")
             }
             target = index
-        case .inBackground:
+        case .inBackground, .markedCard, .relativeMarked:
             target = try resolveCardIndex(destination)
             // The script selection doesn't survive leaving the card.
             if target != cardIndex { clearSelection() }
@@ -285,12 +512,17 @@ final class DocumentScriptHost: HyperTalkHost {
             return stack.cards.count { $0.backgroundID == wanted }
         case .backgrounds:
             return stack.backgrounds.count
+        case .markedCards:
+            return stack.cards.count { $0.isMarked }
         case .parts(let kind, let domain):
             let card = stack.cards[cardIndex]
             let cardParts = card.parts
             let backgroundParts = stack.backgrounds.first(where: { $0.id == card.backgroundID })?.parts ?? []
             func matching(_ parts: [Part]) -> Int {
-                parts.filter { $0.kind.word == kind }.count
+                if kind == "part" {
+                    return parts.filter { $0.kind.word == "button" || $0.kind.word == "field" }.count
+                }
+                return parts.filter { $0.kind.word == kind }.count
             }
             switch domain {
             case .card: return matching(cardParts)
@@ -364,6 +596,15 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     /// Resolves a card destination (from `field … of <card>`) to an index.
+    func setMarked(_ marked: Bool, card: GoDestination?) throws {
+        let index = try card.map { try resolveCardIndex($0) } ?? cardIndex
+        stackBinding.wrappedValue.cards[index].isMarked = marked
+    }
+
+    func beginUsingStack(_ name: String) { UsingStackStore.shared.begin(name) }
+    func endUsingStack(_ name: String) { UsingStackStore.shared.end(name) }
+    func inUseStackScripts() -> [(name: String, source: String)] { UsingStackStore.shared.stacks }
+
     private func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
@@ -387,23 +628,50 @@ final class DocumentScriptHost: HyperTalkHost {
             }
             return index
         case .inBackground(let inner, let background):
-            let indices = stack.cards.indices.filter {
-                backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
-            }
-            guard !indices.isEmpty else {
-                throw HostError("There is no background named \"\(background)\".")
+            let indices: [Int]
+            if let background {
+                indices = stack.cards.indices.filter {
+                    backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
+                }
+                guard !indices.isEmpty else {
+                    throw HostError("There is no background named \"\(background)\".")
+                }
+            } else {
+                // Unnamed (`of bkgnd` / `of this bkgnd`) — the current card's.
+                let wanted = stack.cards[cardIndex].backgroundID
+                indices = stack.cards.indices.filter { stack.cards[$0].backgroundID == wanted }
             }
             switch inner {
             case .first: return indices.first!
             case .last: return indices.last!
             case .number(let number):
                 guard (1...indices.count).contains(number) else {
-                    throw HostError("There is no card \(number) in background \"\(background)\".")
+                    throw HostError("There is no card \(number) in that background.")
                 }
                 return indices[number - 1]
+            case .named(let name):
+                guard let index = indices.first(where: { stack.cards[$0].name.caseInsensitiveCompare(name) == .orderedSame }) else {
+                    throw HostError("There is no card named \"\(name)\" in that background.")
+                }
+                return index
+            case .id(let id):
+                let wanted = id.trimmingCharacters(in: .whitespaces)
+                guard let index = indices.first(where: { String(stack.cards[$0].scriptID) == wanted }) else {
+                    throw HostError("There is no card with id \(id) in that background.")
+                }
+                return index
             default:
                 throw HostError("That card reference isn't supported within a background.")
             }
+        case .markedCard(let n):
+            let marked = stack.cards.indices.filter { stack.cards[$0].isMarked }
+            guard (1...marked.count).contains(n) else { throw HostError("There is no marked card \(n).") }
+            return marked[n - 1]
+        case .relativeMarked(let forward):
+            let marked = stack.cards.indices.filter { stack.cards[$0].isMarked }
+            guard !marked.isEmpty else { throw HostError("There are no marked cards.") }
+            return forward ? (marked.first { $0 > cardIndex } ?? marked.first!)
+                           : (marked.last { $0 < cardIndex } ?? marked.last!)
         case .home, .back, .stack:
             throw HostError("Can't address a field of that card.")
         }
@@ -433,11 +701,101 @@ final class DocumentScriptHost: HyperTalkHost {
         onMessage(text)
     }
 
-    /// `the clickLine` / `the clickText` — the last locked-field click.
+    /// `the clickLine` / `the clickText` / `the clickLoc` — the last click.
     func clickValue(_ field: ClickField) -> String {
         switch field {
-        case .line: ClickRecord.shared.line
-        case .text: ClickRecord.shared.text
+        case .line: return ClickRecord.shared.line
+        case .text: return ClickRecord.shared.text
+        case .location:
+            guard let point = ClickRecord.shared.clickLocation else { return "" }
+            return "\(Int(point.x.rounded())),\(Int(point.y.rounded()))"
+        }
+    }
+
+    /// `the mouse` — down while a browse-mode press is held.
+    func mouseIsDown() -> Bool {
+        MouseState.shared.isDown
+    }
+
+    /// `the mouseClick` — true once for each browse-mode click since the last
+    /// read (consumed here). Cleared at dispatch so the launching click is
+    /// excluded.
+    func consumeMouseClick() -> Bool {
+        ClickRecord.shared.consumeClick()
+    }
+
+    /// `the mouseLoc` — the pointer's card location, live while a press drags
+    /// (between presses: where the last press ended; hover isn't tracked).
+    func mouseLocation() -> (x: Int, y: Int)? {
+        let point = MouseState.shared.location
+        return (Int(point.x.rounded()), Int(point.y.rounded()))
+    }
+
+    /// `play <voice> …` — the stack's imported `snd ` sound by (lowercased)
+    /// name, or the synthesized fallback voice when there's no such sound.
+    func play(voice: String, tempo: Double, notes: [PlayNote]) {
+        let sound = stack.sounds[voice.lowercased()]
+        let wav = sound.flatMap { assetData($0.asset) }
+        SoundPlayer.shared.play(name: voice, wav: wav, baseNote: sound?.baseNote ?? 60, tempo: tempo, notes: notes)
+    }
+
+    func stopPlay() {
+        SoundPlayer.shared.stop()
+    }
+
+    /// `the sound` — the playing voice's name, "done" when idle.
+    func playingSoundName() -> String {
+        SoundPlayer.shared.playingName
+    }
+
+    /// The current card's card/background/stack scripts, for the interpreter to
+    /// re-read after navigation so the message path follows the moving card.
+    /// Mirrors the tail ContentView.scriptPath builds for the initial dispatch.
+    func systemScriptLayers() -> [ScriptLayer]? {
+        systemScriptLayers(forCardAt: cardIndex)
+    }
+
+    /// The card/background/stack layers for the card at `index`.
+    private func systemScriptLayers(forCardAt index: Int) -> [ScriptLayer]? {
+        guard stack.cards.indices.contains(index) else { return nil }
+        let card = stack.cards[index]
+        var layers: [ScriptLayer] = [
+            ScriptLayer(name: "card \"\(card.name)\" script", source: card.script, object: .thisCard)
+        ]
+        if let background = stack.backgrounds.first(where: { $0.id == card.backgroundID }) {
+            layers.append(ScriptLayer(name: "background script", source: background.script, object: .thisBackground))
+        }
+        layers.append(ScriptLayer(name: "stack script", source: stack.script, object: .thisStack))
+        return layers
+    }
+
+    /// The full dispatch path for `send <msg> to <object>` when the target
+    /// isn't on the running path: the object's own script, then the layers
+    /// beneath it — a part falls through its card/background/stack; another
+    /// card falls through its own background and the stack.
+    func scriptLayers(for object: HyperTalkObject) -> [ScriptLayer]? {
+        switch object {
+        case .part(let kind, let domain, let reference, let onCard):
+            guard let location = try? locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard) else { return nil }
+            let target = part(at: location)
+            let layerDomain: HyperTalkObject.PartDomain = if case .background = location { .background } else { .card }
+            let layer = ScriptLayer(
+                name: "\(kind) \"\(target.name)\" script",
+                source: target.script,
+                object: .part(kind: kind, domain: layerDomain, reference: .id(String(target.scriptID)), onCard: nil)
+            )
+            return [layer] + (systemScriptLayers() ?? [])
+        case .card(let destination):
+            guard let index = try? resolveCardIndex(destination) else { return nil }
+            return systemScriptLayers(forCardAt: index)
+        case .thisCard, .thisBackground, .thisStack:
+            // Already on every running path; the interpreter dispatches there
+            // directly, so this is only a fallback for pathless contexts.
+            guard let system = systemScriptLayers() else { return nil }
+            if let start = system.firstIndex(where: { $0.object == object }) {
+                return Array(system[start...])
+            }
+            return nil
         }
     }
 
@@ -559,6 +917,10 @@ final class DocumentScriptHost: HyperTalkHost {
         await onAsk(prompt, initialAnswer)
     }
 
+    func answerFile(_ prompt: String, type: String?) async -> String? {
+        await onAnswerFile(prompt, type)
+    }
+
     func wait(seconds: Double) async {
         try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
     }
@@ -567,8 +929,8 @@ final class DocumentScriptHost: HyperTalkHost {
         switch object {
         case .part(let kind, let domain, let reference, let onCard):
             return (try? locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)) != nil
-        case .card(let reference):
-            return (try? cardIndexFor(reference)) != nil
+        case .card(let destination):
+            return (try? resolveCardIndex(destination)) != nil
         case .thisCard:
             return !stack.cards.isEmpty
         case .thisBackground:
@@ -757,6 +1119,14 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private func convertParse(_ value: String, from: [ConvertFormat]) throws -> Date {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
+        // HyperCard fills any date/time components the value doesn't supply from
+        // the current date and time — so an empty value converts as "now"
+        // (rather than erroring). DateBook relies on this: `goSixMonthly field
+        // "weekSecs"` on a card whose field is empty degrades to the current
+        // period instead of stopping the handler.
+        if trimmed.isEmpty {
+            return Date()
+        }
         if from == [.seconds] || (from.isEmpty && Double(trimmed) != nil) {
             guard let seconds = Double(trimmed) else {
                 throw HostError("Can't read \"\(value)\" as seconds.")
@@ -764,15 +1134,23 @@ final class DocumentScriptHost: HyperTalkHost {
             return Date(timeIntervalSince1970: seconds)
         }
         if from == [.dateItems] || (from.isEmpty && trimmed.contains(",")) {
-            let parts = trimmed.split(separator: ",").map { Int($0.trimmingCharacters(in: .whitespaces)) ?? 0 }
-            guard parts.count >= 3 else {
-                throw HostError("Expected at least year, month, and day in dateItems.")
+            // Missing or empty components inherit from the current date/time,
+            // as in HyperCard — so `,,,0,0,0` (from `put 0 into item 4/5/6`) is
+            // today at midnight, not an invalid year-0 date.
+            let now = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: Date())
+            let raw = trimmed.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            func part(_ index: Int, _ fallback: Int) -> Int {
+                guard index < raw.count, !raw[index].isEmpty, let n = Int(raw[index]) else { return fallback }
+                return n
             }
             var components = DateComponents()
-            components.year = parts[0]; components.month = parts[1]; components.day = parts[2]
-            if parts.count > 3 { components.hour = parts[3] }
-            if parts.count > 4 { components.minute = parts[4] }
-            if parts.count > 5 { components.second = parts[5] }
+            components.year = part(0, now.year!)
+            components.month = part(1, now.month!)
+            components.day = part(2, now.day!)
+            components.hour = part(3, now.hour!)
+            components.minute = part(4, now.minute!)
+            components.second = part(5, now.second!)
             guard let date = Calendar.current.date(from: components) else {
                 throw HostError("Can't read \"\(value)\" as dateItems.")
             }
@@ -819,8 +1197,8 @@ final class DocumentScriptHost: HyperTalkHost {
                 return String(ordinal(of: location, kind: kind))
             }
             return try partProperty(property, of: part(at: location), kind: kind)
-        case .card(let reference):
-            let index = try cardIndexFor(reference)
+        case .card(let destination):
+            let index = try resolveCardIndex(destination)
             return try cardProperty(property, cardAt: index)
         case .thisCard:
             return try cardProperty(property, cardAt: cardIndex)
@@ -834,6 +1212,12 @@ final class DocumentScriptHost: HyperTalkHost {
             case "longname": return "bkgnd \"\(background.name)\""
             case "longid": return "bkgnd id \(background.scriptID)"
             case "id": return String(background.scriptID)
+            case "number":
+                // The background's 1-based position among the stack's
+                // backgrounds — `the number of this background` (DateBook's
+                // doMenu guards on it).
+                return String((stack.backgrounds.firstIndex(where: { $0.id == background.id }) ?? 0) + 1)
+            case "script": return background.script
             case "cantdelete": return background.cantDelete ? "true" : "false"
             case "dontsearch": return background.dontSearch ? "true" : "false"
             default: throw Self.noSuchProperty(property, of: "this background")
@@ -842,11 +1226,18 @@ final class DocumentScriptHost: HyperTalkHost {
             switch property {
             case "name": return stack.name
             case "longname", "longid": return "stack \"\(stack.name)\""
+            case "script": return stack.script
             case "cards": return String(stack.cards.count)
             case "width": return numberText(stack.cardSize.width)
             case "height": return numberText(stack.cardSize.height)
             case "fullscreen": return stack.isFullScreen ? "true" : "false"
             case "paddingcolor": return stack.paddingColor
+            // Stack properties Contrapt doesn't model (the SET side no-ops these
+            // too — see the interpreter's ignorableStackProperties): report
+            // benign defaults so guards like `if the cantModify of this stack`
+            // run. `freeSize`/`size` are byte counts we don't track → 0.
+            case "cantmodify", "cantabort", "cantpeek", "cantdelete", "usermodify": return "false"
+            case "freesize", "size": return "0"
             default: throw Self.noSuchProperty(property, of: "this stack")
             }
         }
@@ -862,8 +1253,8 @@ final class DocumentScriptHost: HyperTalkHost {
             var updated = part(at: location)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: location)
-        case .card(let reference):
-            try setCardProperty(property, cardAt: try cardIndexFor(reference), to: value)
+        case .card(let destination):
+            try setCardProperty(property, cardAt: try resolveCardIndex(destination), to: value)
         case .thisCard:
             try setCardProperty(property, cardAt: cardIndex, to: value)
         case .thisBackground:
@@ -895,6 +1286,7 @@ final class DocumentScriptHost: HyperTalkHost {
         case "longname": return "\(kind) \"\(part.name)\""
         case "longid": return "\(kind) id \(part.scriptID)"
         case "id": return String(part.scriptID)
+        case "script": return part.script
         case "visible": return part.isVisible ? "true" : "false"
         case "width": return numberText(part.frame.width)
         case "height": return numberText(part.frame.height)
@@ -926,6 +1318,12 @@ final class DocumentScriptHost: HyperTalkHost {
         case "hilite", "highlight":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.hilite ? "true" : "false"
+        case "icon":
+            // The button's icon resource id (0 = none). Contrapt draws the
+            // rendered `iconAsset`, so a `set` round-trips the id but doesn't
+            // re-resolve a new glyph at run time.
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return String(properties.iconID)
         case "text":
             switch part.kind {
             case .field(let properties): return properties.text
@@ -956,6 +1354,29 @@ final class DocumentScriptHost: HyperTalkHost {
         case "widemargins":
             guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.wideMargins ? "true" : "false"
+        case "dontwrap":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.dontWrap ? "true" : "false"
+        case "autotab":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.autoTab ? "true" : "false"
+        case "autoselect":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.autoSelect ? "true" : "false"
+        case "multiplelines":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.multipleLines ? "true" : "false"
+        case "fixedlineheight":
+            guard case .field(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.fixedLineHeight ? "true" : "false"
+        case "enabled":
+            // `the enabled of button X` — false after `disable`.
+            return part.isEnabled ? "true" : "false"
+        case "scroll":
+            // The field's scroll offset in pixels; Contrapt doesn't track it, so
+            // it reads 0 (`the scroll of field X`, Version 1.2.5 Release Notes).
+            guard case .field = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return "0"
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -965,17 +1386,24 @@ final class DocumentScriptHost: HyperTalkHost {
         switch property {
         case "name":
             part.name = value
+        case "script":
+            // `set the script of button "X" to …` — scripts build buttons and
+            // wire their behavior at run time (DateBook's fillWeekly). Capped
+            // like any loaded script so a runaway can't grow it unbounded.
+            part.script = Stack.cappedScript(value)
         case "visible":
             part.isVisible = try boolean(value, for: property)
-        case "width": part.frame.width = max(16, try number(value, for: property))
-        case "height": part.frame.height = max(16, try number(value, for: property))
+        case "enabled":
+            part.isEnabled = try boolean(value, for: property)
+        case "width": part.frame.width = max(1, try number(value, for: property))
+        case "height": part.frame.height = max(1, try number(value, for: property))
         case "left": part.frame.x = try number(value, for: property)
         case "top": part.frame.y = try number(value, for: property)
         case "right": part.frame.x = try number(value, for: property) - part.frame.width
         case "bottom": part.frame.y = try number(value, for: property) - part.frame.height
         case "rect", "rectangle":
             let n = try numberList(value, count: 4, for: property)
-            part.frame = PartFrame(x: n[0], y: n[1], width: max(16, n[2] - n[0]), height: max(16, n[3] - n[1]))
+            part.frame = PartFrame(x: n[0], y: n[1], width: max(1, n[2] - n[0]), height: max(1, n[3] - n[1]))
         case "loc", "location":
             let n = try numberList(value, count: 2, for: property)
             part.frame.x = n[0] - part.frame.width / 2
@@ -1012,6 +1440,20 @@ final class DocumentScriptHost: HyperTalkHost {
         case "hilite", "highlight":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.hilite = try boolean(value, for: property)
+            part.kind = .button(properties)
+        case "icon":
+            // HyperCard sets an icon by numeric resource id OR by its name
+            // (`set icon of btn to "General Essay"`). A numeric id round-trips
+            // (so a later `the icon of` reads it back); setting to 0 clears the
+            // icon. Contrapt can't re-resolve a nonzero id OR a name to a glyph
+            // at run time (the icon library isn't loaded), so those are accepted
+            // without swapping the drawn image — a name leaves the current icon
+            // in place rather than erroring.
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            if let id = Int(value.trimmingCharacters(in: .whitespaces)) {
+                properties.iconID = id
+                if id == 0 { properties.iconAsset = nil; properties.iconSymbol = nil; properties.iconMissing = false }
+            }
             part.kind = .button(properties)
         case "text":
             switch part.kind {
@@ -1051,6 +1493,25 @@ final class DocumentScriptHost: HyperTalkHost {
             try withField(&part, kind: kind) { $0.showLines = try boolean(value, for: property) }
         case "widemargins":
             try withField(&part, kind: kind) { $0.wideMargins = try boolean(value, for: property) }
+        case "dontwrap":
+            try withField(&part, kind: kind) { $0.dontWrap = try boolean(value, for: property) }
+        case "autotab":
+            try withField(&part, kind: kind) { $0.autoTab = try boolean(value, for: property) }
+        case "autoselect":
+            try withField(&part, kind: kind) { $0.autoSelect = try boolean(value, for: property) }
+        case "multiplelines":
+            try withField(&part, kind: kind) { $0.multipleLines = try boolean(value, for: property) }
+        case "fixedlineheight":
+            try withField(&part, kind: kind) { $0.fixedLineHeight = try boolean(value, for: property) }
+        case "sharedtext":
+            // Contrapt background fields inherently share their text (they
+            // live on the background); per-card bg text isn't modeled, so
+            // setting sharedText is accepted and ignored.
+            _ = try boolean(value, for: property)
+        case "scroll", "enabled":
+            // Not modeled (a field's scroll offset; a disabled part) — accept
+            // and ignore so setup handlers run (reads give 0 / true).
+            break
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -1092,6 +1553,8 @@ final class DocumentScriptHost: HyperTalkHost {
         if format.isBold { parts.append("bold") }
         if format.isItalic { parts.append("italic") }
         if format.isUnderline { parts.append("underline") }
+        if format.isOutline { parts.append("outline") }
+        if format.isGroup { parts.append("group") }
         return parts.isEmpty ? "plain" : parts.joined(separator: ",")
     }
 
@@ -1100,6 +1563,48 @@ final class DocumentScriptHost: HyperTalkHost {
         format.isBold = tokens.contains("bold")
         format.isItalic = tokens.contains("italic")
         format.isUnderline = tokens.contains("underline")
+        format.isOutline = tokens.contains("outline")
+        // `group` makes the field's text click as a unit (see TextFormat.isGroup
+        // and FieldClickHitTest) — scriptable via `set the textStyle … to group`.
+        format.isGroup = tokens.contains("group")
+    }
+
+    // MARK: - Chunk (text-run) properties
+
+    func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String {
+        let location = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
+        guard case .field(let properties) = part(at: location).kind else {
+            throw HostError("That part is not a field.")
+        }
+        return Self.runProperty(property, text: properties.text, base: properties.format,
+                                runs: properties.styleRuns, range: range)
+    }
+
+    /// Reads a text-run property over a character range: the value if uniform
+    /// across the range, else "mixed" (textStyle) / "" (textFont, textSize).
+    static func runProperty(_ property: String, text: String, base: TextFormat, runs: [StyleRun], range: Range<Int>) -> String {
+        let runs = runs.sorted { $0.start < $1.start }
+        func format(at offset: Int) -> TextFormat {
+            var fmt = base
+            for run in runs where run.start <= offset { fmt = run.format }
+            return fmt
+        }
+        func value(_ f: TextFormat) -> String {
+            switch property {
+            case "textfont": return f.fontDesign.rawValue
+            case "textsize": return f.size == f.size.rounded() ? String(Int(f.size)) : String(f.size)
+            case "textstyle": return styleList(f)
+            default: return ""
+            }
+        }
+        let count = text.count
+        let lo = max(0, range.lowerBound)
+        let hi = min(count, range.upperBound)
+        guard lo < hi else { return value(format(at: lo)) } // empty range → format at the edge
+        var values = Set<String>()
+        for i in lo..<hi { values.insert(value(format(at: i))) }
+        if values.count == 1 { return values.first! }
+        return property == "textstyle" ? "mixed" : ""
     }
 
     static func parseFontDesign(_ value: String) -> FontDesign? {
@@ -1113,12 +1618,16 @@ final class DocumentScriptHost: HyperTalkHost {
         case "name": return card.name
         case "longname": return "card \"\(card.name)\""
         case "longid": return "card id \(card.scriptID)"
+        case "script": return card.script
         case "highlightcolor": return card.highlightColor ?? ""
         case "number": return String(index + 1)
         case "id": return String(card.scriptID)
         case "marked": return card.isMarked ? "true" : "false"
         case "cantdelete": return card.cantDelete ? "true" : "false"
         case "dontsearch": return card.dontSearch ? "true" : "false"
+        // The card picture is always shown (Contrapt doesn't model hiding the
+        // paint layer); `showPict` reads true and setting it is a no-op.
+        case "showpict": return "true"
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }
@@ -1139,28 +1648,8 @@ final class DocumentScriptHost: HyperTalkHost {
         case "highlightcolor":
             // Empty clears it back to the app accent.
             stackBinding.wrappedValue.cards[index].highlightColor = value.isEmpty ? nil : value
+        case "showpict": break // the paint layer is always shown — no-op
         default: throw Self.noSuchProperty(property, of: "a card")
-        }
-    }
-
-    private func cardIndexFor(_ reference: HyperTalkObject.Reference) throws -> Int {
-        switch reference {
-        case .number(let number):
-            guard (1...stack.cards.count).contains(number) else {
-                throw HostError("There is no card \(number) — this stack has \(stack.cards.count) card\(stack.cards.count == 1 ? "" : "s").")
-            }
-            return number - 1
-        case .named(let which):
-            guard let index = stack.cards.firstIndex(where: { $0.name.caseInsensitiveCompare(which) == .orderedSame }) else {
-                throw HostError("There is no card named \"\(which)\".")
-            }
-            return index
-        case .id(let id):
-            let wanted = id.trimmingCharacters(in: .whitespaces)
-            guard let index = stack.cards.firstIndex(where: { String($0.scriptID) == wanted }) else {
-                throw HostError("There is no card with id \(id).")
-            }
-            return index
         }
     }
 
@@ -1240,17 +1729,25 @@ final class DocumentScriptHost: HyperTalkHost {
         }
     }
 
+    /// Whether a part matches a referenced kind. The "part" pseudo-kind is a
+    /// wildcard over buttons and fields (HyperCard's `cd part N` by z-order),
+    /// matching the set `the number of parts` counts.
+    private func matchesPartKind(_ part: Part, _ kind: String) -> Bool {
+        if kind == "part" { return part.kind.word == "button" || part.kind.word == "field" }
+        return part.kind.word == kind
+    }
+
     private func index(ofKind kind: String, matching reference: HyperTalkObject.Reference, in parts: [Part]) -> Int? {
         switch reference {
         case .named(let name):
             return parts.firstIndex { part in
-                part.kind.word == kind && part.name.caseInsensitiveCompare(name) == .orderedSame
+                matchesPartKind(part, kind) && part.name.caseInsensitiveCompare(name) == .orderedSame
             }
         case .number(let number):
             // Ordinal among parts of this kind, in part (z) order.
             guard number >= 1 else { return nil }
             var seen = 0
-            for (index, part) in parts.enumerated() where part.kind.word == kind {
+            for (index, part) in parts.enumerated() where matchesPartKind(part, kind) {
                 seen += 1
                 if seen == number { return index }
             }
@@ -1258,7 +1755,7 @@ final class DocumentScriptHost: HyperTalkHost {
         case .id(let id):
             let wanted = id.trimmingCharacters(in: .whitespaces)
             return parts.firstIndex { part in
-                part.kind.word == kind && String(part.scriptID) == wanted
+                matchesPartKind(part, kind) && String(part.scriptID) == wanted
             }
         }
     }
@@ -1276,7 +1773,7 @@ final class DocumentScriptHost: HyperTalkHost {
             partIndex = index
         }
         var seen = 0
-        for (index, part) in parts.enumerated() where part.kind.word == kind {
+        for (index, part) in parts.enumerated() where matchesPartKind(part, kind) {
             seen += 1
             if index == partIndex { return seen }
         }

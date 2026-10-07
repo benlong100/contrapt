@@ -116,6 +116,60 @@ enum ResourceFork {
         return names
     }
 
+    /// Every resource of `type`, with its id, name (empty when unnamed), and
+    /// bytes — the general walker behind sound extraction (`snd `). Follows
+    /// the same map layout as icons/externalNames.
+    static func namedResources(ofType wanted: String, from fork: Data) -> [(id: Int, name: String, data: Data)] {
+        let d = [UInt8](fork)
+        guard d.count >= 16 else { return [] }
+        func u32(_ o: Int) -> Int { o + 4 <= d.count ? Int((UInt32(d[o]) << 24) | (UInt32(d[o+1]) << 16) | (UInt32(d[o+2]) << 8) | UInt32(d[o+3])) : 0 }
+        func u16(_ o: Int) -> Int { o + 2 <= d.count ? Int((UInt16(d[o]) << 8) | UInt16(d[o+1])) : 0 }
+        func i16(_ o: Int) -> Int { Int(Int16(bitPattern: UInt16(u16(o)))) }
+
+        let dataOffset = u32(0), mapOffset = u32(4)
+        guard mapOffset + 28 <= d.count else { return [] }
+        let typeListStart = mapOffset + u16(mapOffset + 24)
+        let nameListStart = mapOffset + u16(mapOffset + 26)
+        guard typeListStart + 2 <= d.count else { return [] }
+        let typeCount = u16(typeListStart) + 1
+
+        var result: [(id: Int, name: String, data: Data)] = []
+        var p = typeListStart + 2
+        for _ in 0..<typeCount {
+            guard p + 8 <= d.count else { break }
+            let type = String(bytes: d[p..<p+4], encoding: .macOSRoman) ?? ""
+            let refCount = u16(p + 4) + 1
+            let refListStart = typeListStart + u16(p + 6)
+            if type == wanted {
+                var r = refListStart
+                for _ in 0..<refCount {
+                    guard r + 12 <= d.count else { break }
+                    let id = i16(r)
+                    var name = ""
+                    let nameOffset = u16(r + 2)
+                    if nameOffset != 0xFFFF {
+                        let start = nameListStart + nameOffset
+                        if start < d.count {
+                            let length = Int(d[start])
+                            if start + 1 + length <= d.count, length > 0 {
+                                name = String(bytes: d[(start + 1)..<(start + 1 + length)], encoding: .macOSRoman) ?? ""
+                            }
+                        }
+                    }
+                    let resourceOffset = (Int(d[r+5]) << 16) | (Int(d[r+6]) << 8) | Int(d[r+7])
+                    let base = dataOffset + resourceOffset
+                    let length = u32(base)
+                    if length > 0, base + 4 + length <= d.count {
+                        result.append((id, name, Data(d[(base + 4)..<(base + 4 + length)])))
+                    }
+                    r += 12
+                }
+            }
+            p += 8
+        }
+        return result
+    }
+
     /// Render a 128-byte ICON (32×32, 1bpp, MSB first) to a PNG: black where a
     /// bit is set, transparent elsewhere — so it sits on a button like paint.
     static func iconPNG(_ icon: Data) -> Data? {

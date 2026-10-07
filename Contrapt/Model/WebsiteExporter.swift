@@ -94,7 +94,8 @@ enum WebsiteExporter {
     }
 
     /// A filesystem-safe folder name (drop path separators and colons).
-    private static func sanitizedFolderName(_ name: String) -> String {
+    /// Also used by BitmapExporter for its export folder.
+    static func sanitizedFolderName(_ name: String) -> String {
         let bad = CharacterSet(charactersIn: "/\\:")
         let cleaned = name.components(separatedBy: bad).joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -270,6 +271,31 @@ extension WebsiteExporter {
         el.style.justifyContent = el.style.textAlign =
           fmt.align === 'center' ? 'center' : fmt.align === 'right' ? 'right' : 'left';
       }
+      // The field's grouped character ranges (HyperCard's group text style) as
+      // [start, end) pairs, split at line breaks so a group never spans lines.
+      // Each character's group state comes from the style run covering it,
+      // falling back to the field's base format. Mirrors the native
+      // FieldClickHitTest. Returns [] for ungrouped fields (the common case).
+      function groupedRanges(f) {
+        const text = f.text || '';
+        const n = text.length;
+        if (!n) return [];
+        const base = !!(f.format && f.format.isGroup);
+        const runs = (f.styleRuns || []).slice().sort((a, b) => a.start - b.start);
+        function groupedAt(i) {
+          let g = base;
+          for (const r of runs) { if (r.start <= i) g = !!(r.format && r.format.isGroup); else break; }
+          return g;
+        }
+        const ranges = [];
+        let s = -1;
+        for (let i = 0; i <= n; i++) {
+          const on = i < n && text[i] !== '\\n' && groupedAt(i);
+          if (on && s < 0) s = i;
+          else if (!on && s >= 0) { ranges.push([s, i]); s = -1; }
+        }
+        return ranges;
+      }
       function paint(asset) {
         if (!asset) return null;
         const im = document.createElement('img');
@@ -291,6 +317,11 @@ extension WebsiteExporter {
           // stacks (the Tour) keep their vertical layout.
           if (f.textHeight) d.style.lineHeight = f.textHeight + 'px';
           d.textContent = f.text || '';
+          // HyperCard "group" text style: the character ranges that click as a
+          // unit, so the click handler can return the whole run as clickText
+          // (the clickable-phrase navigation idiom). Stashed per-field.
+          const groups = groupedRanges(f);
+          if (groups.length) d.dataset.groups = JSON.stringify(groups);
           // Unlocked plain fields become editable once the engine is live.
           if (f.kind !== 'rich' && !f.lockText) d.dataset.editable = '1';
         } else if (p.type === 'button') {
@@ -570,10 +601,19 @@ extension WebsiteExporter {
               const full = partEl.textContent;
               const before = full.slice(0, pos.offset);
               line = (before.match(/\\n/g) || []).length + 1;
-              let s = pos.offset, e = pos.offset;
-              while (s > 0 && !/\\s/.test(full[s - 1])) s--;
-              while (e < full.length && !/\\s/.test(full[e])) e++;
-              word = full.slice(s, e);
+              // Grouped text (HyperCard's group style): a click in a grouped
+              // range returns the whole run, not just the word. Otherwise the
+              // word under the click, scanning out to whitespace.
+              const groups = partEl.dataset.groups ? JSON.parse(partEl.dataset.groups) : [];
+              const group = groups.find(([gs, ge]) => pos.offset >= gs && pos.offset < ge);
+              if (group) {
+                word = full.slice(group[0], group[1]).trim();
+              } else {
+                let s = pos.offset, e = pos.offset;
+                while (s > 0 && !/\\s/.test(full[s - 1])) s--;
+                while (e < full.length && !/\\s/.test(full[e])) e++;
+                word = full.slice(s, e);
+              }
             }
           }
           handle(engine.mouseUp(Number(partEl.dataset.scriptId), line, word));

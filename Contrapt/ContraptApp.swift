@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var autosaveTimer: Timer?
     /// Claims plain ⌘M ahead of menu dispatch (see below).
     private var messageBoxKeyMonitor: Any?
+    /// Tracks the physical mouse button for `the mouse` (see below).
+    private var mouseButtonMonitor: Any?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Suppress AppKit's automatic "Enter Full Screen" View-menu item —
@@ -105,6 +107,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   event.charactersIgnoringModifiers?.lowercased() == "m" else { return event }
             NotificationCenter.default.post(name: .contraptToggleMessageBox, object: nil)
             return nil
+        }
+
+        // `the mouse` must reflect the physical button anywhere over the stack,
+        // not just presses that land on a part's SwiftUI gesture — the classic
+        // "show a panel, `wait until the mouse is down`, hide it" idiom shows a
+        // field on top, and a click on (or near) it wouldn't otherwise register.
+        // A window-level monitor tracks the button for every click and keeps
+        // `the mouse`/`MouseState` honest. It observes and returns the event
+        // unchanged, so normal handling (field editing, button taps) is intact.
+        mouseButtonMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { event in
+            MainActor.assumeIsolated { MouseState.shared.isDown = (event.type == .leftMouseDown) }
+            return event
         }
 
         // Autosave in place every second. DocumentGroup already saves on window
@@ -363,6 +377,74 @@ private struct ExportWebsiteCommand: View {
         }
     }
 }
+
+/// The File menu's "Export Bitmaps…" item — writes each card and background
+/// paint image as a named PNG ("card 3 id 17.png") into a chosen folder, so
+/// they can be upscaled in an external tool and brought back with Replace
+/// Bitmaps.
+private struct ExportBitmapsCommand: View {
+    @FocusedValue(\.stackBitmaps) private var bitmaps
+
+    var body: some View {
+        Button("Export Bitmaps…") { run() }
+            .disabled(bitmaps == nil)
+    }
+
+    private func run() {
+        guard let bitmaps else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a folder to write the stack's bitmaps into."
+        panel.prompt = "Export"
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+        do {
+            let folder = try bitmaps.export(directory)
+            NSWorkspace.shared.activateFileViewerSelecting([folder])
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+}
+
+/// The File menu's "Replace Bitmaps…" item — the return leg of the bitmap
+/// round trip: reads a folder of PNGs named as Export Bitmaps wrote them and
+/// swaps them into the stack (one undoable edit).
+private struct ReplaceBitmapsCommand: View {
+    @FocusedValue(\.stackBitmaps) private var bitmaps
+
+    var body: some View {
+        Button("Replace Bitmaps…") { run() }
+            .disabled(bitmaps == nil)
+    }
+
+    private func run() {
+        guard let bitmaps else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose the folder of replacement bitmaps, named as exported (like “card 1 id 12.png”)."
+        panel.prompt = "Replace"
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+        do {
+            let result = try bitmaps.replace(directory)
+            let alert = NSAlert()
+            alert.messageText = "Bitmaps Replaced"
+            var text = "Replaced \(result.replaced) bitmap\(result.replaced == 1 ? "" : "s")."
+            if !result.unmatched.isEmpty {
+                text += "\n\nSkipped \(result.unmatched.count) file\(result.unmatched.count == 1 ? "" : "s") that didn't match a card or background: "
+                    + result.unmatched.joined(separator: ", ")
+            }
+            alert.informativeText = text
+            alert.runModal()
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+}
 #endif
 
 /// The View menu's Full Screen toggle, enabled when a stack is focused.
@@ -519,6 +601,9 @@ private struct RootView: View {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let contrapt = try? LegacyStackImporter.importedContraptFile(
             from: url, iconApp: HyperCardAppReference.url(), presentAtActualSize: presentAtActualSize) else { return }
+        // Register the imported stack's classic siblings so a multi-file game
+        // can cross-navigate (`go … of stack "X"`) room to room in place.
+        StackLibrary.shared.registerSiblings(of: url, actualSize: presentAtActualSize)
         openExternal(contrapt)
     }
 
@@ -628,6 +713,9 @@ private struct OpenedStackView: View {
     }
     do {
         let contrapt = try LegacyStackImporter.importedContraptFile(from: url, iconApp: iconApp, presentAtActualSize: actualSize)
+        // Register the imported stack's classic siblings so a multi-file game
+        // can cross-navigate (`go … of stack "X"`) room to room in place.
+        StackLibrary.shared.registerSiblings(of: url, actualSize: actualSize)
         NSDocumentController.shared.openDocument(withContentsOf: contrapt, display: true) { _, _, _ in }
     } catch {
         NSAlert(error: error).runModal()
@@ -707,6 +795,8 @@ struct ContraptApp: App {
             }
             Divider()
             ExportWebsiteCommand()
+            ExportBitmapsCommand()
+            ReplaceBitmapsCommand()
         }
         // Cut/Copy/Paste/Delete act on the selected part in edit mode, else
         // on text (Select All stays text-only).
