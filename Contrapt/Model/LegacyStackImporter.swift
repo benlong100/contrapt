@@ -81,7 +81,8 @@ enum LegacyStackImporter {
         // resource fork — custom icons (QuickTime, AppleScript…) that Apple
         // ships inside the stack, not the app. Stack icons win on any id clash.
         var iconLibrary = iconFork.map { ResourceFork.icons(from: $0) } ?? [:]
-        if let stackFork { iconLibrary.merge(ResourceFork.icons(from: stackFork)) { _, stackIcon in stackIcon } }
+        let stackOwnIcons = stackFork.map { ResourceFork.icons(from: $0) } ?? [:]
+        iconLibrary.merge(stackOwnIcons) { _, stackIcon in stackIcon }
         var iconAssetByID: [Int: String] = [:] // dedupe: one asset per icon id used
 
         // Render a BMAP block to a stored paint asset, returning its name.
@@ -211,6 +212,15 @@ enum LegacyStackImporter {
             var card = Card(id: UUID(), name: "Card 1", backgroundID: stack.backgrounds[0].id, script: "", parts: [])
             card.scriptID = stack.claimScriptID()
             stack.cards.append(card)
+        }
+        // The runtime icon library: every icon in the stack's OWN fork (so
+        // `set the icon` can swap to glyphs no button showed at import — the
+        // animation-button idiom), plus whatever app icons buttons referenced.
+        for (id, _) in stackOwnIcons where iconAssetByID[id] == nil {
+            _ = iconAsset(iconID: id)
+        }
+        for (id, assetName) in iconAssetByID {
+            stack.icons[String(id)] = assetName
         }
         return Imported(stack: stack.sanitized(), assets: assets)
     }

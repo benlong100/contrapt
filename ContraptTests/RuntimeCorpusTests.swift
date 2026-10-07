@@ -127,9 +127,23 @@ import HyperTalk
     try host.setProperty("icon", of: button, to: "5678")
     #expect(try host.propertyValue("icon", of: button) == "5678")
     // Setting by icon NAME (HyperCard allows it) is accepted, not an error, and
-    // leaves the current id in place (Contrapt can't resolve a name to a glyph).
+    // leaves the current id in place (names aren't imported).
     try host.setProperty("icon", of: button, to: "General Essay")
     #expect(try host.propertyValue("icon", of: button) == "5678")
+    // Runtime glyph resolution: an id in the stack's icon library swaps the
+    // drawn asset; an unknown id keeps the number but flags the icon missing.
+    stack.icons["777"] = "glyph-777.png"
+    try host.setProperty("icon", of: button, to: "777")
+    if case .button(let b) = stack.cards[0].parts[bIndex].kind {
+        #expect(b.iconAsset == "glyph-777.png")
+        #expect(b.iconMissing == false)
+    } else { Issue.record("button lost its kind") }
+    try host.setProperty("icon", of: button, to: "99999")
+    if case .button(let b) = stack.cards[0].parts[bIndex].kind {
+        #expect(b.iconAsset == nil)
+        #expect(b.iconMissing == true)
+        #expect(b.iconID == 99999)
+    } else { Issue.record("button lost its kind") }
 }
 
 @MainActor

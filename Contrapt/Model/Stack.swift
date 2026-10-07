@@ -85,6 +85,11 @@ nonisolated struct Stack: Identifiable, Hashable {
     /// Populated at import from the legacy stack's `snd ` resources (plus the
     /// classic voices from the user's HyperCard app).
     var sounds: [String: StackSound] = [:]
+    /// The stack's icon library: classic icon resource id (as a string) →
+    /// rendered PNG asset name. Lets `set the icon of button to N` swap the
+    /// drawn glyph at run time (animation/toggle buttons). Filled at import
+    /// from the stack's own fork plus any app icons buttons referenced.
+    var icons: [String: String] = [:]
     /// How the stack's embedded fonts (FOND resources) resolved at import,
     /// keyed by classic font ID as a string. Informational: parts carry their
     /// resolved TextFormat; this records what mapped where (and would back a
@@ -102,7 +107,7 @@ nonisolated struct Stack: Identifiable, Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
-        case isFullScreen, paddingColor, presentAtActualSize, externalCommands, sounds, fonts
+        case isFullScreen, paddingColor, presentAtActualSize, externalCommands, sounds, fonts, icons
     }
 
     init(from decoder: Decoder) throws {
@@ -121,6 +126,7 @@ extension Stack: Codable {
         externalCommands = try container.decodeIfPresent([String].self, forKey: .externalCommands) ?? []
         sounds = try container.decodeIfPresent([String: StackSound].self, forKey: .sounds) ?? [:]
         fonts = try container.decodeIfPresent([String: StackFont].self, forKey: .fonts) ?? [:]
+        icons = try container.decodeIfPresent([String: String].self, forKey: .icons) ?? [:]
     }
 }
 
@@ -783,6 +789,8 @@ nonisolated extension Stack {
     /// are dropped at save time.
     func referencedAssetNames() -> Set<String> {
         var names: Set<String> = []
+        // The icon library stays available for runtime `set the icon`.
+        names.formUnion(icons.values)
         func collect(_ part: Part) {
             switch part.kind {
             case .image(let image): names.insert(image.assetName)

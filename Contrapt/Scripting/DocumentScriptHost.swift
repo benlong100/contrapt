@@ -1696,16 +1696,22 @@ final class DocumentScriptHost: HyperTalkHost {
             part.kind = .button(properties)
         case "icon":
             // HyperCard sets an icon by numeric resource id OR by its name
-            // (`set icon of btn to "General Essay"`). A numeric id round-trips
-            // (so a later `the icon of` reads it back); setting to 0 clears the
-            // icon. Contrapt can't re-resolve a nonzero id OR a name to a glyph
-            // at run time (the icon library isn't loaded), so those are accepted
-            // without swapping the drawn image — a name leaves the current icon
-            // in place rather than erroring.
+            // (`set icon of btn to "General Essay"`). A numeric id resolves
+            // through the stack's imported icon library (stack.icons) so the
+            // DRAWN glyph swaps too — the animation-button idiom; an id the
+            // library lacks keeps the number (round-trips) but shows the
+            // missing-icon fallback. Setting 0 clears; a NAME leaves the
+            // current icon (names aren't imported).
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             if let id = Int(value.trimmingCharacters(in: .whitespaces)) {
                 properties.iconID = id
-                if id == 0 { properties.iconAsset = nil; properties.iconSymbol = nil; properties.iconMissing = false }
+                if id == 0 {
+                    properties.iconAsset = nil; properties.iconSymbol = nil; properties.iconMissing = false
+                } else if let asset = stack.icons[String(id)] {
+                    properties.iconAsset = asset; properties.iconSymbol = nil; properties.iconMissing = false
+                } else {
+                    properties.iconAsset = nil; properties.iconSymbol = nil; properties.iconMissing = true
+                }
             }
             part.kind = .button(properties)
         case "text":
