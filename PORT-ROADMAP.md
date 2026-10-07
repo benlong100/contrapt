@@ -19,10 +19,11 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    script and write user scrolls back on gesture end. Follow-ups live in
    item 11 (web parity) and item 10b (import HyperCard's persisted scroll —
    small; most stacks reset it in openCard).
-2. **File I/O: `open file` / `read from file` / `write to file` / `close file`**
-   — missing entirely; utility stacks im/export data with it. Sandbox-safe
-   design: map classic paths to user-granted folders (the oracle probe itself
-   is the test case!).
+2. **File I/O** — DONE 2026-10-07 (7d9be5b): all four verbs with HC-faithful
+   semantics (read→it + result "eof"; write at mark/eof/N; failures via the
+   result). Classic colon paths map to Application Support/HyperTalk Files in
+   the sandbox. Follow-up: optionally resolve reads from user-granted folders
+   so stacks can read data files shipped beside them.
 3. **Custom menus** — all menu verbs no-op; games build File/game menus
    (Adventures of Sean 2). Needs session menu model + in-window menu strip
    (stacks hide the menubar) + `doMenu` routing + read-side properties.
