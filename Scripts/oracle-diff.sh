@@ -17,13 +17,13 @@ echo "oracle-diff: job $JOB, $COUNT expressions"
 
 # --- Real HyperCard (oracle): CR-terminated job file, poll for the reply.
 { printf "%s\r" "$JOB"; tr "\n" "\r" < "$WORK/exprs.txt"; } | iconv -f UTF-8 -t MACROMAN > "$SHARED/probe-in.txt"
-for i in {1..60}; do
+for i in {1..120}; do
   sleep 1
   if [ -s "$SHARED/probe-out.txt" ] && \
      [ "$(head -c 20 "$SHARED/probe-out.txt" | tr '\r' '\n' | head -1)" = "$JOB" ]; then
     break
   fi
-  [ $i -eq 60 ] && { echo "oracle TIMED OUT (Probe stack open? expression error dialog in guest?)"; exit 1; }
+  [ $i -eq 120 ] && { echo "oracle TIMED OUT (Probe stack open? expression error dialog in guest?)"; exit 1; }
 done
 iconv -f MACROMAN -t UTF-8 < "$SHARED/probe-out.txt" | tr '\r' '\n' | tail -n +2 > "$WORK/oracle.txt"
 

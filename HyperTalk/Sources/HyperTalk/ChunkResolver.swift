@@ -223,7 +223,9 @@ enum ChunkResolver {
         case .last:
             return (count, count)
         case .middle:
-            let m = count == 0 ? 0 : (count + 1) / 2
+            // HyperCard's middle of an even count is the HIGHER index:
+            // middle item of "a,b,c,d" is c (oracle-verified, HC 2.3).
+            let m = count == 0 ? 0 : count / 2 + 1
             return (m, m)
         case .any:
             let i = count == 0 ? 0 : Int.random(in: 1...count)

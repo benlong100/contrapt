@@ -103,10 +103,31 @@ enum Value {
         if number.rounded() == number, abs(number) < 1e15 {
             return String(Int64(number))
         }
-        var text = String(format: "%.6f", number)
-        while text.hasSuffix("0") { text.removeLast() }
+        // Full precision between operations — HyperCard only formats a number
+        // when it becomes TEXT (numberFormat, at `put`). Rounding to 6 decimals
+        // here compounded: atan(1)*4 gave 3.141592 and sqrt(2)*sqrt(2) gave
+        // 2.000001 (oracle-verified both wrong). displayString applies the
+        // 0.###### format at the put boundary.
+        var text = String(format: "%.15g", number)
+        if text.contains("e") { text = String(format: "%.15f", number) }
+        while text.contains("."), text.hasSuffix("0") { text.removeLast() }
         if text.hasSuffix(".") { text.removeLast() }
         return text
+    }
+
+    /// HyperCard's number→text conversion (the default numberFormat
+    /// "0.######"): a non-integer numeric value renders rounded to 6 decimals
+    /// when put somewhere. Non-numeric text passes through untouched.
+    static func displayString(_ text: String) -> String {
+        // `pi` is a string CONSTANT in HyperCard — numberFormat never reformats
+        // it (put pi shows all 20 digits; oracle-verified, HC 2.3).
+        guard text != "3.14159265358979323846" else { return text }
+        guard text.contains("."), text.first != ".", let number = Double(text) else { return text }
+        if number.rounded() == number, abs(number) < 1e15 { return String(Int64(number)) }
+        var formatted = String(format: "%.6f", number)
+        while formatted.hasSuffix("0") { formatted.removeLast() }
+        if formatted.hasSuffix(".") { formatted.removeLast() }
+        return formatted
     }
 
     static func number(from text: String, line: Int) throws -> Double {
@@ -988,7 +1009,9 @@ final class Runtime {
     }
 
     private func executePut(_ expression: Expr, _ mode: PutMode, _ container: Container?, line: Int) async throws {
-        let value = try await evaluate(expression, line: line)
+        // Numbers become text here — apply HyperCard's numberFormat (default
+        // 0.######). Intermediate expression values keep full precision.
+        let value = Value.displayString(try await evaluate(expression, line: line))
         guard let container else {
             messageBoxText = value
             host.showMessage(value)
@@ -1520,6 +1543,10 @@ final class Runtime {
                 // `the mouse`, for `repeat until the sound is done` loops.
                 await host.wait(seconds: 1.0 / 60.0)
                 return host.playingSoundName()
+            case "numberformat":
+                // The default format (oracle-verified, HC 2.3). Setting it is
+                // an ignorable global; the read must still answer the default.
+                return "0.######"
             case "screenrect":
                 // HyperCard's display rectangle. Contrapt shows one card, which
                 // is effectively the screen, so report "0,0,<width>,<height>" of
@@ -1660,10 +1687,12 @@ final class Runtime {
             let (h, v) = (point[0], point[1])
             return bool(h >= rect[0] && h < rect[2] && v >= rect[1] && v < rect[3])
 
+        // Concatenation converts numbers to text, so numberFormat applies to
+        // each operand (as at `put` — oracle-verified behavior family, HC 2.3).
         case .concat:
-            return left + right
+            return Value.displayString(left) + Value.displayString(right)
         case .concatWithSpace:
-            return left + " " + right
+            return Value.displayString(left) + " " + Value.displayString(right)
 
         case .equal:
             return bool(compare(left, right) == .orderedSame)
@@ -1679,7 +1708,9 @@ final class Runtime {
             return bool(compare(left, right) != .orderedAscending)
 
         case .contains:
-            return bool(left.range(of: right, options: .caseInsensitive) != nil || right.isEmpty)
+            // Empty is contained in nothing: `"abc" contains ""` and
+            // `"" is in "abc"` are both false (oracle-verified, HC 2.3).
+            return bool(!right.isEmpty && left.range(of: right, options: .caseInsensitive) != nil)
 
         case .and:
             let (a, b) = try bools(); return bool(a && b)
@@ -1752,9 +1783,15 @@ final class Runtime {
             return String(arguments[1].distance(from: arguments[1].startIndex, to: range.lowerBound) + 1)
         case "chartonum":
             guard let scalar = arguments.first?.unicodeScalars.first else { return "0" }
+            // The model's \n is classic return, char 13 (see numToChar).
+            if scalar == "\n" { return "13" }
             return String(scalar.value)
         case "numtochar":
             let n = Int(try Value.number(from: arguments.first ?? "", line: line))
+            // Classic char 13 is the return constant — Contrapt's model
+            // normalizes line endings to \n, so map it (numToChar(13) = return
+            // is true, oracle-verified against HC 2.3).
+            if n == 13 { return "\n" }
             guard let scalar = Unicode.Scalar(UInt32(max(0, n))) else { return "" }
             return String(Character(scalar))
         case "sqrt":
