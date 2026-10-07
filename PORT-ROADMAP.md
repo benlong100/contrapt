@@ -46,6 +46,11 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    Flash, FileName/FileExists/NewFileName (panels), SpeakText (AVSpeech),
    sound players (alias to our engine), maybe AddColor (visual, Color Tools).
    Each shim is small; the registry + ranking scan is the real deliverable.
+   STATUS 2026-10-07 (ebe60cb): registry live (host callExternal hook at both
+   dispatch sites); corpus scan ranked FileName×11, PopMenu×9, NewFileName×9,
+   HyPict×9, FontExists×5, long tail. Shipped shims: PopMenu/PopUpMenu,
+   FileName, NewFileName, FontExists. Next candidates: HyPict (with P2
+   picture work), Flash, ShowList, SysEnv — add as beta stacks surface them.
 5. **Per-chunk `set the textStyle/textFont/textSize of <chunk> of field`** —
    read side done; write side doesn't parse. StyleRun split/merge exists for
    import, needs script plumbing (both hosts). Backlog has the design.
