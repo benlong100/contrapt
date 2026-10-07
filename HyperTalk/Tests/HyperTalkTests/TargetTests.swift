@@ -98,6 +98,56 @@ import Testing
     #expect(host.fields["out"] == "Go")
 }
 
+@Test func selectAChunkOfTheTargetUsesTheFieldsContents() async throws {
+    // The Home stack's selectHCLine, verbatim: a parenthesized chunk of `the
+    // target` as the select container, sized by a chunk-count expression that
+    // also reads the target's contents.
+    let field = HyperTalkObject.part(kind: "field", domain: .background, reference: .named("Stacks"), onCard: nil)
+    let host = MockHost(fields: ["background stacks": "Alpha\nBeta\nGamma"])
+    let layers = [
+        ScriptLayer(name: "field script", source: """
+        on mouseUp
+          put 2 into theLine
+          select char 1 to ((number of chars in (line theLine of the target)) + 1) of (line theLine to (theLine + 1) of the target)
+        end mouseUp
+        """, object: field),
+    ]
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
+    // Line 2 plus its trailing return: "Beta\n" at absolute chars 6..11.
+    #expect(host.selections.first?.start == 6)
+    #expect(host.selections.first?.end == 11)
+}
+
+@Test func theTargetAsAContainerWritesTheFieldsContents() async throws {
+    let field = HyperTalkObject.part(kind: "field", domain: .card, reference: .named("Note"), onCard: nil)
+    let host = MockHost(fields: ["card note": "old"])
+    let layers = [
+        ScriptLayer(name: "field script", source: """
+        on mouseUp
+          put "Hello" into the target
+        end mouseUp
+        """, object: field),
+    ]
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
+    #expect(host.fields["card note"] == "Hello")
+}
+
+@Test func aChunkOfTheTargetReadsTheFieldsContents() async throws {
+    // `line 2 of the target` is the field's text, while `the target` alone
+    // stays the object's name (as the first test above checks).
+    let field = HyperTalkObject.part(kind: "field", domain: .card, reference: .named("List"), onCard: nil)
+    let host = MockHost(fields: ["card list": "Alpha\nBeta\nGamma", "out": ""])
+    let layers = [
+        ScriptLayer(name: "field script", source: """
+        on mouseUp
+          put line 2 of the target into field "out"
+        end mouseUp
+        """, object: field),
+    ]
+    _ = try await HyperTalk.send("mouseUp", along: layers, host: host)
+    #expect(host.fields["out"] == "Beta")
+}
+
 @Test func meWithoutAnObjectIsAFriendlyError() async throws {
     do {
         _ = try await HyperTalk.send("mouseUp", along: [

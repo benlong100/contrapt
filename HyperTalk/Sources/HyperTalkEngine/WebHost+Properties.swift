@@ -19,8 +19,8 @@ extension WebHost {
             let loc = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
             if property == "number" { return String(ordinal(of: loc, kind: kind)) }
             return try partProperty(property, of: part(at: loc), kind: kind)
-        case .card(let reference):
-            return try cardProperty(property, cardAt: try cardIndexFor(reference))
+        case .card(let destination):
+            return try cardProperty(property, cardAt: try resolveCardIndex(destination))
         case .thisCard:
             return try cardProperty(property, cardAt: cardIndex)
         case .thisBackground:
@@ -33,6 +33,7 @@ extension WebHost {
             case "longname": return "bkgnd \"\(bg.name)\""
             case "longid": return "bkgnd id \(bg.scriptID)"
             case "id": return String(bg.scriptID)
+            case "script": return bg.script
             case "cantdelete": return bg.cantDelete ? "true" : "false"
             case "dontsearch": return bg.dontSearch ? "true" : "false"
             default: throw Self.noSuchProperty(property, of: "this background")
@@ -41,11 +42,16 @@ extension WebHost {
             switch property {
             case "name": return stack.name
             case "longname", "longid": return "stack \"\(stack.name)\""
+            case "script": return stack.script
             case "cards": return String(stack.cards.count)
             case "width": return numberText(stack.cardSize.width)
             case "height": return numberText(stack.cardSize.height)
             case "fullscreen": return stack.isFullScreen ? "true" : "false"
             case "paddingcolor": return stack.paddingColor
+            // Unmodeled stack properties read benign defaults (the SET side
+            // no-ops them too) so guards run.
+            case "cantmodify", "cantabort", "cantpeek", "cantdelete", "usermodify": return "false"
+            case "freesize", "size": return "0"
             default: throw Self.noSuchProperty(property, of: "this stack")
             }
         }
@@ -59,8 +65,8 @@ extension WebHost {
             var updated = part(at: loc)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: loc)
-        case .card(let reference):
-            try setCardProperty(property, cardAt: try cardIndexFor(reference), to: value)
+        case .card(let destination):
+            try setCardProperty(property, cardAt: try resolveCardIndex(destination), to: value)
         case .thisCard:
             try setCardProperty(property, cardAt: cardIndex, to: value)
         case .thisBackground:
@@ -153,6 +159,26 @@ extension WebHost {
         case "widemargins":
             guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.wideMargins ? "true" : "false"
+        case "dontwrap":
+            guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.dontWrap ? "true" : "false"
+        case "autotab":
+            guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.autoTab ? "true" : "false"
+        case "autoselect":
+            guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.autoSelect ? "true" : "false"
+        case "multiplelines":
+            guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.multipleLines ? "true" : "false"
+        case "fixedlineheight":
+            guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.fixedLineHeight ? "true" : "false"
+        case "enabled":
+            return "true" // disabled parts aren't modeled
+        case "scroll":
+            guard case .field = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return "0" // scroll offset isn't tracked
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -162,6 +188,7 @@ extension WebHost {
         switch property {
         case "name": part.name = value
         case "visible": part.isVisible = try boolean(value, for: property)
+        case "enabled": break // disabled parts aren't modeled in the web player yet
         case "width": part.frame.width = max(16, try number(value, for: property))
         case "height": part.frame.height = max(16, try number(value, for: property))
         case "left": part.frame.x = try number(value, for: property)
@@ -233,6 +260,21 @@ extension WebHost {
             try withField(&part, kind: kind) { $0.showLines = try boolean(value, for: property) }
         case "widemargins":
             try withField(&part, kind: kind) { $0.wideMargins = try boolean(value, for: property) }
+        case "dontwrap":
+            try withField(&part, kind: kind) { $0.dontWrap = try boolean(value, for: property) }
+        case "autotab":
+            try withField(&part, kind: kind) { $0.autoTab = try boolean(value, for: property) }
+        case "autoselect":
+            try withField(&part, kind: kind) { $0.autoSelect = try boolean(value, for: property) }
+        case "multiplelines":
+            try withField(&part, kind: kind) { $0.multipleLines = try boolean(value, for: property) }
+        case "fixedlineheight":
+            try withField(&part, kind: kind) { $0.fixedLineHeight = try boolean(value, for: property) }
+        case "sharedtext":
+            // Accepted and ignored — background fields inherently share text.
+            _ = try boolean(value, for: property)
+        case "scroll", "enabled":
+            break // not modeled (field scroll offset; disabled part) — ignore
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -264,6 +306,8 @@ extension WebHost {
         if format.isBold { parts.append("bold") }
         if format.isItalic { parts.append("italic") }
         if format.isUnderline { parts.append("underline") }
+        if format.isOutline { parts.append("outline") }
+        if format.isGroup { parts.append("group") }
         return parts.isEmpty ? "plain" : parts.joined(separator: ",")
     }
 
@@ -272,11 +316,50 @@ extension WebHost {
         format.isBold = tokens.contains("bold")
         format.isItalic = tokens.contains("italic")
         format.isUnderline = tokens.contains("underline")
+        format.isOutline = tokens.contains("outline")
+        // `group` makes the field's text click as a unit (see TextFormat.isGroup)
+        // — scriptable via `set the textStyle … to group`.
+        format.isGroup = tokens.contains("group")
     }
 
     static func parseFontDesign(_ value: String) -> FontDesign? {
         let normalized = value.lowercased().trimmingCharacters(in: .whitespaces)
         return FontDesign.allCases.first { $0.rawValue == normalized || $0.label.lowercased() == normalized }
+    }
+
+    // MARK: - Chunk (text-run) properties
+
+    func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String {
+        let loc = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
+        guard case .field(let f) = part(at: loc).kind else { throw HostError("That part is not a field.") }
+        return Self.runProperty(property, text: f.text, base: f.format, runs: f.styleRuns, range: range)
+    }
+
+    /// Reads a text-run property over a character range: the value if uniform
+    /// across the range, else "mixed" (textStyle) / "" (textFont, textSize).
+    static func runProperty(_ property: String, text: String, base: TextFormat, runs: [StyleRun], range: Range<Int>) -> String {
+        let runs = runs.sorted { $0.start < $1.start }
+        func format(at offset: Int) -> TextFormat {
+            var fmt = base
+            for run in runs where run.start <= offset { fmt = run.format }
+            return fmt
+        }
+        func value(_ f: TextFormat) -> String {
+            switch property {
+            case "textfont": return f.fontDesign.rawValue
+            case "textsize": return f.size == f.size.rounded() ? String(Int(f.size)) : String(f.size)
+            case "textstyle": return styleList(f)
+            default: return ""
+            }
+        }
+        let count = text.count
+        let lo = max(0, range.lowerBound)
+        let hi = min(count, range.upperBound)
+        guard lo < hi else { return value(format(at: lo)) } // empty range → format at the edge
+        var values = Set<String>()
+        for i in lo..<hi { values.insert(value(format(at: i))) }
+        if values.count == 1 { return values.first! }
+        return property == "textstyle" ? "mixed" : ""
     }
 
     // MARK: - Card properties
@@ -287,12 +370,16 @@ extension WebHost {
         case "name": return card.name
         case "longname": return "card \"\(card.name)\""
         case "longid": return "card id \(card.scriptID)"
+        case "script": return card.script
         case "highlightcolor": return card.highlightColor ?? ""
         case "number": return String(index + 1)
         case "id": return String(card.scriptID)
         case "marked": return card.isMarked ? "true" : "false"
         case "cantdelete": return card.cantDelete ? "true" : "false"
         case "dontsearch": return card.dontSearch ? "true" : "false"
+        // The card picture is always shown (Contrapt doesn't model hiding the
+        // paint layer); `showPict` reads true and setting it is a no-op.
+        case "showpict": return "true"
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }
@@ -304,28 +391,8 @@ extension WebHost {
         case "cantdelete": stack.cards[index].cantDelete = try boolean(value, for: property)
         case "dontsearch": stack.cards[index].dontSearch = try boolean(value, for: property)
         case "highlightcolor": stack.cards[index].highlightColor = value.isEmpty ? nil : value
+        case "showpict": break // the paint layer is always shown — no-op
         default: throw Self.noSuchProperty(property, of: "a card")
-        }
-    }
-
-    func cardIndexFor(_ reference: HyperTalkObject.Reference) throws -> Int {
-        switch reference {
-        case .number(let n):
-            guard (1...stack.cards.count).contains(n) else {
-                throw HostError("There is no card \(n) — this stack has \(stack.cards.count) card\(stack.cards.count == 1 ? "" : "s").")
-            }
-            return n - 1
-        case .named(let which):
-            guard let i = stack.cards.firstIndex(where: { $0.name.caseInsensitiveCompare(which) == .orderedSame }) else {
-                throw HostError("There is no card named \"\(which)\".")
-            }
-            return i
-        case .id(let id):
-            let wanted = id.trimmingCharacters(in: .whitespaces)
-            guard let i = stack.cards.firstIndex(where: { String($0.scriptID) == wanted }) else {
-                throw HostError("There is no card with id \(id).")
-            }
-            return i
         }
     }
 
@@ -398,21 +465,29 @@ extension WebHost {
         }
     }
 
+    /// Whether a part matches a referenced kind. The "part" pseudo-kind is a
+    /// wildcard over buttons and fields (HyperCard's `cd part N` by z-order),
+    /// matching the set `the number of parts` counts.
+    func matchesPartKind(_ part: Part, _ kind: String) -> Bool {
+        if kind == "part" { return part.kind.word == "button" || part.kind.word == "field" }
+        return part.kind.word == kind
+    }
+
     func index(ofKind kind: String, matching reference: HyperTalkObject.Reference, in parts: [Part]) -> Int? {
         switch reference {
         case .named(let name):
-            return parts.firstIndex { $0.kind.word == kind && $0.name.caseInsensitiveCompare(name) == .orderedSame }
+            return parts.firstIndex { matchesPartKind($0, kind) && $0.name.caseInsensitiveCompare(name) == .orderedSame }
         case .number(let number):
             guard number >= 1 else { return nil }
             var seen = 0
-            for (i, part) in parts.enumerated() where part.kind.word == kind {
+            for (i, part) in parts.enumerated() where matchesPartKind(part, kind) {
                 seen += 1
                 if seen == number { return i }
             }
             return nil
         case .id(let id):
             let wanted = id.trimmingCharacters(in: .whitespaces)
-            return parts.firstIndex { $0.kind.word == kind && String($0.scriptID) == wanted }
+            return parts.firstIndex { matchesPartKind($0, kind) && String($0.scriptID) == wanted }
         }
     }
 
@@ -424,7 +499,7 @@ extension WebHost {
         case .background(let b, let i): parts = stack.backgrounds[b].parts; partIndex = i
         }
         var seen = 0
-        for (i, part) in parts.enumerated() where part.kind.word == kind {
+        for (i, part) in parts.enumerated() where matchesPartKind(part, kind) {
             seen += 1
             if i == partIndex { return seen }
         }
@@ -464,18 +539,28 @@ extension WebHost {
 
     func convertParse(_ value: String, from: [ConvertFormat]) throws -> Date {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
+        // HyperCard fills components the value omits from the current date/time,
+        // so an empty value converts as "now" rather than erroring (mirrors the
+        // app host; see DocumentScriptHost.convertParse).
+        if trimmed.isEmpty {
+            return Date()
+        }
         if from == [.seconds] || (from.isEmpty && Double(trimmed) != nil) {
             guard let seconds = Double(trimmed) else { throw HostError("Can't read \"\(value)\" as seconds.") }
             return Date(timeIntervalSince1970: seconds)
         }
         if from == [.dateItems] || (from.isEmpty && trimmed.contains(",")) {
-            let parts = trimmed.split(separator: ",").map { Int($0.trimmingCharacters(in: .whitespaces)) ?? 0 }
-            guard parts.count >= 3 else { throw HostError("Expected at least year, month, and day in dateItems.") }
+            // Missing/empty components inherit from the current date/time.
+            let now = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: Date())
+            let raw = trimmed.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            func part(_ index: Int, _ fallback: Int) -> Int {
+                guard index < raw.count, !raw[index].isEmpty, let n = Int(raw[index]) else { return fallback }
+                return n
+            }
             var c = DateComponents()
-            c.year = parts[0]; c.month = parts[1]; c.day = parts[2]
-            if parts.count > 3 { c.hour = parts[3] }
-            if parts.count > 4 { c.minute = parts[4] }
-            if parts.count > 5 { c.second = parts[5] }
+            c.year = part(0, now.year!); c.month = part(1, now.month!); c.day = part(2, now.day!)
+            c.hour = part(3, now.hour!); c.minute = part(4, now.minute!); c.second = part(5, now.second!)
             guard let date = Calendar.current.date(from: c) else { throw HostError("Can't read \"\(value)\" as dateItems.") }
             return date
         }

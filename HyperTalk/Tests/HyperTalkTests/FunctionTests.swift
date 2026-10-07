@@ -305,3 +305,17 @@ import Testing
     #expect(host.fields["a"] == "2019686400")
     #expect(host.fields["b"] == "121181184000")
 }
+
+@Test func bareFunctionOfForms() async throws {
+    // `<fn> of X` without a leading `the` — Power Tools: `length of the script
+    // of this card`, `charToNum of last char of …`.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      put length of "hello" into field "out"
+      put charToNum of "A" after field "out"
+      put sqrt of 9 after field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "5653")  // length 5, charToNum A = 65, sqrt 9 = 3
+}

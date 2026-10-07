@@ -50,6 +50,11 @@ struct TextFormat: Codable, Hashable {
     var isBold = false
     var isItalic = false
     var isUnderline = false
+    var isOutline = false
+    /// HyperCard's "group" text style — no glyph effect, but a click in a
+    /// grouped run makes `the clickText` return the whole run. The web player
+    /// reads this (and the per-run styleRuns) to compute clickText in-browser.
+    var isGroup = false
     var align: TextAlign = .left
 
     init() {}
@@ -61,6 +66,8 @@ struct TextFormat: Codable, Hashable {
         isBold = try c.decodeIfPresent(Bool.self, forKey: .isBold) ?? false
         isItalic = try c.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
         isUnderline = try c.decodeIfPresent(Bool.self, forKey: .isUnderline) ?? false
+        isOutline = try c.decodeIfPresent(Bool.self, forKey: .isOutline) ?? false
+        isGroup = try c.decodeIfPresent(Bool.self, forKey: .isGroup) ?? false
         align = try c.decodeIfPresent(TextAlign.self, forKey: .align) ?? .left
     }
 }
@@ -95,7 +102,7 @@ enum ButtonStyleKind: String, Codable, CaseIterable {
 
 enum FieldKind: String, Codable { case plain, rich }
 
-enum FieldStyle: String, Codable, CaseIterable { case transparent, opaque, rectangle, shadow }
+enum FieldStyle: String, Codable, CaseIterable { case transparent, opaque, rectangle, shadow, scrolling }
 
 struct ButtonPart: Codable, Hashable {
     var title: String
@@ -128,6 +135,12 @@ struct FieldPart: Codable, Hashable {
     var showLines: Bool
     var wideMargins: Bool
     var style: FieldStyle
+    var dontWrap: Bool
+    var autoTab: Bool
+    var autoSelect: Bool
+    var multipleLines: Bool
+    var fixedLineHeight: Bool
+    var styleRuns: [StyleRun]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -140,7 +153,21 @@ struct FieldPart: Codable, Hashable {
         showLines = try c.decodeIfPresent(Bool.self, forKey: .showLines) ?? false
         wideMargins = try c.decodeIfPresent(Bool.self, forKey: .wideMargins) ?? false
         style = try c.decodeIfPresent(FieldStyle.self, forKey: .style) ?? .rectangle
+        dontWrap = try c.decodeIfPresent(Bool.self, forKey: .dontWrap) ?? false
+        autoTab = try c.decodeIfPresent(Bool.self, forKey: .autoTab) ?? false
+        autoSelect = try c.decodeIfPresent(Bool.self, forKey: .autoSelect) ?? false
+        multipleLines = try c.decodeIfPresent(Bool.self, forKey: .multipleLines) ?? false
+        fixedLineHeight = try c.decodeIfPresent(Bool.self, forKey: .fixedLineHeight) ?? false
+        styleRuns = try c.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
     }
+}
+
+/// Per-run styled text — a Character offset into the field's text plus the
+/// format from there. Carried for parity with the app model; the web player's
+/// CSS rendering of runs is not built yet.
+struct StyleRun: Codable, Hashable {
+    var start: Int
+    var format: TextFormat
 }
 
 struct LabelPart: Codable, Hashable { var text: String }

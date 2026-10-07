@@ -16,6 +16,19 @@ import Testing
     #expect(host.properties["button OK.width"] == "300")
 }
 
+@Test func numberOfThisBackgroundReadsAsAProperty() async throws {
+    // `the number of this background` (DateBook's doMenu guards on it) reads
+    // as a property of the current background, not a count.
+    let host = MockHost(fields: ["out": ""])
+    host.properties["this background.number"] = "3"
+    try await run("""
+    on mouseUp
+      put the number of this background into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "3")
+}
+
 @Test func theOfReadsAProperty() async throws {
     let host = MockHost(fields: ["out": ""])
     host.properties["button OK.width"] = "120"
@@ -159,6 +172,34 @@ import Testing
     end mouseUp
     """, host: host)
     #expect(host.fields["out"] == "full")
+}
+
+@Test func setCantAbortOfThisStackIsAHarmlessNoOp() async throws {
+    // The Home stack's disallowInterruption/allowInterruption toggle
+    // `cantAbort of this stack`, which Contrapt doesn't model — it must run
+    // without error and not reach the host as a real property set.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      set cantAbort of this stack to true
+      set the cantPeek of this stack to false
+      put "ran" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ran")
+    #expect(host.properties["this stack.cantabort"] == nil)
+    #expect(host.properties["this stack.cantpeek"] == nil)
+}
+
+@Test func setCantAbortOfANamedStackIsAlsoANoOp() async throws {
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      set cantAbort of stack "Home" to true
+      put "ran" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ran")
 }
 
 @Test func getPutsIntoIt() async throws {
@@ -364,4 +405,91 @@ import Testing
     end mouseUp
     """, host: MockHost(fields: ["out": ""]))
     #expect(host.fields["out"] == "hello")
+}
+
+@Test func setModeledPropertyStillApplies() async throws {
+    // Guard: the unmodeled-target fallback must not disturb real property sets.
+    let host = MockHost()
+    host.properties["card button Go.visible"] = "true"
+    try await run("""
+    on mouseUp
+      set the visible of cd btn "Go" to false
+    end mouseUp
+    """, host: host)
+    #expect(host.properties["card button Go.visible"] == "false")
+}
+
+@Test func setPropertyOfUnmodeledTargetNoOps() async throws {
+    // `set <prop> of <chunk of field | menuItem | function()>` — targets we
+    // don't model as settable objects. Accepted and no-op'd so the handler
+    // runs, rather than failing to compile. (Per-chunk textStyle actually
+    // applying is a separate tracked feature.)
+    let host = MockHost(fields: ["out": "", "menuitems": "a\nb"])
+    try await run("""
+    on mouseUp
+      set textStyle of line 1 of field "MenuItems" to plain
+      set the name of last menuItem of menu "Edit" to "X"
+      put "ran" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ran")
+}
+
+@Test func selectedButtonOfFamilyReadsEmpty() async throws {
+    // HyperCard button families aren't modeled; `the selectedButton of family N`
+    // parses (as an absent object) and reads empty, so New Features'
+    // hiliteSectionButton runs instead of failing to compile.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      get the selectedButton of family 1
+      if it is empty then put "none" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "none")
+}
+
+@Test func relativeCardPropertyReads() async throws {
+    // `the id of next card`, `the short name of prev card` — a card relative to
+    // the current one used as an object (Background Art, New Features). Stack
+    // order wraps: from card 2 of 5, next is 3 and prev is 1.
+    let host = MockHost(fields: ["out": ""])
+    host.cardCount = 5
+    host.properties["this card.number"] = "2"
+    host.properties["card 3.id"] = "317"
+    host.properties["card 1.name"] = "Intro"
+    try await run("""
+    on mouseUp
+      put the id of next card into field "out"
+      put the short name of prev card after field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "317Intro")
+}
+
+@Test func selectedButtonOfFamilyScopedToACard() async throws {
+    // `the selectedButton of family 1 of first card` — a family scoped to a
+    // card; still unmodeled, reads empty, parses cleanly (New Features).
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      get the selectedButton of family 1 of first card
+      if it is empty then put "ok" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ok")
+}
+
+@Test func partScopedToCardOfBackground() async throws {
+    // Graph Maker's openStack: `bg btn id 68 of cd 1 of bg "Graphs"` must
+    // resolve against bg "Graphs", not the current background (the `of bg X`
+    // scope on the part's owning card was being dropped).
+    let host = MockHost()
+    host.properties["card 1.graphs.background button id 68.hilite"] = "true"
+    try await run("""
+    on mouseUp
+      set the hilite of bg btn id 68 of cd 1 of bg "Graphs" to false
+    end mouseUp
+    """, host: host)
+    #expect(host.properties["card 1.graphs.background button id 68.hilite"] == "false")
 }

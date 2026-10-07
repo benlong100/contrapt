@@ -15,6 +15,17 @@ struct Parser {
     /// `of` belongs to the chunk, not to a bare-property access, so the
     /// `<identifier> of` shortcut is suppressed.
     private var suppressBarePropertyOf = false
+    /// Expression-nesting depth, bounded to keep a pathologically nested or
+    /// malformed script (deeply parenthesized, runaway operators) from
+    /// overflowing the recursive-descent parser's stack and crashing. Real
+    /// scripts nest only a handful deep; the limit is far above that.
+    private var expressionDepth = 0
+    // A backstop against runaway recursion (infinite/absurd nesting) that would
+    // overflow the recursive-descent parser's stack. Real scripts DO nest deep
+    // — e.g. a 96-level block-form if/else time dispatcher (BMUG's
+    // AppointmentMaster) — so the limit is generous; it only trips on clearly
+    // pathological input. (Parsing runs on a normal 8MB stack in the app.)
+    private static let maxExpressionDepth = 500
 
     init(tokens: [Token]) {
         self.tokens = tokens
@@ -23,6 +34,19 @@ struct Parser {
     static func parse(_ source: String) throws -> ParsedScript {
         var parser = Parser(tokens: try Tokenizer.tokenize(source))
         return try parser.parseScript()
+    }
+
+    /// Parses a script handler-by-handler, skipping any handler that fails
+    /// rather than failing the whole script — HyperCard's per-handler
+    /// compilation. Used for in-use auxiliary stacks (big shared libraries),
+    /// so one unsupported construct doesn't disable the whole library. Returns
+    /// an empty script if the source can't even be tokenized.
+    static func parseLenient(_ source: String) -> ParsedScript {
+        guard let tokens = try? Tokenizer.tokenize(source) else {
+            return ParsedScript(handlers: [:], functions: [:])
+        }
+        var parser = Parser(tokens: tokens)
+        return (try? parser.parseScript(lenient: true)) ?? ParsedScript(handlers: [:], functions: [:])
     }
 
     /// Parses loose statements outside any handler — a message box line.
@@ -86,7 +110,13 @@ struct Parser {
     }
 
     private func peekWords(_ words: [String]) -> Bool {
-        for (offset, word) in words.enumerated() where peekIdentifier(offset) != word {
+        for (offset, word) in words.enumerated() {
+            if peekIdentifier(offset) == word { continue }
+            // A quoted handler name also closes its handler: `end "CreditSubs"`
+            // matches `["end", "creditsubs"]` (Checking & Savings demo).
+            if index + offset < tokens.count,
+               case .string(let text) = tokens[index + offset].kind,
+               text.lowercased() == word { continue }
             return false
         }
         return true
@@ -144,24 +174,32 @@ struct Parser {
 
     // MARK: - Script and handlers
 
-    private mutating func parseScript() throws -> ParsedScript {
+    private mutating func parseScript(lenient: Bool = false) throws -> ParsedScript {
         var handlers: [String: Handler] = [:]
         var functions: [String: Handler] = [:]
         while true {
             skipNewlines()
             if current.kind == .endOfScript { break }
             if consumeWord("on") {
-                let handler = try parseHandler(keyword: "on")
-                if handlers[handler.name] != nil {
-                    throw ScriptError(line: handler.line, message: "There is more than one handler named '\(handler.name)'.")
+                do {
+                    let handler = try parseHandler(keyword: "on")
+                    // A duplicate handler is unreachable in HyperCard — message
+                    // dispatch scans top-to-bottom, so the FIRST definition wins
+                    // and the later one is dead code. Keep the first; don't error
+                    // (Cultural Almanac ships with a duplicate closeCard).
+                    if handlers[handler.name] == nil { handlers[handler.name] = handler }
+                } catch let error as ScriptError {
+                    if !lenient { throw error }
+                    skipToNextHandler() // a library handler we can't parse — skip it
                 }
-                handlers[handler.name] = handler
             } else if consumeWord("function") {
-                let function = try parseHandler(keyword: "function")
-                if functions[function.name] != nil {
-                    throw ScriptError(line: function.line, message: "There is more than one function named '\(function.name)'.")
+                do {
+                    let function = try parseHandler(keyword: "function")
+                    if functions[function.name] == nil { functions[function.name] = function }
+                } catch let error as ScriptError {
+                    if !lenient { throw error }
+                    skipToNextHandler()
                 }
-                functions[function.name] = function
             } else {
                 // Loose text outside any handler — decorative banners, notes,
                 // the "MESSAGE HANDLERS IN THIS SCRIPT" comment blocks common in
@@ -173,9 +211,31 @@ struct Parser {
         return ParsedScript(handlers: handlers, functions: functions)
     }
 
+    /// Lenient-parse recovery: skip forward to the start of the next handler
+    /// (a line beginning `on`/`function`) or the end of the script, so a
+    /// handler that failed to parse doesn't take the rest of the library with it.
+    private mutating func skipToNextHandler() {
+        while current.kind != .endOfScript {
+            if current.kind == .newline {
+                advance()
+                if let word = peekIdentifier(), word == "on" || word == "function" { return }
+            } else {
+                advance()
+            }
+        }
+    }
+
     private mutating func parseHandler(keyword: String) throws -> Handler {
         let startLine = current.line
-        guard let name = peekIdentifier() else {
+        // The handler name is usually an identifier, but some stacks quote it
+        // (`on "CreditSubs" … end "CreditSubs"`) — accept a string too, keyed
+        // lowercased like any other handler name.
+        let name: String
+        if let word = peekIdentifier() {
+            name = word
+        } else if case .string(let text) = current.kind {
+            name = text.lowercased()
+        } else {
             throw ScriptError(line: current.line, message: "Expected a name after '\(keyword)'.")
         }
         advance()
@@ -191,6 +251,9 @@ struct Parser {
         let body = try parseStatements(handlerName: name, stopBefore: [["end", name]], blockDescription: "handler '\(name)'", blockLine: startLine)
         advance() // "end"
         advance() // handler name
+        // Tolerate trailing tokens after `end <name>` — Apple's Home writes
+        // `end doMenu which` (echoing the parameter).
+        while current.kind != .newline, current.kind != .endOfScript { advance() }
         try expectNewline()
         return Handler(name: name, parameters: parameters, body: body, line: startLine)
     }
@@ -200,6 +263,13 @@ struct Parser {
     /// Parses statements until one of `stopBefore` word sequences begins a
     /// line. The terminator is left unconsumed.
     private mutating func parseStatements(handlerName: String, stopBefore: [[String]], blockDescription: String, blockLine: Int) throws -> [Stmt] {
+        // Nested blocks (if/repeat within if/repeat) recurse here; bound the
+        // depth so a pathologically nested handler can't overflow the stack.
+        expressionDepth += 1
+        defer { expressionDepth -= 1 }
+        guard expressionDepth <= Self.maxExpressionDepth else {
+            throw ScriptError(line: current.line, message: "This handler is nested too deeply.")
+        }
         var statements: [Stmt] = []
         while true {
             skipNewlines()
@@ -251,6 +321,14 @@ struct Parser {
                 return Stmt(kind: .exitToHyperCard, line: line)
             }
             if consumeWord(handlerName) {
+                try expectNewline()
+                return Stmt(kind: .exitHandler, line: line)
+            }
+            // `exit "mouseUp"` — a quoted handler name (Checking & Savings demo).
+            // Any handler name exits the current handler, so accept a string that
+            // matches (case-insensitively), as HyperCard does.
+            if case .string(let name) = current.kind, name.caseInsensitiveCompare(handlerName) == .orderedSame {
+                advance()
                 try expectNewline()
                 return Stmt(kind: .exitHandler, line: line)
             }
@@ -315,18 +393,36 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .answerFile(prompt, type: type), line: line)
             }
+            // `answer program <prompt> [of type <type>]` — a PPC program-browser
+            // dialog (AppleEvents). No other app is reachable, so it behaves as
+            // cancelled: `it` comes back empty.
+            if consumeWord("program") {
+                let savedSuppress = suppressBarePropertyOf
+                suppressBarePropertyOf = true
+                _ = try parseExpression() // the prompt (ignored)
+                suppressBarePropertyOf = savedSuppress
+                if consumeWord("of") { _ = consumeWord("type"); _ = try parseExpression() }
+                try expectNewline()
+                return Stmt(kind: .put(.stringLiteral(""), .into, .variable("it")), line: line)
+            }
             let prompt = try parseExpression()
             var buttons: [Expr] = []
             if consumeWord("with") {
-                // Buttons are separated by `or`; parse below it so `or` isn't
-                // swallowed as the boolean operator.
+                // Buttons are separated by `or` (parsed below it so `or` isn't
+                // swallowed as the boolean operator); some stacks use commas
+                // instead (`answer "…" with "No","Yes"`).
                 buttons.append(try parseConcatenation())
-                while consumeWord("or") { buttons.append(try parseConcatenation()) }
+                while consumeWord("or") || consumeSymbol(",") { buttons.append(try parseConcatenation()) }
             }
             try expectNewline()
             return Stmt(kind: .answer(prompt, buttons: buttons), line: line)
         case "ask":
             advance()
+            // `ask file <prompt> [with <default>]` (a save-file dialog) and
+            // `ask password <prompt>` degrade to a plain text ask — Contrapt
+            // has no file/password dialog, so the default (or empty) comes
+            // back in `it`, and the stack's own `if it is empty` guard copes.
+            _ = consumeWord("file") || consumeWord("password")
             let prompt = try parseExpression()
             var initialAnswer: Expr?
             if consumeWord("with") { initialAnswer = try parseExpression() }
@@ -338,6 +434,19 @@ struct Parser {
             let effect = try parseVisualEffect(line: line)
             try expectNewline()
             return Stmt(kind: .visualEffect(effect), line: line)
+        case "lock", "unlock":
+            // `lock screen` / `unlock screen [with visual effect …]` is modeled
+            // (see `.setScreenLocked`): Contrapt doesn't batch screen redraws,
+            // but it DOES use the lock to defer a cross-window `go home`/`go
+            // stack` so the classic invisible peek-and-pop at Home doesn't yank
+            // the window order. lock/unlock messages|recent|menus|errorDialogs
+            // stay no-ops. Any trailing `with visual effect …` is swallowed.
+            let locking = word == "lock"
+            advance()
+            let isScreen = consumeWord("screen")
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: isScreen ? .setScreenLocked(locking) : .noOp, line: line)
         case "wait":
             advance()
             let kind: WaitKind
@@ -417,14 +526,33 @@ struct Parser {
             return Stmt(kind: .passMessage, line: line)
         case "send":
             advance()
-            // `send <message> to <object>` — dispatch to a specific object.
+            // `send <message> [to <object>]` — dispatch a message. With no `to`,
+            // it goes to the current card (`send openCard`, `send "calc" && x`),
+            // travelling the normal card→background→stack path from there.
             let message = try parseExpression()
             guard consumeWord("to") else {
-                throw ScriptError(line: line, message: "Expected 'to <object>' after 'send <message>'.")
+                try expectNewline()
+                return Stmt(kind: .sendMessage(message, to: .thisCard), line: line)
+            }
+            // `send <expr> to program <app> [with/without reply]` — an AppleEvent
+            // to another application. Contrapt can't reach other apps, so the
+            // whole line is accepted and no-op'd.
+            if consumeWord("program") {
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
             }
             let object = try parseObjectExpr()
             try expectNewline()
             return Stmt(kind: .sendMessage(message, to: object), line: line)
+        case "request", "reply":
+            // AppleEvent verbs — `request <expr> from program <app>`, `reply
+            // <expr>` / `reply error <expr>` (answering an `appleEvent`). No
+            // other app is reachable, so accept and no-op the whole line.
+            advance()
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
         case "delete":
             // `delete menu "X"`, `delete button …`, etc. Contrapt doesn't model
             // object deletion via this verb (card deletion is `doMenu "Delete
@@ -434,14 +562,46 @@ struct Parser {
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
-        case "choose", "drag", "type", "reset":
-            // Paint/tool automation Contrapt doesn't model: `choose <tool>
-            // tool`, `drag from a to b`, `type "…"`, `reset paint`. Accepted
-            // and ignored so old paint scripts don't error.
+        case "choose":
+            // `choose <name> tool` — a real statement: the button/field tools
+            // arm click-to-select for `doMenu "Clear Button"/"Clear Field"`,
+            // browse restores clicking, and paint tools no-op in the host.
+            // Other `choose` forms (`choose tool 3`) are accepted and ignored.
+            advance()
+            if let tool = peekIdentifier(), tool != "tool", peekIdentifier(1) == "tool" {
+                advance(); advance() // <name> tool
+                try expectNewline()
+                return Stmt(kind: .chooseTool(tool), line: line)
+            }
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        case "drag", "type", "reset", "dial", "create":
+            // Automation Contrapt doesn't model: `drag from a to b`, `type
+            // "…"`, `reset paint`. Also `dial <number> [with modem/tones]`,
+            // which needs telephony hardware, and `create menu "X"` / `create
+            // stack …` (Contrapt models neither custom menus nor runtime stack
+            // creation). Accepted and ignored so these scripts don't error.
             advance()
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
+        case "enable", "disable":
+            // `enable`/`disable <button|field>` set the part's `enabled`
+            // property (grayed + non-responsive). Menus/menu bar aren't modeled,
+            // so `disable menu "File"` is a no-op.
+            let enabled = word == "enable"
+            advance()
+            _ = consumeWord("the")
+            if let w = peekIdentifier(), w == "menu" || w == "menubar" || w == "menuitem" {
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
+            let object = try parseObjectExpr()
+            try expectNewline()
+            return Stmt(kind: .set(property: "enabled", object: object,
+                                   value: .stringLiteral(enabled ? "true" : "false")), line: line)
         case "click":
             advance()
             _ = consumeWord("at")
@@ -454,6 +614,50 @@ struct Parser {
         case "domenu":
             advance()
             return Stmt(kind: .doMenu(try parseMenuItem()), line: line)
+        case "play":
+            advance()
+            // `play stop` silences; `play <voice> [tempo <n>] [<notes>]` plays
+            // a named sound, optionally as a melody (see PlayNotes).
+            if consumeWord("stop") {
+                try expectNewline()
+                return Stmt(kind: .playStop, line: line)
+            }
+            let voice = try parsePrimary()
+            var tempo: Expr?
+            if consumeWord("tempo") { tempo = try parsePrimary() }
+            var notes: Expr?
+            if current.kind != .newline, current.kind != .endOfScript {
+                notes = try parsePlayNotes()
+            }
+            try expectNewline()
+            return Stmt(kind: .play(voice: voice, tempo: tempo, notes: notes), line: line)
+        case "start", "stop":
+            // `start using stack "X"` / `stop using stack "X"` adds/removes an
+            // auxiliary stack from the message-passing hierarchy (HyperCard
+            // 2.x), so its handlers/functions are reachable from any stack. Only
+            // the `using` form is ours; anything else stays a message send.
+            if peekIdentifier(1) == "using" {
+                let starting = word == "start"
+                advance() // start/stop
+                advance() // using
+                // `start using this stack` — the current stack is already in the
+                // message path, so adding/removing it is a no-op here.
+                if consumeWord("this") {
+                    _ = consumeWord("stack")
+                    try expectNewline()
+                    return Stmt(kind: .noOp, line: line)
+                }
+                _ = consumeWord("stack")
+                let name = try parseExpression()
+                // Tolerate any trailing tokens, as the old whole-line form did.
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: starting ? .startUsing(name) : .stopUsing(name), line: line)
+            }
+            return try parseMessageSend(word: word, line: line)
+        case "mark", "unmark":
+            advance()
+            return try parseMark(mark: word == "mark", line: line)
         case "sort":
             advance()
             return try parseSort(line: line)
@@ -489,20 +693,54 @@ struct Parser {
                 guard consumeWord("of") else {
                     throw ScriptError(line: line, message: "Expected 'of' after 'select text'.")
                 }
-                guard let fieldRef = try parseFieldRefIfPresent() else {
-                    throw ScriptError(line: line, message: "Expected a field after 'select text of'.")
+                // `select text of the foundField` / `… the selectedField` — the
+                // value is a field descriptor (`card field id 5`), re-parsed at
+                // run time; select the whole field's text.
+                let savedDescriptor = index
+                if consumeWord("the") {
+                    if let found = Self.foundFields[peekIdentifier() ?? ""] {
+                        advance()
+                        try expectNewline()
+                        return Stmt(kind: .select(.descriptor(.found(found))), line: line)
+                    }
+                    if let component = Self.selectionFields[peekIdentifier() ?? ""] {
+                        advance()
+                        try expectNewline()
+                        return Stmt(kind: .select(.descriptor(.selected(component))), line: line)
+                    }
+                    index = savedDescriptor
                 }
+                if let fieldRef = try parseFieldRefIfPresent() {
+                    try expectNewline()
+                    let target: SelectTarget = edge == "before" ? .beforeText(fieldRef)
+                        : edge == "after" ? .afterText(fieldRef) : .textOf(fieldRef)
+                    return Stmt(kind: .select(target), line: line)
+                }
+                // Not a plain field ref — `select text of me`, `… of the target`,
+                // `… of someFieldVar`. Parse a container; the runtime resolves it
+                // to a field and selects the whole text (or collapses to an end).
+                let container = try parseContainer(line: line)
                 try expectNewline()
-                let target: SelectTarget = edge == "before" ? .beforeText(fieldRef)
-                    : edge == "after" ? .afterText(fieldRef) : .textOf(fieldRef)
-                return Stmt(kind: .select(target), line: line)
+                let textEdge: TextEdge = edge == "before" ? .before : edge == "after" ? .after : .whole
+                return Stmt(kind: .select(.textOfContainer(container, edge: textEdge)), line: line)
             }
-            // Any container parses (old stacks `select theObject` to drive
-            // paint/edit tools); the runtime selects text only when the
-            // container bottoms out in a field, and no-ops otherwise.
-            let container = try parseContainer(line: line)
+            // A field/chunk container (or a variable holding a field
+            // descriptor): the runtime selects text when it bottoms out in a
+            // field. If the whole line parses as one container, use it.
+            let saved = index
+            if let container = try? parseContainer(line: line),
+               current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .select(.chunk(container)), line: line)
+            }
+            // Otherwise it selects a non-field object — `select cd btn id 17`,
+            // `select line 0 of bkgnd btn "X"` (a popup button's list). That
+            // drives HyperCard's edit tools, which Contrapt doesn't model, so
+            // accept and no-op the line rather than failing the handler.
+            index = saved
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
-            return Stmt(kind: .select(.chunk(container)), line: line)
+            return Stmt(kind: .noOp, line: line)
 
         case "push":
             advance()
@@ -531,13 +769,26 @@ struct Parser {
             }
             advance()
             if consumeWord("of") {
-                let object = try parseObjectExpr()
-                guard consumeWord("to") else {
-                    throw ScriptError(line: line, message: "Expected 'to' and a value at the end of 'set'.")
+                // A modeled object target (`set loc of btn "X" to …`). If it
+                // parses cleanly up to `to`, keep it.
+                let saved = index
+                if let object = try? parseObjectExpr(), peekIdentifier() == "to" {
+                    advance() // to
+                    let value = try parseSetValue()
+                    try expectNewline()
+                    return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
                 }
-                let value = try parseSetValue()
+                // The target isn't something we model as a settable object — a
+                // chunk of a field (`set textStyle of line 2 of fld "X"`), a menu
+                // item (`set name of last menuItem of menu "Y"`), or a function
+                // result (`set topLeft of popObject() to …`). Accept and no-op
+                // the whole line rather than failing the handler, as with other
+                // unmodeled sets. (Applying per-chunk textStyle is a separate,
+                // tracked feature.)
+                index = saved
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
                 try expectNewline()
-                return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
+                return Stmt(kind: .noOp, line: line)
             }
             // Object-less property: `set the itemDelimiter to ";"`.
             guard consumeWord("to") else {
@@ -550,22 +801,26 @@ struct Parser {
             // An unknown word is a message send: it travels the message
             // path at run time (HyperCard semantics), so `doGreeting "Bill"`
             // can reach a handler defined on the card, background, or stack.
-            advance()
-            var arguments: [Expr] = []
-            if current.kind != .newline, current.kind != .endOfScript {
-                repeat {
-                    arguments.append(try parseExpression())
-                } while consumeSymbol(",")
-            }
-            // Unknown commands with bespoke syntax (`choose select tool`,
-            // `drag from a to b`, `doMenu "…"`) may leave tokens we can't parse
-            // as arguments. Rather than fail the whole script, skip the rest of
-            // the line — the command still dispatches as a message, surfacing
-            // at run time only if nothing handles it (HyperCard semantics).
-            while current.kind != .newline, current.kind != .endOfScript { advance() }
-            try expectNewline()
-            return Stmt(kind: .send(word, arguments), line: line)
+            return try parseMessageSend(word: word, line: line)
         }
+    }
+
+    /// A command word Contrapt doesn't recognize — dispatched as a message
+    /// along the object path at run time (HyperCard semantics). Bespoke
+    /// argument syntax that won't parse as expressions is skipped to the end
+    /// of the line rather than failing the whole handler. `word` is the as-yet
+    /// unconsumed command keyword.
+    private mutating func parseMessageSend(word: String, line: Int) throws -> Stmt {
+        advance()
+        var arguments: [Expr] = []
+        if current.kind != .newline, current.kind != .endOfScript {
+            repeat {
+                arguments.append(try parseExpression())
+            } while consumeSymbol(",")
+        }
+        while current.kind != .newline, current.kind != .endOfScript { advance() }
+        try expectNewline()
+        return Stmt(kind: .send(word, arguments), line: line)
     }
 
     /// A `set … to <value>` value, allowing a comma list for points and
@@ -581,6 +836,15 @@ struct Parser {
 
     private mutating func parsePut(line: Int) throws -> Stmt {
         let value = try parseExpression()
+        // `put <expr> to program <app> [without reply]` — an AppleEvent to
+        // another application (HyperBattleship's networked play). Contrapt can't
+        // reach other apps, so accept and no-op the whole line.
+        if peekIdentifier() == "to", peekIdentifier(1) == "program" {
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        }
+
         var mode: PutMode?
         if consumeWord("into") { mode = .into }
         else if consumeWord("after") { mode = .after }
@@ -591,9 +855,12 @@ struct Parser {
             return Stmt(kind: .put(value, .into, nil), line: line)
         }
 
-        // `put … into menu "X" [with menuMsgs …]` populates a HyperCard menu,
+        // `put … into menu "X" [with menuMsgs …]` / `put … into last menuItem
+        // of menu 3 with menuMsg …` populates a HyperCard menu or menu item,
         // which Contrapt doesn't model — accept and ignore the whole line.
-        if let w = peekIdentifier(), w == "menu" || w == "menuitem" || w == "menubar" {
+        if let w = peekIdentifier(),
+           w == "menu" || w == "menuitem" || w == "menubar"
+           || ((Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil) && peekIdentifier(1) == "menuitem") {
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
@@ -607,10 +874,26 @@ struct Parser {
     /// A put destination: a chunk of a container (`word 2 of field "X"`),
     /// a field, or a variable.
     private mutating func parseContainer(line: Int) throws -> Container {
+        // A parenthesized container — the Home stack's list idiom puts the
+        // base chunk in parens: `select char 1 to n of (line 2 of the target)`.
+        if consumeSymbol("(") {
+            let container = try parseContainer(line: line)
+            guard consumeSymbol(")") else {
+                throw ScriptError(line: line, message: "Expected ')' after a parenthesized container.")
+            }
+            return container
+        }
         // `me` in a field's script is the field's contents.
         if peekIdentifier() == "me" {
             advance()
             return .me
+        }
+        // `[the] target` — the contents of the field the message was sent to.
+        let targetOffset = peekIdentifier() == "the" ? 1 : 0
+        if peekIdentifier(targetOffset) == "target" {
+            if targetOffset == 1 { advance() } // the
+            advance() // target
+            return .target
         }
         if let word = peekIdentifier(), let kind = Self.chunkKinds[word] {
             advance()
@@ -623,7 +906,7 @@ struct Parser {
                 ? .range(start, try parseAdditive())
                 : .index(start)
             suppressBarePropertyOf = savedSuppress
-            guard consumeWord("of") else {
+            guard consumeWord("of") || consumeWord("in") else {
                 throw ScriptError(line: line, message: "Expected 'of' after '\(word)' in a put destination.")
             }
             return .chunk(kind, selector, try parseContainer(line: line))
@@ -635,7 +918,7 @@ struct Parser {
             if ordinalOffset == 1 { advance() } // the
             advance() // ordinal
             advance() // kind
-            guard consumeWord("of") else {
+            guard consumeWord("of") || consumeWord("in") else {
                 throw ScriptError(line: line, message: "Expected 'of' after '\(ordinalWord) \(kindWord)'.")
             }
             return .chunk(kind, selector, try parseContainer(line: line))
@@ -649,6 +932,14 @@ struct Parser {
             advance() // msg / message
             if let next = peekIdentifier(), next == "box" || next == "window" { advance() }
             return .messageBox
+        }
+        // `[the] selection` as a destination — `put X into the selection`
+        // replaces the selected text.
+        let selectionOffset = peekIdentifier() == "the" ? 1 : 0
+        if peekIdentifier(selectionOffset) == "selection" {
+            if selectionOffset == 1 { advance() } // the
+            advance() // selection
+            return .selection
         }
         if let fieldRef = try parseFieldRefIfPresent() {
             return .field(fieldRef)
@@ -729,9 +1020,46 @@ struct Parser {
 
     /// Parses `<kind> [<direction>] [[very] <speed>]` after `visual effect`,
     /// e.g. `dissolve`, `wipe left`, `iris open slowly`, `zoom out very fast`.
+    /// The note specification after `play <voice> [tempo N]`. A quoted string,
+    /// a field, or a parenthesized expression is evaluated; a bare note sequence
+    /// (`b3 c#4 d e f# r g4`) is taken literally — reconstructed from its tokens
+    /// so `#`, dots, and octave digits stay attached to their note letter.
+    private mutating func parsePlayNotes() throws -> Expr {
+        if case .string = current.kind { return try parseExpression() }
+        if case .symbol("(") = current.kind { return try parseExpression() }
+        if let w = peekIdentifier(),
+           ["field", "fld", "card", "cd", "background", "bkgnd", "bg", "the"].contains(w) {
+            return try parseExpression()
+        }
+        var text = ""
+        while current.kind != .newline, current.kind != .endOfScript {
+            let piece: String
+            let continuesNote: Bool // true → no leading space (#, ., octave digit)
+            switch current.kind {
+            case .identifier(let word): piece = word; continuesNote = false
+            case .string(let string): piece = string; continuesNote = false
+            case .number(let value): piece = Value.string(from: value); continuesNote = true
+            case .symbol(let symbol): piece = symbol; continuesNote = true
+            default: piece = ""; continuesNote = true
+            }
+            if !text.isEmpty, !continuesNote { text += " " }
+            text += piece
+            advance()
+        }
+        return .stringLiteral(text)
+    }
+
     /// An optional `to <image>` clause is tolerated but ignored for now.
     private mutating func parseVisualEffect(line: Int) throws -> ScreenEffect {
-        guard let first = peekIdentifier() else {
+        // The effect name is usually a keyword, but some stacks quote it
+        // (`visual effect "CheckerBoard"`) — accept a string too (lowercased so
+        // it matches the keyword cases).
+        let first: String
+        if let word = peekIdentifier() {
+            first = word
+        } else if case .string(let text) = current.kind {
+            first = text.lowercased()
+        } else {
             throw ScriptError(line: line, message: "Expected an effect after 'visual effect', like dissolve or wipe left.")
         }
         advance()
@@ -739,7 +1067,7 @@ struct Parser {
         switch first {
         case "dissolve": kind = .dissolve
         case "wipe": kind = .wipe
-        case "scroll": kind = .scroll
+        case "scroll", "push": kind = .scroll // push is a push-reveal ≈ scroll
         case "zoom": kind = .zoom
         case "iris": kind = .iris
         case "checkerboard": kind = .checkerboard
@@ -763,7 +1091,11 @@ struct Parser {
             kind = .zoom
             return try finishVisualEffect(kind: kind, direction: first == "shrink" ? .close : .open)
         default:
-            throw ScriptError(line: line, message: "Unknown visual effect '\(first)'.")
+            // The effect name is a variable (`visual effect theEffect`) or an
+            // effect Contrapt doesn't model — can't be resolved at parse time.
+            // The transition is cosmetic, so fall back to a dissolve and still
+            // consume any direction/speed tail, rather than failing the handler.
+            kind = .dissolve
         }
 
         var direction: ScreenEffect.Direction?
@@ -839,11 +1171,103 @@ struct Parser {
         return .stringLiteral(words.joined(separator: " "))
     }
 
+    /// `mark`/`unmark [this] card`, `… card N`, `… all cards`, `… cards where
+    /// <condition>`. The `… cards by finding …` form isn't modeled — accepted
+    /// and no-op'd.
+    private mutating func parseMark(mark: Bool, line: Int) throws -> Stmt {
+        _ = consumeWord("the")
+        if consumeWord("all") {
+            _ = consumeCardWord()
+            try expectNewline()
+            return Stmt(kind: .setMarked(mark: mark, .allCards), line: line)
+        }
+        if let w = peekIdentifier(), Self.cardWords.contains(w) || w == "cards" || w == "cds" {
+            if peekIdentifier(1) == "where" {
+                advance() // cards
+                advance() // where
+                let condition = try parseExpression()
+                try expectNewline()
+                return Stmt(kind: .setMarked(mark: mark, .cardsWhere(condition)), line: line)
+            }
+            if peekIdentifier(1) == "by" {
+                // `mark cards by finding "x" [in field "y"]` — not modeled.
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
+        }
+        // A single card: `mark [this] card [N | "name" | id N]` (bare = current).
+        _ = consumeWord("this")
+        guard consumeCardWord() else {
+            try expectNewline()
+            return Stmt(kind: .setMarked(mark: mark, .card(nil)), line: line)
+        }
+        let cardRef: CardRef?
+        if current.kind == .newline || current.kind == .endOfScript {
+            cardRef = nil // `mark card` / `mark this card` → the current card
+        } else if consumeWord("id") {
+            cardRef = .idExpression(try parsePrimary())
+        } else {
+            cardRef = .expression(try parsePrimary())
+        }
+        try expectNewline()
+        return Stmt(kind: .setMarked(mark: mark, .card(cardRef)), line: line)
+    }
+
     /// `sort [this stack] [marked] [cards] [of …] [ascending|descending]
     /// [text|numeric|international|dateTime] by <expr>` — reorders the stack's
     /// cards. Contrapt sorts the whole stack; qualifiers it doesn't model
     /// (marked, of a background) are accepted and ignored.
     private mutating func parseSort(line: Int) throws -> Stmt {
+        // Container sort — `sort [the] [lines|items of] <container>` (the Home
+        // stack's `sort bg fld "Apps For Docs"`) sorts a field's or variable's
+        // text in place, as opposed to the cards sort below. An explicit
+        // `lines of`/`items of`, or a field reference, marks this form. Must
+        // be detected before the cards form eats a `cd` field qualifier.
+        var sortItems = false
+        var isContainerSort = false
+        let theOffset = peekIdentifier() == "the" ? 1 : 0
+        if let unit = peekIdentifier(theOffset), unit == "lines" || unit == "items",
+           peekIdentifier(theOffset + 1) == "of" {
+            if theOffset == 1 { advance() } // the
+            sortItems = unit == "items"
+            advance() // lines / items
+            advance() // of
+            isContainerSort = true
+        } else if startsFieldContainer() {
+            isContainerSort = true
+        } else if startsBareContainerSort() {
+            // `sort it`, `sort list`, `sort dataList descending numeric` — a
+            // bare variable/`it` container (no `cards`/`this stack`/`by` yet),
+            // sorting its lines in place.
+            isContainerSort = true
+        }
+        if isContainerSort {
+            let container = try parseContainer(line: line)
+            var ascending = true
+            var numeric = false
+            for _ in 0..<2 {
+                if consumeWord("ascending") { ascending = true }
+                else if consumeWord("descending") { ascending = false }
+                else if consumeWord("numeric") { numeric = true }
+                else if consumeWord("text") || consumeWord("international")
+                            || consumeWord("datetime") || consumeWord("date") { numeric = false }
+            }
+            var key: Expr?
+            if consumeWord("by") {
+                for _ in 0..<2 {
+                    if consumeWord("ascending") { ascending = true }
+                    else if consumeWord("descending") { ascending = false }
+                    else if consumeWord("numeric") { numeric = true }
+                    else if consumeWord("text") || consumeWord("international")
+                                || consumeWord("datetime") || consumeWord("date") { numeric = false }
+                }
+                key = try parseExpression()
+            }
+            try expectNewline()
+            return Stmt(kind: .sortContainer(items: sortItems, container: container,
+                                             ascending: ascending, numeric: numeric, key: key), line: line)
+        }
         _ = consumeWord("this"); _ = consumeWord("stack")
         _ = consumeWord("marked")
         _ = consumeCardWord()
@@ -865,6 +1289,14 @@ struct Parser {
         guard consumeWord("by") else {
             throw ScriptError(line: line, message: "Expected 'by <expression>' in 'sort'.")
         }
+        // Direction/style may ALSO follow `by` — `sort by descending field "X"`.
+        for _ in 0..<2 {
+            if consumeWord("ascending") { ascending = true }
+            else if consumeWord("descending") { ascending = false }
+            else if consumeWord("numeric") { numeric = true }
+            else if consumeWord("text") || consumeWord("international")
+                        || consumeWord("datetime") || consumeWord("date") { numeric = false }
+        }
         let key = try parseExpression()
         try expectNewline()
         return Stmt(kind: .sortCards(ascending: ascending, numeric: numeric, key: key), line: line)
@@ -879,14 +1311,34 @@ struct Parser {
         // Ignorable targets.
         let ignorable = ["menubar", "menu", "titlebar", "message", "msg", "tool",
                          "pattern", "patterns", "picture", "pict", "background",
-                         "card", "bkgnd", "bg", "all", "cards", "window", "windows",
-                         "groups", "scroll", "variable"]
+                         "card", "cd", "bkgnd", "bkgd", "bg", "all", "cards", "cds",
+                         "marked", "window", "windows", "groups", "scroll", "variable"]
         if let first = peekIdentifier(), ignorable.contains(first),
            !isPartReference() {
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
         }
+        // `show 10 cards` / `show (number of cards) cards` — the flip-through
+        // animation (a count expression before `cards`). Contrapt doesn't
+        // animate; accept and no-op. `show all cards` is caught by the list above.
+        if case .number = current.kind {} else if case .symbol("(") = current.kind {} else {
+            // not a count — fall through to the object case below
+            return try finishShowHide(visible: visible, line: line)
+        }
+        do {
+            let saved = index
+            if (try? parseExpression()) != nil, let w = peekIdentifier(), w == "cards" || w == "cds" {
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
+            index = saved
+        }
+        return try finishShowHide(visible: visible, line: line)
+    }
+
+    private mutating func finishShowHide(visible: Bool, line: Int) throws -> Stmt {
         let object = try parseObjectExpr()
         // `at h,v` — HyperCard also moves the part; we just show/hide it.
         if consumeWord("at") {
@@ -898,14 +1350,47 @@ struct Parser {
                                value: .stringLiteral(visible ? "true" : "false")), line: line)
     }
 
+    /// Whether a field reference begins here (`[the] [card|bg] field …`) —
+    /// how `sort` tells its container form from its cards form.
+    private func startsFieldContainer() -> Bool {
+        var offset = peekIdentifier() == "the" ? 1 : 0
+        if let w = peekIdentifier(offset),
+           Self.cardWords.contains(w) || Self.backgroundWords.contains(w) { offset += 1 }
+        guard let w = peekIdentifier(offset) else { return false }
+        return w == "field" || w == "fld"
+    }
+
+    /// Whether `sort` is followed by a bare container to sort in place
+    /// (`sort it`, `sort list`) rather than the cards form. True when the next
+    /// word isn't one of the cards-form keywords (`cards`, `this`, `marked`,
+    /// an order/style word, or `by`) — i.e. it's a plain variable or `it`.
+    private func startsBareContainerSort() -> Bool {
+        let offset = peekIdentifier() == "the" ? 1 : 0
+        guard let w = peekIdentifier(offset) else { return false }
+        let cardsFormKeywords: Set<String> = [
+            "cards", "card", "cds", "cd", "marked", "this", "stack", "by",
+            "ascending", "descending", "numeric", "text", "international",
+            "datetime", "date", "lines", "items",
+        ]
+        return !cardsFormKeywords.contains(w)
+    }
+
     /// Whether what's ahead is a part reference like `card button "X"` /
     /// `field 1` (so `show card button…` isn't mistaken for the ignorable
     /// `card picture`).
     private func isPartReference() -> Bool {
-        let partKinds = ["button", "field", "label", "image"]
-        if let w = peekIdentifier(), partKinds.contains(w) { return true }
-        if let w = peekIdentifier(), ["card", "background", "bg", "bkgnd"].contains(w),
-           let next = peekIdentifier(1), partKinds.contains(next) { return true }
+        // `picture`/`pict` is the card's paint layer (an ignorable no-op), not
+        // an image *part* — exclude it even though `partKindSynonyms` aliases
+        // `picture` to `image` for real `image "X"` part references.
+        func isKind(_ word: String?) -> Bool {
+            guard let word, word != "picture", word != "pict" else { return false }
+            return Self.partKindSynonyms[word] != nil
+        }
+        // A bare part (`btn "X"`, `field 1`) or a domain-qualified one
+        // (`cd btn id 5`, `bg field 2`) — synonyms included (btn/fld, cd/bg).
+        if isKind(peekIdentifier()) { return true }
+        if let w = peekIdentifier(), Self.cardWords.contains(w) || Self.backgroundWords.contains(w),
+           isKind(peekIdentifier(1)) { return true }
         return false
     }
 
@@ -920,7 +1405,27 @@ struct Parser {
         _ = consumeWord("to")
         _ = consumeWord("the")
         var target: GoTarget
-        if consumeWord("next") {
+        // Marked-card navigation — `go marked card N`, `go first/last/next/
+        // previous marked card`. Checked before the plain next/first/last
+        // branches, which would otherwise claim the leading keyword.
+        if peekIdentifier() == "marked", let c = peekIdentifier(1), Self.cardWords.contains(c) {
+            advance() // marked
+            advance() // card
+            target = .markedCard(try parseExpression())
+        } else if let w = peekIdentifier(), peekIdentifier(1) == "marked" {
+            advance() // ordinal/relative
+            advance() // marked
+            _ = consumeCardWord()
+            switch w {
+            case "next": target = .relativeMarked(forward: true)
+            case "previous", "prev": target = .relativeMarked(forward: false)
+            case "first": target = .markedCard(.numberLiteral(1))
+            case "last": target = .markedCardOrdinal(.last)
+            case "middle": target = .markedCardOrdinal(.middle)
+            case "any": target = .markedCardOrdinal(.any)
+            default: target = .markedCard(.numberLiteral(Double(Self.ordinals[w] ?? 1)))
+            }
+        } else if consumeWord("next") {
             _ = consumeCardWord()
             target = .next
         } else if consumeWord("previous") || consumeWord("prev") {
@@ -936,9 +1441,31 @@ struct Parser {
             target = .home
         } else if consumeWord("back") {
             target = .back
+        } else if consumeWord("recent") {
+            // `go recent card` — the most recently viewed card, like `go back`.
+            _ = consumeCardWord()
+            target = .back
+        } else if consumeWord("any") {
+            // `go [to] any card` — a random card in the stack.
+            _ = consumeCardWord()
+            target = .any
+        } else if consumeWord("this") {
+            // `go [to] this card` stays on the current card; `go this bg` goes to
+            // the current background's first card.
+            if consumeBackgroundWord() {
+                target = .inBackground(.first, background: nil)
+            } else {
+                _ = consumeCardWord() || consumeWord("stack")
+                target = .current
+            }
         } else if consumeCardWord() {
-            if consumeWord("id") {
-                target = .idExpression(try parseExpression())
+            if current.kind == .newline || current.kind == .endOfScript {
+                target = .current // bare `go [to] card` → the current card
+            } else if consumeWord("id") {
+                // A dangling `go card id` with no number (a leftover line) stays
+                // on the current card rather than failing the handler.
+                target = (current.kind == .newline || current.kind == .endOfScript)
+                    ? .current : .idExpression(try parseExpression())
             } else {
                 target = .expression(try parseExpression())
             }
@@ -952,16 +1479,33 @@ struct Parser {
             // `go [to] stack "X"` — another stack (opens at its first card).
             target = .inStack(name: try parseExpression(), card: nil)
         } else if current.kind != .newline && current.kind != .endOfScript {
-            // A bare `go [to] "Name"` — a card by name/number.
-            target = .expression(try parseExpression())
+            // A bare `go [to] "Name"` — a card/stack by name/number. An unquoted
+            // MULTI-word name (`go to File Index`, `go to Clip Art`, `go to Area
+            // Codes`) is HyperCard's shorthand for a stack of that name; join the
+            // consecutive bare words. A single bare word stays an expression (it
+            // may be a variable holding a destination name). Stops at a trailing
+            // qualifier (`of …`, `in a new window`, `without dialog`).
+            if case .identifier(let first) = current.kind, isGoNameWord(first),
+               let second = peekIdentifier(1), isGoNameWord(second) {
+                var words: [String] = []
+                while case .identifier(let w) = current.kind, isGoNameWord(w) {
+                    words.append(w); advance()
+                }
+                target = .inStack(name: .stringLiteral(words.joined(separator: " ")), card: nil)
+            } else {
+                target = .expression(try parseExpression())
+            }
         } else {
             throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
         }
         // Trailing qualifiers compose innermost-first, as HyperCard writes them:
         // `go cd X of bkgnd "Paths" of stack "Home"` = (card X in background
         // "Paths") in stack "Home".
-        if let background = try parseOfBackground() {
-            target = .inBackground(target, background: background)
+        if let qualifier = try parseOfBackground() {
+            switch qualifier {
+            case .current: target = .inBackground(target, background: nil)
+            case .named(let background): target = .inBackground(target, background: background)
+            }
         }
         if peekIdentifier() == "of", peekIdentifier(1) == "stack" {
             advance(); advance() // of stack
@@ -981,6 +1525,14 @@ struct Parser {
     }
 
     private mutating func parseIf(handlerName: String, line: Int) throws -> Stmt {
+        // A long single-line `if … then … else if … else if …` chain recurses
+        // parseIf ⇄ parseElse (bypassing parseStatements); bound it here so it
+        // can't overflow the stack.
+        expressionDepth += 1
+        defer { expressionDepth -= 1 }
+        guard expressionDepth <= Self.maxExpressionDepth else {
+            throw ScriptError(line: line, message: "This 'if' is nested too deeply.")
+        }
         let condition = try parseExpression()
         // HyperCard lets `then` begin on the next line(s):
         //   if <cond>
@@ -1065,7 +1617,8 @@ struct Parser {
                 throw ScriptError(line: line, message: "Expected a variable name after 'repeat with'.")
             }
             advance()
-            guard consumeSymbol("=") else {
+            // `repeat with i = 2 to 6` — Home's STAK writes `is` for `=`.
+            guard consumeSymbol("=") || consumeWord("is") else {
                 throw ScriptError(line: line, message: "Expected '=' after the variable in 'repeat with'.")
             }
             let from = try parseExpression()
@@ -1241,6 +1794,10 @@ struct Parser {
     /// `id`. Returns nil (consuming nothing) otherwise.
     private mutating func parseFieldRefIfPresent() throws -> FieldRef? {
         let fieldWords: Set<String> = ["field", "fld"]
+        // An optional leading article: `the field "X"`, `the card field 1`. Undo
+        // the `the` if what follows isn't actually a field reference.
+        let saved = index
+        _ = consumeWord("the")
         let domain: HyperTalkObject.PartDomain
         if let w = peekIdentifier(), fieldWords.contains(w) {
             domain = .any
@@ -1256,6 +1813,7 @@ struct Parser {
             advance()
             advance()
         } else {
+            index = saved
             return nil
         }
         let isID = consumeWord("id")
@@ -1267,25 +1825,35 @@ struct Parser {
     /// card`, `field 1 of card "About"`. Returns nil (consuming nothing) when
     /// no card owner follows.
     private mutating func parseFieldCardRef() throws -> CardRef? {
-        guard peekIdentifier() == "of" else { return nil }
+        // `of card N` or, as HyperCard also allows, `in card N`
+        // (`put card field "chain" in card 81 into beer`). `into` is a distinct
+        // word, so it isn't mistaken for `in`; the reset below undoes a bare
+        // `in` that isn't a card scope.
+        guard peekIdentifier() == "of" || peekIdentifier() == "in" else { return nil }
         let saved = index
-        advance() // of
+        advance() // of / in
         _ = consumeWord("the")
         let ref: CardRef
         if consumeWord("next") { _ = consumeCardWord(); ref = .next }
         else if consumeWord("previous") || consumeWord("prev") { _ = consumeCardWord(); ref = .previous }
         else if consumeWord("first") { _ = consumeCardWord(); ref = .first }
         else if consumeWord("last") { _ = consumeCardWord(); ref = .last }
-        else if consumeWord("this") { _ = consumeCardWord(); ref = .current }
+        else if consumeWord("this") { _ = consumeCardWord() || consumeBackgroundWord(); ref = .current }
+        else if consumeWord("recent") { _ = consumeCardWord(); ref = .previous } // most recent ≈ previous
+        else if consumeWord("marked") { _ = consumeCardWord(); ref = .markedCard(try parsePrimary()) }
         else if consumeCardWord() {
             ref = consumeWord("id") ? .idExpression(try parsePrimary()) : .expression(try parsePrimary())
         } else {
             index = saved // not a card owner (e.g. `field "x" of the target`)
             return nil
         }
-        // `last card of bkgnd "X"` — scope the card to that background.
-        if let background = try parseOfBackground() {
-            return .inBackground(ref, background: background)
+        // `last card of bkgnd "X"` — scope the card to that background;
+        // `of bkgnd` / `of this bkgnd` scope to the current one.
+        if let qualifier = try parseOfBackground() {
+            switch qualifier {
+            case .current: return .inBackground(ref, background: nil)
+            case .named(let background): return .inBackground(ref, background: background)
+            }
         }
         return ref
     }
@@ -1293,15 +1861,49 @@ struct Parser {
     /// Consumes an `of <background> <name>` qualifier, returning the name
     /// expression. Returns nil (consuming nothing) when it isn't present, or
     /// when it's a bare `of <background>` with no name (dropped).
-    private mutating func parseOfBackground() throws -> Expr? {
-        guard peekIdentifier() == "of", let word = peekIdentifier(1),
-              Self.backgroundWords.contains(word) else { return nil }
-        advance() // of
-        advance() // background word
-        guard current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "into" else {
-            return nil // bare `of bkgnd` — no name to scope by
+    /// A background scope after a card reference. `.named` carries the name
+    /// expression; `.current` is the unnamed forms — `of bkgnd` bare and
+    /// `of this bkgnd` — meaning the current card's background (DateBook's
+    /// `go to last card of bkgnd` extends *its own* section, not the stack).
+    enum BackgroundQualifier {
+        case current
+        case named(Expr)
+    }
+
+    /// Whether a bare word is part of an unquoted multi-word `go` destination
+    /// name (`File Index`) rather than a trailing qualifier. Stops the name at
+    /// the qualifier keywords HyperCard uses after a destination.
+    private func isGoNameWord(_ word: String) -> Bool {
+        !["of", "in", "without", "the"].contains(word)
+    }
+
+    private mutating func parseOfBackground() throws -> BackgroundQualifier? {
+        guard peekIdentifier() == "of" else { return nil }
+        if let word = peekIdentifier(1), Self.backgroundWords.contains(word) {
+            advance() // of
+            advance() // background word
+            _ = consumeWord("id") // `of bg id 9036` — id matched as a name, best effort
+            guard current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "into" else {
+                return .current // bare `of bkgnd` — the current background
+            }
+            return .named(try parsePrimary()) // the background name/number
         }
-        return try parsePrimary() // the background name/number
+        if peekIdentifier(1) == "this", let word = peekIdentifier(2), Self.backgroundWords.contains(word) {
+            advance(); advance(); advance() // of this <background word>
+            return .current
+        }
+        return nil
+    }
+
+    /// Wraps a just-parsed card object in a background scope if a trailing
+    /// `of [this] bkgnd [name]` follows (`card "Color" of bkgnd "Content"`,
+    /// `card 2 of this bg`). Returns the bare object when there's no scope.
+    private mutating func scopeCardObject(_ base: ObjectExpr) throws -> ObjectExpr {
+        guard let qualifier = try parseOfBackground() else { return base }
+        switch qualifier {
+        case .current: return .cardInScope(base: base, background: nil)
+        case .named(let background): return .cardInScope(base: base, background: background)
+        }
     }
 
     private mutating func consumeCardWord() -> Bool {
@@ -1324,6 +1926,21 @@ struct Parser {
             if consumeBackgroundWord() { return .thisBackground }
             if consumeWord("stack") { return .thisStack }
             throw ScriptError(line: line, message: "Expected 'card', 'background', or 'stack' after 'this'.")
+        }
+        // `marked card N` as an object — `the short name of marked card 2`.
+        if peekIdentifier() == "marked", let c = peekIdentifier(1), Self.cardWords.contains(c) {
+            advance() // marked
+            advance() // card
+            return .markedCard(try parsePrimary())
+        }
+        // A card relative to the current one, used as an object for a property
+        // read: `the id of next card`, `the short name of prev card`. (`go next
+        // card` is handled separately in parseGo.)
+        if let w = peekIdentifier(), ["next", "previous", "prev", "recent"].contains(w),
+           let n = peekIdentifier(1), Self.cardWords.contains(n) {
+            advance() // next/previous/prev/recent
+            advance() // card word
+            return .cardRelative(w == "next" ? .next : .previous)
         }
         // Dispatch identity: `me` and `[the] target`.
         if consumeWord("me") { return .me }
@@ -1358,7 +1975,33 @@ struct Parser {
             advance() // window
             return .window(.stringLiteral(w))
         }
+        // Button families (HyperCard's radio-button grouping) aren't modeled, so
+        // `family N` resolves to an absent object — `the selectedButton of
+        // family 1` reads empty — letting stacks that use families import and
+        // run. Reuses the window case's absent-object behavior.
+        if peekIdentifier() == "family" {
+            advance()
+            _ = consumeWord("id")
+            let name: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
+                ? .stringLiteral("") : try parsePrimary()
+            // `selectedButton of family 1 of first card` — a family scoped to a
+            // card. Still unmodeled; consume and ignore the owning card.
+            if consumeWord("of") { _ = try? parseObjectExpr() }
+            return .window(name)
+        }
 
+        // A leading ordinal before `menuItem` — `last menuItem of menu 3`,
+        // `first menuItem of menu "File"`. Menus aren't modeled, so these
+        // resolve to an absent menu object (property reads empty, existence
+        // false), like the bare `menuItem …` form in the menu branch below.
+        if let w = peekIdentifier(), Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil,
+           peekIdentifier(1) == "menuitem" {
+            advance() // ordinal
+            advance() // menuitem
+            if case .number = current.kind { advance() }
+            if consumeWord("of") || consumeWord("in") { _ = consumeWord("menu"); _ = try? parsePrimary() }
+            return .menu(.stringLiteral(""))
+        }
         // A leading ordinal: `last cd btn`, `first card`, `middle field`,
         // `any button`. `first`…`tenth` are exact positions; `last`/`middle`/
         // `any` resolve against the live count when evaluated.
@@ -1384,8 +2027,8 @@ struct Parser {
             }
             if let c = peekIdentifier(), Self.cardWords.contains(c) {
                 advance()
-                if let n = numeric { return .card(.numberLiteral(Double(n))) }
-                return .cardByOrdinal(keyword!)
+                if let n = numeric { return try scopeCardObject(.card(.numberLiteral(Double(n)))) }
+                return try scopeCardObject(.cardByOrdinal(keyword!))
             }
             // `first bg` / `last bg` — background-by-ordinal isn't modeled;
             // resolve to the current background (best effort).
@@ -1428,13 +2071,13 @@ struct Parser {
         if let w = peekIdentifier(), Self.cardWords.contains(w) {
             advance()
             if consumeWord("id") {
-                return .cardByID(try parsePrimary())
+                return try scopeCardObject(.cardByID(try parsePrimary()))
             }
             // A bare `card`/`cd` with nothing naming a specific card → this card.
             if current.kind == .newline || current.kind == .endOfScript {
                 return .thisCard
             }
-            return .card(try parsePrimary())
+            return try scopeCardObject(.card(try parsePrimary()))
         }
         // `stack "X"` / `stack <expr>` — a named stack (`this stack` is handled
         // above). A bare `stack` with nothing after is the current stack.
@@ -1459,8 +2102,9 @@ struct Parser {
             _ = consumeWord("id")
             let name: Expr = (current.kind == .newline || current.kind == .endOfScript)
                 ? .stringLiteral("") : try parsePrimary()
-            // `menuItem N of menu "X"` — consume and ignore the owning menu.
-            if consumeWord("of") { _ = consumeWord("menu"); _ = try? parsePrimary() }
+            // `menuItem N of menu "X"` / `menuItem N in menu "X"` — consume and
+            // ignore the owning menu (`there is a menuItem 6 in menu X`).
+            if consumeWord("of") || consumeWord("in") { _ = consumeWord("menu"); _ = try? parsePrimary() }
             return .menu(name)
         }
         // A parenthesized expression builds the object's descriptor inline —
@@ -1486,7 +2130,7 @@ struct Parser {
 
     /// The types recognized by `is a[n] <type>`.
     static let typeNames: Set<String> = [
-        "number", "integer", "point", "rect", "rectangle", "logical", "boolean",
+        "number", "integer", "point", "rect", "rectangle", "logical", "boolean", "date",
     ]
 
     /// Functions readable as `the <fn> of X`, not just `fn(X)`.
@@ -1497,7 +2141,7 @@ struct Parser {
     /// `the clickLine` / `the clickText` — where the last locked-field click
     /// landed (HyperCard 2.2's list-navigation idiom).
     static let clickFields: [String: ClickField] = [
-        "clickline": .line, "clicktext": .text,
+        "clickline": .line, "clicktext": .text, "clickloc": .location,
     ]
 
     /// `the selectedLine` etc. — the script selection set by `select`.
@@ -1511,6 +2155,23 @@ struct Parser {
     static let oneArgFunctions: Set<String> = [
         "sqrt", "sin", "cos", "tan", "atan", "exp", "exp1", "exp2",
         "ln", "ln1", "log2", "abs", "trunc", "round", "average", "sum",
+        // `the random of N` / `random of N` — the Manhole's idle animation
+        // (`if the random of 2 is 1 then …`). `random(N)` already works.
+        "random",
+    ]
+
+    /// Functions whose single argument may be written `<fn> of X` without a
+    /// leading `the` — `length of X`, `charToNum of X`, `sqrt of X`. The
+    /// argument is an expression (value), not an object.
+    static let functionsWithOf: Set<String> =
+        oneArgFunctions.union(["length", "value", "chartonum", "numtochar", "param"])
+
+    /// Words that connect or terminate a value (operators, keywords) — so a
+    /// bareword like `menu` followed by one of these was itself the value, not a
+    /// keyword taking a name (`if menu is "X"`, not the menu named "is").
+    static let expressionConnectors: Set<String> = [
+        "is", "and", "or", "then", "into", "of", "to", "from", "with", "within",
+        "contains", "mod", "div", "else", "in",
     ]
 
     /// Adjectives HyperTalk allows before `name` — `the short name of …`,
@@ -1526,6 +2187,10 @@ struct Parser {
         "button": "button", "btn": "button",
         "field": "field", "fld": "field",
         "label": "label", "image": "image", "picture": "image",
+        // `part` addresses any part by z-order, regardless of kind — `cd part 3`,
+        // `the rect of cd part i`, `last cd part`. The host treats the "part"
+        // pseudo-kind as a wildcard over buttons and fields.
+        "part": "part",
     ]
     static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg"]
     static let cardWords: Set<String> = ["card", "cd"]
@@ -1535,9 +2200,10 @@ struct Parser {
     static let windowQualifiers: Set<String> = ["card", "cd", "tool", "pattern", "patterns",
                                                  "scroll", "fatbits", "variable"]
     /// Object-less global properties readable as `the <name>`. `stacks` (the
-    /// open-stack list) and `mouseclick` (a pending click) are functions in
-    /// HyperCard; they read the same way here.
-    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick"]
+    /// open-stack list), `mouseclick` (a pending click), `mouse` (the button
+    /// state, up/down), and `sound` (the playing sound's name, "done" when
+    /// idle) are functions in HyperCard; they read the same way here.
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,
@@ -1559,6 +2225,36 @@ struct Parser {
         case "any": return .any
         default: return nil
         }
+    }
+
+    /// The HyperCard application version Contrapt reports. A late 2.x, so
+    /// stacks that require a minimum (`if the version of HyperCard < 1.2`)
+    /// proceed to their modern path.
+    static let hyperCardVersion = "2.4.1"
+
+    /// Parses `the [long|short] version` — optionally `of HyperCard` — if one
+    /// begins here (after `the`), returning the app version string. Consumes
+    /// nothing and returns nil otherwise, including for `the version of <stack>`
+    /// (a different, stack-specific property handled by the generic path).
+    private mutating func parseHyperCardVersion() -> Expr? {
+        let adjectives: Set<String> = ["long", "short"]
+        let first = peekIdentifier()
+        let hasAdjective = adjectives.contains(first ?? "")
+        let noun = hasAdjective ? peekIdentifier(1) : first
+        guard noun == "version" else { return nil }
+        let afterNoun = hasAdjective ? 2 : 1
+        if peekIdentifier(afterNoun) == "of" {
+            // Only `of HyperCard` is the app version; `of <stack>` is different.
+            guard peekIdentifier(afterNoun + 1) == "hypercard" else { return nil }
+            if hasAdjective { advance() }
+            advance() // version
+            advance() // of
+            advance() // hypercard
+            return .stringLiteral(Self.hyperCardVersion)
+        }
+        if hasAdjective { advance() }
+        advance() // version
+        return .stringLiteral(Self.hyperCardVersion)
     }
 
     /// Parses a clock field if one begins here (after `the`), else nil
@@ -1599,15 +2295,19 @@ struct Parser {
     /// `the number of this card`). Consumes tokens only on success.
     private mutating func parseCountable() -> Countable? {
         let saved = index
+        // `marked cards` / `marked cds` — cards whose `marked` property is true.
+        if peekIdentifier() == "marked", let next = peekIdentifier(1), next == "cards" || next == "cds" {
+            advance(); advance(); return .markedCards
+        }
         // An optional layer qualifier: `card`/`bkgnd`/`background`.
         var domain: HyperTalkObject.PartDomain = .any
         var qualified = false
         switch peekIdentifier() {
         case "card", "cd":
             // Ambiguous with the `cards` plural; only treat as a qualifier if
-            // a part-kind plural follows (`card buttons`).
+            // a part-kind plural follows (`card buttons`, `card parts`).
             if let next = peekIdentifier(1), next == "buttons" || next == "btns"
-                || next == "fields" || next == "flds" {
+                || next == "fields" || next == "flds" || next == "parts" || next == "part" {
                 domain = .card; qualified = true; advance()
             }
         case "background", "bkgnd", "bg":
@@ -1628,23 +2328,24 @@ struct Parser {
         if noun == "fields" || noun == "flds" {
             advance(); return .parts(kind: "field", domain: domain)
         }
+        // `[card|background] parts` — buttons and fields together (HyperCard's
+        // `the number of card parts`). The pseudo-kind "part" counts both.
+        if noun == "parts" || noun == "part" {
+            advance(); return .parts(kind: "part", domain: domain)
+        }
         index = saved
         return nil
     }
 
     /// After `the number of`, reads a count of things Contrapt doesn't model —
-    /// `menuItems of menu "X"`, `menus`, `marked cds` — or nil if what follows
-    /// isn't one. Each counts as a literal 0 (no menus exist; no cards are
-    /// marked), so loops like `repeat with x = 1 to the number of menuItems of
-    /// menu "File"` simply never run. Consumes tokens only on success.
+    /// `menuItems of menu "X"`, `menus` — or nil if what follows isn't one. Each
+    /// counts as a literal 0 (no menus exist), so loops like `repeat with x = 1
+    /// to the number of menuItems of menu "File"` simply never run. (Marked
+    /// cards ARE modeled now — see `parseCountable`.) Consumes only on success.
     private mutating func parseUnmodeledCount() -> Expr? {
         let saved = index
         let noun = peekIdentifier()
         if noun == "menus" { advance(); return .numberLiteral(0) }
-        if noun == "marked", let next = peekIdentifier(1), next == "cards" || next == "cds" {
-            advance(); advance()
-            return .numberLiteral(0)
-        }
         guard noun == "menuitems" || noun == "menuitem" else { return nil }
         advance()
         // The owning menu: `of menu "File"` — consumed and ignored.
@@ -1672,6 +2373,27 @@ struct Parser {
         guard let tokens = try? Tokenizer.tokenize(source) else { return nil }
         var parser = Parser(tokens: tokens)
         return parser.parseCountable()
+    }
+
+    /// Wraps a card count with its background scope, returning a count Expr.
+    /// A *dynamic* background (`of bg <variable>`) becomes `.cardCountInBackground`
+    /// (resolved at run time); everything else uses the static `applyCountScope`.
+    private mutating func parseCountExpr(_ countable: Countable, line: Int) throws -> Expr {
+        if case .cards = countable {
+            let saved = index
+            if consumeWord("of") || consumeWord("in") {
+                let isThis = consumeWord("this")
+                let hasOrdinal = { if let w = self.peekIdentifier() { return w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil }; return false }()
+                if !isThis, !hasOrdinal, consumeBackgroundWord(), !consumeWord("id"),
+                   case .identifier = current.kind {
+                    // `of bg <variable>` — a runtime-named background.
+                    let background = try parsePrimary()
+                    return .cardCountInBackground(background)
+                }
+                index = saved // not a dynamic background — fall back to static
+            }
+        }
+        return .count(applyCountScopeIfPresent(to: countable))
     }
 
     /// After a `number of <plural>` count, parses an optional
@@ -1726,6 +2448,14 @@ struct Parser {
             else if case .string = current.kind { advance() }
             return countable
         }
+        if consumeWord("stack") {
+            // `in this stack` / `of stack "X"` — the whole-stack scope, which is
+            // already the default; consume an optional stack name/id and ignore.
+            _ = consumeWord("id")
+            if case .number = current.kind { advance() }
+            else if case .string = current.kind { advance() }
+            return countable
+        }
         index = saved
         return countable
     }
@@ -1742,7 +2472,10 @@ struct Parser {
         var cardScope: CardRef?
         while true {
             let saved = index
-            guard consumeWord("of") else { return cardScope }
+            // `of card N` or, as HyperCard also allows, `in card N`
+            // (`show card button "X" in card 81`). The no-match reset below keeps
+            // a bare `in` that isn't a card scope from being consumed.
+            guard consumeWord("of") || consumeWord("in") else { return cardScope }
             let isThis = consumeWord("this")
             var ordinal: String?
             if let w = peekIdentifier(),
@@ -1750,7 +2483,13 @@ struct Parser {
                 ordinal = w
                 advance()
             }
-            if consumeCardWord() {
+            if consumeWord("marked") {
+                // `… of marked card N` — scope the part/field to the Nth marked
+                // card (`bg field "X" of marked card CardCount`).
+                _ = consumeCardWord()
+                let n = (try? parsePrimary()) ?? .numberLiteral(1)
+                if cardScope == nil { cardScope = .markedCard(n) }
+            } else if consumeCardWord() {
                 let isID = consumeWord("id")
                 // An optional identifier/number/string naming the card (`of cd
                 // curCard`, `of card 5`) — but not a following statement keyword.
@@ -1775,11 +2514,16 @@ struct Parser {
                     }
                 }
             } else if consumeBackgroundWord() {
-                // Background scope: consume its optional id/name and ignore it.
+                // Background scope: `… of cd 1 of bg "Graphs"` scopes the card
+                // to that background (so the part resolves against bg "Graphs",
+                // not the current background). `… of bg "X"` with no card means
+                // a card of that background (best effort: its current one).
                 _ = consumeWord("id")
+                var backgroundName: Expr?
                 if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
-                    _ = try? parsePrimary()
+                    backgroundName = try? parsePrimary()
                 }
+                cardScope = .inBackground(cardScope ?? .current, background: backgroundName)
             } else {
                 index = saved
                 return cardScope
@@ -1792,11 +2536,17 @@ struct Parser {
         if let n = ordinals[word] { return .index(.numberLiteral(Double(n))) }
         if word == "last" { return .last }
         if word == "middle" { return .middle }
+        if word == "any" { return .any } // `any item of X` — a random chunk
         return nil
     }
 
     private mutating func parsePrimary() throws -> Expr {
         let line = current.line
+        expressionDepth += 1
+        defer { expressionDepth -= 1 }
+        guard expressionDepth <= Self.maxExpressionDepth else {
+            throw ScriptError(line: line, message: "This expression is nested too deeply.")
+        }
         switch current.kind {
         case .number(let value):
             advance()
@@ -1850,6 +2600,11 @@ struct Parser {
                 advance()
                 return .selected(component)
             }
+            // `the [long|short] version [of HyperCard]` — the HyperCard
+            // application version, which stacks gate startup on.
+            if let version = parseHyperCardVersion() {
+                return version
+            }
             // `the [long|short|abbreviated] date/time`, `the seconds/ticks`.
             if let field = parseClockField() {
                 return .clock(field)
@@ -1878,12 +2633,18 @@ struct Parser {
                 advance() // of
                 return .call("length", [try parsePrimary()])
             }
-            // `the sqrt of X`, `the sin of X`, etc. — one-argument functions.
-            if let function = peekIdentifier(), Self.oneArgFunctions.contains(function),
+            // `the sqrt of X`, `the charToNum of X`, `the param of N`, etc. —
+            // one-argument functions written with `the … of`.
+            if let function = peekIdentifier(), Self.functionsWithOf.contains(function),
                peekIdentifier(1) == "of" {
                 advance() // function
                 advance() // of
                 return .call(function, [try parsePrimary()])
+            }
+            // `the paramCount` / `the params` — zero-argument handler-arg readers.
+            if let w = peekIdentifier(), w == "paramcount" || w == "params" {
+                advance()
+                return .call(w, [])
             }
             // `the number of words of X` → chunk count (but not
             // `the number of this card`, which is a card property).
@@ -1903,7 +2664,7 @@ struct Parser {
                 advance() // number
                 advance() // of
                 if let countable = parseCountable() {
-                    return .count(applyCountScopeIfPresent(to: countable))
+                    return try parseCountExpr(countable, line: line)
                 }
                 if let unmodeled = parseUnmodeledCount() { return unmodeled }
                 // `the number of (<expr>)` — the noun is computed at run time
@@ -1919,7 +2680,7 @@ struct Parser {
                let kindWord = peekIdentifier(1), let kind = Self.chunkKinds[kindWord] {
                 advance() // ordinal
                 advance() // kind
-                guard consumeWord("of") else {
+                guard consumeWord("of") || consumeWord("in") else {
                     throw ScriptError(line: line, message: "Expected 'of' after '\(ordinalWord) \(kindWord)'.")
                 }
                 return .chunk(kind, selector, try parsePrimary())
@@ -1943,6 +2704,11 @@ struct Parser {
                 let property = peekIdentifier()!
                 advance() // property
                 advance() // of
+                // `the textStyle of line 2 of field "X"` — a run property of a
+                // chunk of a field (the base after `of` is a chunk kind).
+                if Self.chunkKinds[peekIdentifier() ?? ""] != nil {
+                    return .chunkProperty(property.lowercased(), try parseContainer(line: line))
+                }
                 return .property(property.lowercased(), try parseObjectExpr())
             }
             return try parsePrimary()
@@ -1959,7 +2725,7 @@ struct Parser {
                 ? .range(start, try parseAdditive())
                 : .index(start)
             suppressBarePropertyOf = savedSuppress
-            guard consumeWord("of") else {
+            guard consumeWord("of") || consumeWord("in") else {
                 throw ScriptError(line: line, message: "Expected 'of' after '\(word)', like: \(word) 2 of field \"Notes\".")
             }
             return .chunk(kind, selector, try parsePrimary())
@@ -1976,17 +2742,46 @@ struct Parser {
             // reserves both words for dispatch identity).
             if word == "me" { return .meValue }
             if word == "target" { return .property("name", .target) }
+            // `[the] msg [box|window]` / `message [box|window]` read as a value —
+            // the message box's current contents (`if the message box is not
+            // empty`, `first char of the message box`).
+            if word == "msg" || word == "message" {
+                if let next = peekIdentifier(), next == "box" || next == "window" { advance() }
+                return .messageBoxValue
+            }
             // `menu "X"` read as a value — its items, one per line, in
-            // HyperCard (`line 4 to 9 of menu "InUse"`). Contrapt has no
-            // menus, so it reads empty. Only a literal or parenthesized name
-            // follows the keyword; a bare `menu` stays a plain variable.
+            // HyperCard (`line 4 to 9 of menu "InUse"`, `line 8 of menu it`).
+            // Contrapt has no menus, so it reads empty. A literal, parenthesized,
+            // or variable name follows the keyword; a bare `menu` (nothing after)
+            // stays a plain variable.
             if word == "menu" {
                 switch current.kind {
                 case .string, .number, .symbol("("):
                     return .property("text", .menu(try parsePrimary()))
+                case .identifier(let name) where !Self.expressionConnectors.contains(name):
+                    // `line 8 of menu it` — a variable names the menu. But a
+                    // following operator/keyword (`menu is …`, `menu & …`) means
+                    // `menu` was itself the variable, not a menu keyword.
+                    advance()
+                    return .property("text", .menu(.variable(name)))
                 default:
                     break
                 }
+            }
+            // `menuItem N of menu "X"` read as a value — the item's text. Menus
+            // aren't modeled, so it reads empty (`get name of … menuItem …`,
+            // `last menuItem of menu 3 is "-"`). A leading ordinal is handled
+            // just below, where `word` is the ordinal.
+            if word == "menuitem" {
+                if case .number = current.kind { advance() }
+                if consumeWord("of") || consumeWord("in") { _ = consumeWord("menu"); _ = try? parsePrimary() }
+                return .property("text", .menu(.stringLiteral("")))
+            }
+            if Self.ordinalSelector(word) != nil, peekIdentifier() == "menuitem" {
+                advance() // menuitem
+                if case .number = current.kind { advance() }
+                if consumeWord("of") || consumeWord("in") { _ = consumeWord("menu"); _ = try? parsePrimary() }
+                return .property("text", .menu(.stringLiteral("")))
             }
             // Bare `number of cards/backgrounds/buttons/fields [scope]` — a
             // count (HyperTalk's `the` is optional). `number of this card`
@@ -1995,7 +2790,7 @@ struct Parser {
                 let saved = index
                 advance() // of
                 if let countable = parseCountable() {
-                    return .count(applyCountScopeIfPresent(to: countable))
+                    return try parseCountExpr(countable, line: line)
                 }
                 if let unmodeled = parseUnmodeledCount() { return unmodeled }
                 // Bare `number of chars/words/lines/items in X` — a chunk
@@ -2019,7 +2814,7 @@ struct Parser {
             if !suppressBarePropertyOf, let selector = Self.ordinalSelector(word),
                let kindWord = peekIdentifier(), let kind = Self.chunkKinds[kindWord] {
                 advance() // chunk kind
-                guard consumeWord("of") else {
+                guard consumeWord("of") || consumeWord("in") else {
                     throw ScriptError(line: line, message: "Expected 'of' after '\(word) \(kindWord)'.")
                 }
                 return .chunk(kind, selector, try parsePrimary())
@@ -2029,7 +2824,11 @@ struct Parser {
             // A plain variable is never legitimately followed by `of`, so
             // treating `<ident> of …` as a property access is safe.
             // `short name of X` → `name`; `long name of X` → the descriptor.
-            if !suppressBarePropertyOf, Self.nameAdjectives.contains(word),
+            // Not gated by suppressBarePropertyOf: `short/long name of X` is
+            // unambiguous, so `go cd short name of target` must parse (the
+            // suppression exists only for the generic `<var> of` form below,
+            // which would otherwise eat `go card whichSix of stack "X"`).
+            if Self.nameAdjectives.contains(word),
                let noun = peekIdentifier(), noun == "name" || noun == "id",
                peekIdentifier(1) == "of" {
                 advance() // name/id
@@ -2038,8 +2837,24 @@ struct Parser {
                 let property = noun == "name" ? (long ? "longname" : "name") : (long ? "longid" : "id")
                 return .property(property, try parseObjectExpr())
             }
+            // Bare `<function> of X` (no leading `the`) — `length of theText`,
+            // `charToNum of last char of fld "X"`, `sqrt of n`. The argument is
+            // an expression (its value), unlike the `<property> of <object>`
+            // form below. Checked first so function words aren't read as
+            // properties of an object. Suppressed inside a chunk index, where a
+            // variable can share a function's name (`line Ln of X` — `Ln`
+            // lowercases to the `ln` function — must stay a chunk, not ln(X)).
+            if !suppressBarePropertyOf, peekIdentifier() == "of",
+               Self.functionsWithOf.contains(word.lowercased()) {
+                advance() // of
+                return .call(word, [try parsePrimary()])
+            }
             if !suppressBarePropertyOf, peekIdentifier() == "of" {
                 advance() // of
+                // `textStyle of line 2 of fld "X"` — a run property of a chunk.
+                if Self.chunkKinds[peekIdentifier() ?? ""] != nil {
+                    return .chunkProperty(word.lowercased(), try parseContainer(line: line))
+                }
                 return .property(word.lowercased(), try parseObjectExpr())
             }
             // `name(args)` — a function call. Otherwise a plain variable.

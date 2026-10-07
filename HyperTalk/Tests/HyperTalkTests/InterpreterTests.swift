@@ -66,7 +66,8 @@ final class MockHost: HyperTalkHost {
         case .number(let n): return "card \(n)."
         case .named(let s): return "card \(s).".lowercased()
         case .id(let i): return "id \(i)."
-        case .inBackground(let inner, let bg): return cardPrefix(inner) + bg.lowercased() + "."
+        case .inBackground(let inner, let bg): return cardPrefix(inner) + (bg?.lowercased() ?? "this bg") + "."
+        case .markedCard(let n): return "marked card \(n)."
         default: return "other."
         }
     }
@@ -121,6 +122,25 @@ final class MockHost: HyperTalkHost {
         }
     }
 
+    /// A readable key for a card *object* (now a `GoDestination`): `card 2`,
+    /// `card id 12`, `card About`, `card About of bg Content`. Matches the old
+    /// `card <referenceText>` format for the number/named/id cases tests use.
+    private func cardDestinationText(_ destination: GoDestination) -> String {
+        switch destination {
+        case .number(let n): return "card \(n)"
+        case .named(let s): return "card \(s)"
+        case .id(let i): return "card id \(i)"
+        case .first: return "first card"
+        case .last: return "last card"
+        case .next: return "next card"
+        case .previous: return "prev card"
+        case .inBackground(let inner, let bg):
+            return "\(cardDestinationText(inner)) of \(bg.map { "bg \($0)" } ?? "this bg")"
+        case .markedCard(let n): return "marked card \(n)"
+        default: return "card"
+        }
+    }
+
     private func domainText(_ domain: HyperTalkObject.PartDomain) -> String {
         switch domain {
         case .any: ""
@@ -135,7 +155,7 @@ final class MockHost: HyperTalkHost {
             // Reuses the field-scope prefix: `cd btn id 8 of cd "Stack Menus"`
             // keys as "card stack menus.card button id 8.<property>".
             "\(cardPrefix(onCard))\(domainText(domain))\(kind) \(referenceText(reference)).\(property)"
-        case .card(let reference): "card \(referenceText(reference)).\(property)"
+        case .card(let destination): "\(cardDestinationText(destination)).\(property)"
         case .thisCard: "this card.\(property)"
         case .thisBackground: "this background.\(property)"
         case .thisStack: "this stack.\(property)"
@@ -195,16 +215,29 @@ final class MockHost: HyperTalkHost {
     var answerChoice: String?
     var askResponse: String? = ""
     var answerPrompts: [String] = []
+    var answerButtons: [[String]] = []
     var askPrompts: [String] = []
 
     func answer(_ prompt: String, buttons: [String]) async -> String {
         answerPrompts.append(prompt)
+        answerButtons.append(buttons)
         return answerChoice ?? buttons.first ?? "OK"
     }
 
     func ask(_ prompt: String, initialAnswer: String) async -> String? {
         askPrompts.append(prompt)
         return askResponse
+    }
+
+    /// The path `answer file` returns (nil = the user cancelled, the default).
+    var answerFileResponse: String?
+    var answerFilePrompts: [String] = []
+    var answerFileTypes: [String?] = []
+
+    func answerFile(_ prompt: String, type: String?) async -> String? {
+        answerFilePrompts.append(prompt)
+        answerFileTypes.append(type)
+        return answerFileResponse
     }
 
     /// Seconds requested by each `wait`; instant so tests don't actually pause.
@@ -214,11 +247,79 @@ final class MockHost: HyperTalkHost {
         waits.append(seconds)
     }
 
+    /// How many `the mouse` reads report "down" before the button counts as
+    /// released; 0 (the default) reads as up from the start.
+    var mouseDownPolls = 0
+
+    func mouseIsDown() -> Bool {
+        guard mouseDownPolls > 0 else { return false }
+        mouseDownPolls -= 1
+        return true
+    }
+
+    /// How many `the mouseClick` reads report "no click yet" before a click
+    /// lands; after that many false reads, the next read is true (once). The
+    /// default never clicks, so `repeat until the mouseClick` would spin — only
+    /// set it in tests that exercise the click-wait.
+    var mouseClickPolls = 0
+    private var mouseClicked = false
+
+    func consumeMouseClick() -> Bool {
+        if mouseClickPolls > 0 { mouseClickPolls -= 1; return false }
+        if mouseClicked { return false }
+        mouseClicked = true
+        return true
+    }
+
+    /// Scripts for off-path `send … to <object>` targets, keyed like
+    /// properties ("button OK", "card 2"). The returned path is just the
+    /// object's own layer — enough to prove dispatch reached it.
+    var objectScripts: [String: String] = [:]
+
+    func scriptLayers(for object: HyperTalkObject) -> [ScriptLayer]? {
+        let key: String
+        switch object {
+        case .part(let kind, _, let reference, _): key = "\(kind) \(referenceText(reference))"
+        case .card(let destination): key = cardDestinationText(destination)
+        default: return nil
+        }
+        guard let source = objectScripts[key] else { return nil }
+        return [ScriptLayer(name: "\(key) script", source: source, object: object)]
+    }
+
+    /// Tools chosen by `choose <name> tool`, and the name `the tool` reads.
+    var chosenTools: [String] = []
+    var toolName = "browse tool"
+
+    func chooseTool(_ name: String) { chosenTools.append(name) }
+    func currentToolName() -> String { toolName }
+
+    /// Pointer positions served to `the mouseLoc` polls, consumed in order
+    /// (the last repeats) — a scripted drag path. Nil (default) reads 0,0.
+    var mousePath: [(x: Int, y: Int)] = []
+
+    func mouseLocation() -> (x: Int, y: Int)? {
+        guard !mousePath.isEmpty else { return nil }
+        return mousePath.count > 1 ? mousePath.removeFirst() : mousePath[0]
+    }
+
+    /// `play` calls, `play stop` count, and the canned `the sound` reading.
+    var played: [(voice: String, tempo: Double, notes: [PlayNote])] = []
+    var playStops = 0
+    var playingName = "done"
+
+    func play(voice: String, tempo: Double, notes: [PlayNote]) {
+        played.append((voice, tempo, notes))
+    }
+
+    func stopPlay() { playStops += 1 }
+    func playingSoundName() -> String { playingName }
+
     /// Records each `find`, and matches (via FindMatcher) against the field
     /// values it holds — enough to exercise the interpreter's result and
     /// found* wiring. The real cross-card search lives in the app's host.
     var findCalls: [(text: String, mode: FindMode, inField: HyperTalkObject.Reference?)] = []
-    private var foundValues: [FoundField: String] = [:]
+    var foundValues: [FoundField: String] = [:]
 
     func find(_ text: String, mode: FindMode, inField: HyperTalkObject.Reference?, fieldDomain: HyperTalkObject.PartDomain) throws -> Bool {
         findCalls.append((text, mode, inField))
@@ -260,6 +361,8 @@ final class MockHost: HyperTalkHost {
     /// Scoped card counts for `number of cds in this bg` tests, keyed by
     /// "this" / a bg name / "#N" / "id N". Falls back to cardCount.
     var backgroundCardCounts: [String: Int] = [:]
+    /// `the number of marked cards`.
+    var markedCardCount = 0
 
     func count(_ countable: Countable) throws -> Int {
         switch countable {
@@ -276,7 +379,10 @@ final class MockHost: HyperTalkHost {
             }
             return sortKeys.isEmpty ? cardCount : sortKeys.count
         case .backgrounds: return backgroundCount
-        case .parts(let kind, _): return kind == "field" ? fields.count : buttonCount
+        case .markedCards: return markedCardCount
+        case .parts(let kind, _):
+            if kind == "part" { return fields.count + buttonCount }
+            return kind == "field" ? fields.count : buttonCount
         }
     }
 
@@ -287,6 +393,32 @@ final class MockHost: HyperTalkHost {
     var reorderedTo: [Int]?
     func setSortContext(_ cardIndex: Int?) { sortContext = cardIndex }
     func reorderCards(_ order: [Int]) throws { reorderedTo = order }
+
+    /// `mark`/`unmark` — card numbers currently marked (1-based; `nil` card
+    /// means the current card, recorded as 1).
+    var markedCardNumbers: Set<Int> = []
+    func setMarked(_ marked: Bool, card: GoDestination?) throws {
+        let n: Int = { if case .number(let x) = card { return x } else { return 1 } }()
+        if marked { markedCardNumbers.insert(n) } else { markedCardNumbers.remove(n) }
+    }
+
+    /// `start using stack` support: a test library of stack name → full script,
+    /// and the names currently in use (most-recently-added first).
+    var stackLibrary: [String: String] = [:]
+    private(set) var inUseStackNames: [String] = []
+    func beginUsingStack(_ name: String) {
+        inUseStackNames.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
+        inUseStackNames.insert(name, at: 0)
+    }
+    func endUsingStack(_ name: String) {
+        inUseStackNames.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
+    func inUseStackScripts() -> [(name: String, source: String)] {
+        inUseStackNames.compactMap { name in
+            stackLibrary.first { $0.key.caseInsensitiveCompare(name) == .orderedSame }
+                .map { (name, $0.value) }
+        }
+    }
 
     /// `doMenu` built-in actions performed (untrapped items).
     var performedMenu: [String] = []
@@ -304,8 +436,8 @@ final class MockHost: HyperTalkHost {
             if kind == "field", fields[fieldKey(reference, domain)] != nil { return true }
             let prefix = "\(cardPrefix(onCard))\(domainText(domain))\(kind) \(referenceText(reference))."
             return properties.keys.contains { $0.hasPrefix(prefix) }
-        case .card(let reference):
-            return properties.keys.contains { $0.hasPrefix("card \(referenceText(reference)).") }
+        case .card(let destination):
+            return properties.keys.contains { $0.hasPrefix("\(cardDestinationText(destination)).") }
         case .thisCard, .thisBackground, .thisStack:
             return true
         }
@@ -331,8 +463,15 @@ final class MockHost: HyperTalkHost {
         return formatter
     }
 
+    /// A fixed "now" matching `clock(.seconds)`, so convert's fill-from-current
+    /// behavior is deterministic in tests.
+    private var referenceNow: Date { Date(timeIntervalSince1970: 2019686400) }
+
     private func convertParse(_ value: String, from: [ConvertFormat]) throws -> Date {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
+        // Empty converts as "now" (HyperCard fills omitted components from the
+        // current date/time) — mirrors the app and web hosts.
+        if trimmed.isEmpty { return referenceNow }
         let effective: [ConvertFormat]
         if !from.isEmpty {
             effective = from
@@ -359,13 +498,17 @@ final class MockHost: HyperTalkHost {
             return Date(timeIntervalSince1970: seconds)
         }
         if effective == [.dateItems] {
-            let parts = trimmed.split(separator: ",").map { Int($0.trimmingCharacters(in: .whitespaces)) ?? 0 }
-            guard parts.count >= 3 else { throw HostError("Expected at least year, month, day in dateItems.") }
+            // Missing/empty components inherit from the current date/time.
+            let now = utcCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: referenceNow)
+            let raw = trimmed.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            func part(_ index: Int, _ fallback: Int) -> Int {
+                guard index < raw.count, !raw[index].isEmpty, let n = Int(raw[index]) else { return fallback }
+                return n
+            }
             var components = DateComponents()
-            components.year = parts[0]; components.month = parts[1]; components.day = parts[2]
-            if parts.count > 3 { components.hour = parts[3] }
-            if parts.count > 4 { components.minute = parts[4] }
-            if parts.count > 5 { components.second = parts[5] }
+            components.year = part(0, now.year!); components.month = part(1, now.month!); components.day = part(2, now.day!)
+            components.hour = part(3, now.hour!); components.minute = part(4, now.minute!); components.second = part(5, now.second!)
             guard let date = utcCalendar.date(from: components) else { throw HostError("Bad dateItems.") }
             return date
         }
@@ -395,6 +538,22 @@ func run(_ script: String, handler: String = "mouseUp", host: MockHost = MockHos
 }
 
 // MARK: - Commands
+
+@Test func unsetGlobalIsFalseInCondition() async throws {
+    // A declared-but-never-set global is empty; `if it then` must take the
+    // else branch rather than erroring (classic-stack flag idiom).
+    let host = try await run("""
+    on mouseUp
+      global dragonFly
+      if dragonFly then
+        put "yes" into field "out"
+      else
+        put "no" into field "out"
+      end if
+    end mouseUp
+    """, host: MockHost(fields: ["out": ""]))
+    #expect(host.fields["out"] == "no")
+}
 
 @Test func goToNextCard() async throws {
     let host = try await run("""

@@ -40,15 +40,20 @@ public enum HostEffect: Equatable, Sendable {
 public struct EngineInteraction: Sendable {
     public var answer: @Sendable (_ prompt: String, _ buttons: [String]) async -> String
     public var ask: @Sendable (_ prompt: String, _ initialAnswer: String) async -> String?
+    /// `answer file` — returns the chosen file's path, or nil on cancel. The
+    /// default cancels, since a headless/web host has no file picker.
+    public var answerFile: @Sendable (_ prompt: String, _ type: String?) async -> String?
     public var wait: @Sendable (_ seconds: Double) async -> Void
 
     public init(
         answer: @escaping @Sendable (String, [String]) async -> String = { _, buttons in buttons.first ?? "OK" },
         ask: @escaping @Sendable (String, String) async -> String? = { _, initial in initial },
+        answerFile: @escaping @Sendable (String, String?) async -> String? = { _, _ in nil },
         wait: @escaping @Sendable (Double) async -> Void = { _ in }
     ) {
         self.answer = answer
         self.ask = ask
+        self.answerFile = answerFile
         self.wait = wait
     }
 }

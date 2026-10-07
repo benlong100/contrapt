@@ -27,6 +27,47 @@ private func layers(button: String = "", card: String = "", background: String =
     #expect(host.performedMenu == ["New Card"])
 }
 
+@Test func doMenuCardAuthoringItemsReachTheHost() async throws {
+    // Copy/Cut/Paste Card (like New/Delete Card) travel to the host's
+    // performMenu when no handler traps them; the app performs the action.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      doMenu "Copy Card"
+      doMenu "Cut Card"
+      doMenu "Paste Card"
+    end mouseUp
+    """, host: host)
+    #expect(host.performedMenu == ["Copy Card", "Cut Card", "Paste Card"])
+}
+
+@Test func doMenuPartAuthoringItemsReachTheHost() async throws {
+    // New/Clear Button and Field travel to performMenu like the card verbs; the
+    // app creates or removes the part.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      doMenu "New Button"
+      doMenu "New Field"
+      doMenu "Clear Button"
+    end mouseUp
+    """, host: host)
+    #expect(host.performedMenu == ["New Button", "New Field", "Clear Button"])
+}
+
+@Test func scriptPropertyRoundTrips() async throws {
+    // `set the script of button …` then reading it back — the plumbing a stack
+    // uses to wire up a button it just created (DateBook's fillWeekly).
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      set the script of card button "Go" to "on mouseUp" & return & "beep" & return & "end mouseUp"
+      put the script of card button "Go" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "on mouseUp\nbeep\nend mouseUp")
+}
+
 @Test func doMenuHandlerCanTrapTheCommand() async throws {
     // An `on doMenu` that doesn't pass traps the command — no built-in.
     let host = MockHost(fields: ["out": ""])

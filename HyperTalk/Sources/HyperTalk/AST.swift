@@ -74,6 +74,10 @@ indirect enum StmtKind {
     case pushCard
     /// `pop card [into <container>]` — return to (or read) the pushed card.
     case popCard(Container?)
+    /// `lock screen` / `unlock screen` — while the screen is locked, a
+    /// cross-window `go home`/`go stack` defers to unlock (the classic
+    /// invisible peek-and-pop at Home). In-stack navigation is unaffected.
+    case setScreenLocked(Bool)
     /// A recognized-but-ignored statement (e.g. `show menuBar`) — parsed so
     /// old stacks don't error on things Contrapt has no concept of.
     case noOp
@@ -89,12 +93,35 @@ indirect enum StmtKind {
     /// `sort [cards] [ascending|descending] [text|numeric] by <expr>` — reorder
     /// the stack's cards by a key evaluated on each card.
     case sortCards(ascending: Bool, numeric: Bool, key: Expr)
+    /// `sort [lines|items of] <container> [ascending|descending]
+    /// [text|numeric] [by <expr>]` — sort a container's lines or items in
+    /// place. A nil key sorts by the element itself; in the key expression,
+    /// `each` names the element being ranked.
+    case sortContainer(items: Bool, container: Container, ascending: Bool, numeric: Bool, key: Expr?)
+    /// `mark`/`unmark` a card's `marked` property: `mark card N`, `mark all
+    /// cards`, `mark cards where <condition>` (and the `unmark` forms).
+    case setMarked(mark: Bool, MarkTarget)
+    /// `start using stack <name>` / `stop using stack <name>` — add/remove an
+    /// auxiliary stack from the message hierarchy, so its handlers/functions
+    /// are reachable from the current stack.
+    case startUsing(Expr)
+    case stopUsing(Expr)
     /// `doMenu <item>` — send a `doMenu` message (so handlers can trap it),
     /// then perform the built-in menu action if nothing traps it.
     case doMenu(Expr)
+    /// `play <voice> [tempo <n>] [<notes>]` — play a named sound, optionally
+    /// as a melody (see PlayNotes for the notes-string grammar).
+    case play(voice: Expr, tempo: Expr?, notes: Expr?)
+    /// `play stop` — silence the current sound.
+    case playStop
     /// `click at <h>,<v>` — a synthetic click at a card location. The second
     /// expression is nil when the point arrives as one `"h,v"` value.
     case clickAt(Expr, Expr?)
+    /// `choose <name> tool` — switch the scripting tool. With the button or
+    /// field tool chosen, `click at` *selects* the part under the point (for
+    /// `doMenu "Clear Button"`) instead of clicking it; `choose browse tool`
+    /// restores normal clicking. Paint tools are accepted and ignored.
+    case chooseTool(String)
     /// `select …` — set (or clear) the script selection in a field: `select
     /// empty`, `select [the] text of field 1`, `select before/after text of
     /// field 1` (a collapsed selection at an end), `select line 2 of field 1`
@@ -114,10 +141,19 @@ indirect enum SelectTarget {
     /// A chunk-of-field container (`line 2 of field 1`, `char 3 to 9 of
     /// line 2 of field "Topics"`).
     case chunk(Container)
+    /// `select [before|after] text of <container>` where the container isn't a
+    /// plain field ref — `me`, `the target`, or a variable holding a field
+    /// descriptor (`select text of me`, `select after text of myField`).
+    /// Resolves the container to its field and selects the whole text, or
+    /// collapses to the start/end.
+    case textOfContainer(Container, edge: TextEdge)
     /// `select the clickLine` / `select the selectedLine` — an expression
     /// whose *value* is a chunk descriptor, re-parsed at run time.
     case descriptor(Expr)
 }
+
+/// Which end of a field's text `select [before|after] text of …` lands on.
+enum TextEdge { case whole, before, after }
 
 enum PutMode {
     case into
@@ -147,8 +183,21 @@ indirect enum CardRef {
     case expression(Expr)
     /// `card id <expr>`.
     case idExpression(Expr)
-    /// `<first|last|N> card of background <name>` — scoped to a background.
-    case inBackground(CardRef, background: Expr)
+    /// `<first|last|N> card of background <name>` — scoped to a background;
+    /// a nil name (`of bkgnd` bare, `of this bkgnd`) means the current one.
+    case inBackground(CardRef, background: Expr?)
+    /// `marked card <expr>` — the Nth marked card (`field "X" of marked card n`).
+    case markedCard(Expr)
+}
+
+/// What a `mark`/`unmark` command applies to.
+indirect enum MarkTarget {
+    /// `mark [this] card` / `mark card N` — one card (nil = the current card).
+    case card(CardRef?)
+    /// `mark all cards`.
+    case allCards
+    /// `mark cards where <condition>` — every card the condition is true on.
+    case cardsWhere(Expr)
 }
 
 indirect enum Container {
@@ -157,8 +206,15 @@ indirect enum Container {
     /// `me` as a container in a field's script — the field's contents
     /// (`put empty into me` in a closeField handler).
     case me
+    /// `[the] target` as a container — the contents of the field the current
+    /// message was dispatched to (`select line 2 of the target`).
+    case target
     /// The message box: `put x into message` / `msg`. Writing shows it.
     case messageBox
+    /// `[the] selection` — the currently selected text. Reading gives the
+    /// selected text; writing replaces it (`put X into the selection`). Resolved
+    /// at run time to the selected field and character range.
+    case selection
     /// A chunk of another container: `word 2 of field "X"`.
     case chunk(ChunkKind, ChunkSelector, Container)
 }
@@ -186,17 +242,31 @@ indirect enum GoTarget {
     case previous
     case first
     case last
+    /// `go to any card` — a random card in the stack.
+    case any
+    /// `go [to] this card` — re-navigate to the current card (a stay/refresh,
+    /// common in an `else` branch: "do nothing, stay here").
+    case current
     case expression(Expr)
     case idExpression(Expr)
     /// `go home` — open the Home stack.
     case home
     /// `go back` — return to the previously viewed card (browser history).
     case back
-    /// `go <first|last|N> card of background <name>`.
-    case inBackground(GoTarget, background: Expr)
+    /// `go <first|last|N> card of background <name>`; a nil name (`of
+    /// bkgnd` bare, `of this bkgnd`) means the current background.
+    case inBackground(GoTarget, background: Expr?)
     /// `go [to] stack "X"` or `go card N of stack "X"` — another stack, with
     /// an optional card destination within it (nil = the stack's first card).
     case inStack(name: Expr, card: GoTarget?)
+    /// `go [to] marked card <expr>` — the Nth marked card.
+    case markedCard(Expr)
+    /// `go next/previous marked card` — the next/previous marked card from the
+    /// current one, wrapping around.
+    case relativeMarked(forward: Bool)
+    /// `go first/last/middle/any marked card` — a positional marked card,
+    /// resolved against the live marked-card count.
+    case markedCardOrdinal(Ordinal)
 }
 
 indirect enum RepeatKind {
@@ -216,6 +286,11 @@ indirect enum Expr {
     case field(FieldRef)
     /// `the <property> of <object>`.
     case property(String, ObjectExpr)
+    /// `the textStyle of line 2 of field "X"` — a text-run property (textFont,
+    /// textSize, textStyle) of a chunk of a field. The container resolves to a
+    /// field and a character range; the run property is read over that range
+    /// (uniform value, or "mixed").
+    case chunkProperty(String, Container)
     /// A chunk of text: `word 2 of X`, `char 1 to 5 of X`, `the last line of X`.
     case chunk(ChunkKind, ChunkSelector, Expr)
     /// `the number of words of X` — how many chunks of a kind are in X.
@@ -226,6 +301,10 @@ indirect enum Expr {
     case countDynamic(Expr)
     /// `the number of cards / fields / [card|bkgnd] buttons`, etc.
     case count(Countable)
+    /// `the number of cds of bg <expr>` where the background is named by a
+    /// runtime expression (a variable) — `the number of cds of bg bgNum`. The
+    /// static-scope forms (`of bg "X"`, `of bg 2`, `of this bg`) stay `.count`.
+    case cardCountInBackground(Expr)
     /// A function call in an expression: `myFunc(a, b)`, `length(x)`.
     case call(String, [Expr])
     /// `the result` — the value returned by the last command/function.
@@ -241,6 +320,9 @@ indirect enum Expr {
     /// Bare `me` as a value: a field's script reads its own contents
     /// (HyperCard 2.x); any other object falls back to its name.
     case meValue
+    /// `[the] message [box|window]` / `msg` read as a value — the message box's
+    /// current contents.
+    case messageBoxValue
     /// `the clickLine` / `the clickText` — the host's last locked-field click.
     case click(ClickField)
     /// `X is [not] a[n] <type>` — a type test (number, integer, point, rect,
@@ -263,6 +345,7 @@ indirect enum ChunkSelector {
     case range(Expr, Expr)      // word 2 to 4
     case last
     case middle
+    case any                    // `any item of X` — a random chunk
 }
 
 /// An object reference in source: `button "OK"`, `card field 1`,
@@ -274,6 +357,16 @@ indirect enum ObjectExpr {
     case partByID(kind: String, domain: HyperTalkObject.PartDomain, id: Expr, card: CardRef?)
     case card(Expr)
     case cardByID(Expr)
+    /// A card object scoped to a background: `card "Color" of bkgnd "Content"`,
+    /// `card 2 of bg "Paths"`. `base` is one of the card object cases above; a
+    /// nil background means `of this bkgnd` (the current card's). Resolves to a
+    /// `GoDestination` carrying the scope, like `go cd X of bkgnd "Y"`.
+    case cardInScope(base: ObjectExpr, background: Expr?)
+    /// A card relative to the current one as an object — `the id of next card`,
+    /// `the short name of prev card`. Resolved to a concrete card at run time.
+    case cardRelative(CardRef)
+    /// `marked card <expr>` as an object — `the short name of marked card 2`.
+    case markedCard(Expr)
     case thisCard
     case thisBackground
     case thisStack

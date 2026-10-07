@@ -20,9 +20,10 @@ import Testing
     #expect(host.answerPrompts == ["Save changes?"])
 }
 
-@Test func answerFileSimulatesCancel() async throws {
+@Test func answerFileCancelLeavesItEmptyAndResultCancel() async throws {
     // The Home stack's selectHCFile: `answer file prompt of type filter`, then
     // `if (it is empty) or (the result = "Cancel") then exit to HyperCard`.
+    // No scripted choice → the host cancels.
     let host = MockHost(fields: ["out": ""])
     _ = try await run("""
     on mouseUp
@@ -32,6 +33,23 @@ import Testing
     end mouseUp
     """, host: host)
     #expect(host.fields["out"] == "/Cancel")
+    #expect(host.answerFilePrompts == ["Select the stack to open:"])
+    #expect(host.answerFileTypes == ["STAK"])
+}
+
+@Test func answerFileChosenPathLandsInItWithEmptyResult() async throws {
+    // A chosen file: `it` is the path and `the result` is empty, so
+    // selectHCFile returns it instead of aborting.
+    let host = MockHost(fields: ["out": ""])
+    host.answerFileResponse = "/Users/me/Stacks/Addresses"
+    _ = try await run("""
+    on mouseUp
+      answer file "Pick a stack:"
+      put it & "|" & the result into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "/Users/me/Stacks/Addresses|")
+    #expect(host.answerFileTypes == [nil]) // no `of type` clause
 }
 
 @Test func answerDefaultsToFirstButton() async throws {

@@ -214,6 +214,9 @@ enum ChunkResolver {
         case .middle:
             let m = count == 0 ? 0 : (count + 1) / 2
             return (m, m)
+        case .any:
+            let i = count == 0 ? 0 : Int.random(in: 1...count)
+            return (i, i)
         }
     }
 }

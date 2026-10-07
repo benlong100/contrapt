@@ -78,9 +78,11 @@ public enum FoundField: Sendable, Equatable {
 /// (a descriptor like `line 3 of card field id 12`, so `the value of the
 /// clickLine` reads that line and `word 2 of the clickLine` is the line
 /// number) and `the clickText` (the word under the click). HyperCard 2.2's
-/// list-field navigation idiom. Empty before any such click.
+/// list-field navigation idiom. Empty before any such click. `location` is
+/// `the clickLoc` — the card point of the last press, "h,v" (DateBook's month
+/// grids compute the clicked row from it).
 public enum ClickField: Sendable, Equatable {
-    case line, text
+    case line, text, location
 }
 
 /// What the `selected*` readers ask about the script selection (set by the
@@ -109,7 +111,15 @@ public enum GoDestination: Equatable, Sendable {
     case back
     /// A card scoped to a background: `first/last/Nth card of background X`.
     /// `which` is `.first`, `.last`, or `.number(n)` within that background.
-    indirect case inBackground(GoDestination, background: String)
+    /// A nil background name means the *current* card's background (`go last
+    /// card of bkgnd` with no name, or `of this bkgnd`).
+    indirect case inBackground(GoDestination, background: String?)
+    /// `marked card N` — the Nth card (1-based, stack order) whose `marked`
+    /// property is true. `go marked card 2`, `bg field "X" of marked card n`.
+    case markedCard(Int)
+    /// `go next/previous marked card` — the next/previous marked card from the
+    /// current one, wrapping around.
+    case relativeMarked(forward: Bool)
     /// Another stack by name, with an optional card destination within it
     /// (nil = its first card): `go stack "X"`, `go card N of stack "X"`.
     indirect case stack(name: String, card: GoDestination?)
@@ -126,6 +136,8 @@ public enum Countable: Sendable, Equatable {
     /// `the number of [card|background] buttons/fields`. Kind is
     /// "button"/"field"; `.any` counts both the card and background layers.
     case parts(kind: String, domain: HyperTalkObject.PartDomain)
+    /// `the number of marked cards` — cards whose `marked` property is true.
+    case markedCards
 
     /// Which background a scoped card count means.
     public enum BackgroundScope: Sendable, Equatable {
@@ -161,7 +173,10 @@ public enum HyperTalkObject: Sendable, Equatable {
     /// the part lives on (`hilite of cd btn id 8 of cd "Stack Menus"`); nil
     /// means the current card.
     case part(kind: String, domain: PartDomain, reference: Reference, onCard: GoDestination?)
-    case card(Reference)
+    /// A card as an object, addressed the same way `go` addresses one — by
+    /// number/name/id, by ordinal, or scoped to a background (`card "X" of
+    /// bkgnd "Y"`). The host resolves it with the same logic as navigation.
+    case card(GoDestination)
     case thisCard
     case thisBackground
     case thisStack
@@ -176,6 +191,11 @@ public protocol HyperTalkHost: AnyObject {
     /// a host can hold the script while the effect plays — HyperCard scripts
     /// resume only after the new card is on screen.
     func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) async throws
+    /// `lock screen` / `unlock screen`. Hosts that show each stack in its own
+    /// window use this to defer a cross-window `go home`/`go stack` until the
+    /// screen unlocks, so the classic invisible peek-and-pop at Home doesn't
+    /// reorder windows. Optional; the default ignores it.
+    func setScreenLocked(_ locked: Bool)
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
     /// optionally restricted to the card or background layer. `onCard` names a
     /// different card the field lives on (`field "X" of prev card`); nil means
@@ -209,6 +229,11 @@ public protocol HyperTalkHost: AnyObject {
     /// `ask <prompt> with <default>` — a modal text prompt. Returns the text
     /// entered, or nil if the user cancels.
     func ask(_ prompt: String, initialAnswer: String) async -> String?
+    /// `answer file <prompt> [of type <type>]` — a file-open dialog. `type` is
+    /// the classic four-char Mac file type the stack asked for (e.g. "STAK"),
+    /// advisory only. Returns the chosen file's path, or nil if the user
+    /// cancels.
+    func answerFile(_ prompt: String, type: String?) async -> String?
     /// `wait` — pause the script for `seconds`. The host owns real time (as
     /// with the clock), so tests can make it instant.
     func wait(seconds: Double) async
@@ -236,6 +261,11 @@ public protocol HyperTalkHost: AnyObject {
     func clearSelection()
     /// `the selectedLine` / `selectedText` / `selectedChunk` / `selectedField`.
     func selectionValue(_ component: SelectionComponent) -> String
+    /// A text-run property (`textFont`, `textSize`, `textStyle`) over a
+    /// character range of a field — `the textStyle of char 3 to 9 of field "X"`,
+    /// `the textSize of line 2 of fld "Notes"`. Returns the uniform value over
+    /// the range, or "mixed" when the runs disagree (as in HyperCard).
+    func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String
     /// `the number of cards / backgrounds / [card|bkgnd] buttons / fields`.
     func count(_ countable: Countable) throws -> Int
     /// During `sort`, temporarily resolve field/property lookups against the
@@ -245,6 +275,18 @@ public protocol HyperTalkHost: AnyObject {
     /// `sort` — reorder the stack's cards to the given permutation of current
     /// indices (e.g. `[2,0,1]` puts card 3 first).
     func reorderCards(_ order: [Int]) throws
+    /// `mark`/`unmark` — set a card's `marked` property. `card` nil means the
+    /// current card. `mark all cards` and `mark cards where …` call this once
+    /// per card (by number). Throws if the card doesn't exist.
+    func setMarked(_ marked: Bool, card: GoDestination?) throws
+    /// `start using stack <name>` / `stop using stack <name>` — add/remove an
+    /// auxiliary stack from the message hierarchy (session state the host owns,
+    /// like globals). The host resolves the named stack's script.
+    func beginUsingStack(_ name: String)
+    func endUsingStack(_ name: String)
+    /// The scripts of the stacks currently in use, most-recently-added first —
+    /// searched for handlers/functions after the current stack, before giving up.
+    func inUseStackScripts() -> [(name: String, source: String)]
     /// `doMenu <item>` that no handler trapped — perform the built-in menu
     /// action (e.g. New Card, Delete Card). Unknown items are ignored.
     func performMenu(_ item: String) throws
@@ -264,6 +306,56 @@ public protocol HyperTalkHost: AnyObject {
     /// "Can't understand" errors — while genuinely unknown names still error,
     /// so typos in the user's own scripts surface.
     func isExternalName(_ name: String) -> Bool
+    /// `the mouse` — whether the primary button (or a touch) is down right
+    /// now, for the classic press-and-hold poll `repeat until the mouse is
+    /// up`. Optional; hosts without live mouse tracking read up, so such a
+    /// loop exits on its first check.
+    func mouseIsDown() -> Bool
+    /// `the mouseClick` — whether a click has happened since this was last
+    /// read. True is reported once per click and consumed on read, so the
+    /// classic wait-for-a-click poll `repeat until the mouseClick` exits on
+    /// the next click (and `the clickLoc`/`the clickLine` then describe it).
+    /// Optional; hosts without click tracking read false, so such a loop would
+    /// spin — those hosts shouldn't run click-wait scripts. The click that
+    /// launched the current handler does not count.
+    func consumeMouseClick() -> Bool
+    /// `the mouseLoc` / `mouseH` / `mouseV` — the pointer's card location,
+    /// live during a browse press (the mid-drag tracking loops poll). Nil
+    /// (the default) reads as 0,0 — hosts without pointer tracking.
+    func mouseLocation() -> (x: Int, y: Int)?
+    /// The card/background/stack scripts of the *current* card, in message-path
+    /// order (card, then background, then stack). The interpreter re-reads this
+    /// after every in-stack `go` so the message path follows navigation, as in
+    /// HyperCard: a handler that navigates and then sends a message (or lets one
+    /// travel unhandled) reaches the card it moved to, not the one it started
+    /// on. Return nil (the default) to keep the path fixed at dispatch — hosts
+    /// that don't model a live current card opt out this way.
+    func systemScriptLayers() -> [ScriptLayer]?
+    /// The full dispatch path for `send <msg> to <object>` when the target
+    /// isn't on the running message path: the object's own script layer first,
+    /// then the layers beneath it (its card, background, stack). Nil (the
+    /// default) means the host can't resolve it — the send then dispatches
+    /// from the current layer, the pre-targeted behavior.
+    func scriptLayers(for object: HyperTalkObject) -> [ScriptLayer]?
+    /// `play <voice> [tempo <n>] [<notes>]` — start the named sound, as a
+    /// melody when `notes` is non-empty (tempo in quarter-notes per minute).
+    /// Playback is asynchronous: the script continues while sound plays, and
+    /// `the sound` reports the voice until it finishes. Optional; hosts
+    /// without audio ignore it.
+    func play(voice: String, tempo: Double, notes: [PlayNote])
+    /// `play stop` — silence the current sound. Optional.
+    func stopPlay()
+    /// `choose <name> tool` — "browse", "button", "field", or a paint tool
+    /// name. With the button/field tool chosen, `click at` selects the part
+    /// under the point (armed for `doMenu "Clear Button"`) instead of
+    /// clicking it. Optional; hosts without tools ignore it.
+    func chooseTool(_ name: String)
+    /// `the tool` — the chosen tool's name, e.g. "browse tool". Optional.
+    func currentToolName() -> String
+    /// `the sound` — the playing voice's name, or "done" when idle. Optional;
+    /// hosts without audio always read "done", so wait-for-melody loops
+    /// (`repeat until the sound is done`) exit immediately.
+    func playingSoundName() -> String
 }
 
 public extension HyperTalkHost {
@@ -278,6 +370,47 @@ public extension HyperTalkHost {
     func setSelection(field: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, start: Int, end: Int) throws {}
     func clearSelection() {}
     func selectionValue(_ component: SelectionComponent) -> String { "" }
+
+    /// Hosts that don't model card marking ignore `mark`/`unmark`.
+    func setMarked(_ marked: Bool, card: GoDestination?) throws {}
+
+    /// Hosts that don't model a multi-stack library ignore `start/stop using`
+    /// and report no in-use stacks (so the message path stays single-stack).
+    func beginUsingStack(_ name: String) {}
+    func endUsingStack(_ name: String) {}
+    func inUseStackScripts() -> [(name: String, source: String)] { [] }
+
+    /// Hosts without per-run style storage fall back to the field's whole-field
+    /// run property (the range is ignored).
+    func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String {
+        try propertyValue(property, of: .part(kind: "field", domain: domain, reference: reference, onCard: nil))
+    }
+
+    /// Single-window hosts (and tests) don't defer navigation; ignore the lock.
+    func setScreenLocked(_ locked: Bool) {}
+
+    /// Hosts without live mouse tracking read `the mouse` as up and the
+    /// pointer as unknown.
+    func mouseIsDown() -> Bool { false }
+    func consumeMouseClick() -> Bool { false }
+    func mouseLocation() -> (x: Int, y: Int)? { nil }
+
+    /// Hosts that don't model a live current card keep the message path fixed
+    /// at dispatch (the pre-navigation-following behavior).
+    func systemScriptLayers() -> [ScriptLayer]? { nil }
+
+    /// Hosts that can't resolve arbitrary objects leave off-path sends
+    /// dispatching from the current layer.
+    func scriptLayers(for object: HyperTalkObject) -> [ScriptLayer]? { nil }
+
+    /// Hosts without audio ignore `play` and read `the sound` as done.
+    func play(voice: String, tempo: Double, notes: [PlayNote]) {}
+    func stopPlay() {}
+    func playingSoundName() -> String { "done" }
+
+    /// Hosts without tools ignore `choose` and always read the browse tool.
+    func chooseTool(_ name: String) {}
+    func currentToolName() -> String { "browse tool" }
 }
 
 /// Errors a host throws from its callbacks; the interpreter wraps them

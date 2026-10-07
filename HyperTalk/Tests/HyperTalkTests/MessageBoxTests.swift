@@ -73,6 +73,21 @@ private func cardPath(card: String = "", stack: String = "") -> [ScriptLayer] {
     }
 }
 
+@Test func theMessageBoxReadsAsAValue() async throws {
+    // `the message box` / `msg` as an expression — its current contents.
+    // Power Tools: `if the message box is not empty then …`; Phone: `first
+    // char of the message box`.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      put "Dial 5551234" into the message box
+      if the message box is not empty then put first char of msg into field "out"
+      put the message box after field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "DDial 5551234")
+}
+
 @Test func multipleStatementsSeparatedByNewlinesRun() async throws {
     let host = MockHost(fields: ["out": ""])
     _ = try await HyperTalk.execute(

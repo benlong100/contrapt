@@ -34,6 +34,36 @@ import Testing
     #expect(host.selections.first?.end == 9)
 }
 
+@Test func selectTextOfMeAndTargetInAFieldScript() async throws {
+    // Readymade Fields / Phone Dialer idiom: `select text of me`, and the
+    // before/after collapses — the field designator is `me`, not a literal ref.
+    let field = HyperTalkObject.part(kind: "field", domain: .card, reference: .named("Note"), onCard: nil)
+    let host = MockHost(fields: ["card note": "Marmot"])
+    _ = try await HyperTalk.send("mouseUp", along: [
+        ScriptLayer(name: "field script", source: """
+        on mouseUp
+          select text of me
+          select after text of me
+          select before text of the target
+        end mouseUp
+        """, object: field)
+    ], host: host)
+    #expect(host.selections.map { [$0.start, $0.end] } == [[0, 6], [6, 6], [0, 0]])
+}
+
+@Test func selectTextOfAVariableFieldReference() async throws {
+    // Readymade Buttons: `select text of whichLayer`, where the variable holds
+    // a field descriptor — resolved at run time.
+    let host = MockHost(fields: ["name": "Marmot"])
+    try await run("""
+    on mouseUp
+      put "field " & quote & "Name" & quote into whichLayer
+      select text of whichLayer
+    end mouseUp
+    """, host: host)
+    #expect(host.selections.map { [$0.start, $0.end] } == [[0, 6]])
+}
+
 @Test func selectTextEmptyAndEdges() async throws {
     let host = MockHost(fields: ["name": "Marmot"])
     try await run("""
@@ -95,4 +125,21 @@ import Testing
     let idle = MockHost(fields: [:])
     try await run("on mouseUp\nselect the clickLine\nend mouseUp", host: idle)
     #expect(idle.selections.isEmpty)
+}
+
+@Test func selectingAButtonObjectIsANoOp() async throws {
+    // `select cd btn id 17` / `select line 0 of bg btn "X"` drive HyperCard's
+    // edit tools (copy/paste a button, a popup's list) — not modeled, so they
+    // parse and no-op, and the handler keeps running.
+    let host = MockHost(fields: ["out": ""])
+    try await run("""
+    on mouseUp
+      select cd btn id 17
+      select line 0 of bg btn "Go Back"
+      put "ran" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "ran")
+    #expect(host.selections.isEmpty)
+    #expect(!host.selectionCleared)
 }

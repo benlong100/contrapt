@@ -95,7 +95,7 @@ final class WebHost: HyperTalkHost {
                 throw HostError("There is no card with id \(id).")
             }
             target = i
-        case .inBackground:
+        case .inBackground, .markedCard, .relativeMarked:
             target = try resolveCardIndex(destination)
         case .home, .back, .stack:
             return
@@ -127,11 +127,15 @@ final class WebHost: HyperTalkHost {
             guard let wanted else { throw HostError("There is no such background.") }
             return stack.cards.count { $0.backgroundID == wanted }
         case .backgrounds: return stack.backgrounds.count
+        case .markedCards: return stack.cards.count(where: { $0.isMarked })
         case .parts(let kind, let domain):
             let card = stack.cards[cardIndex]
             let cardParts = card.parts
             let bgParts = stack.backgrounds.first(where: { $0.id == card.backgroundID })?.parts ?? []
-            func matching(_ parts: [Part]) -> Int { parts.filter { $0.kind.word == kind }.count }
+            func matching(_ parts: [Part]) -> Int {
+                if kind == "part" { return parts.filter { $0.kind.word == "button" || $0.kind.word == "field" }.count }
+                return parts.filter { $0.kind.word == kind }.count
+            }
             switch domain {
             case .card: return matching(cardParts)
             case .background: return matching(bgParts)
@@ -195,6 +199,11 @@ final class WebHost: HyperTalkHost {
 
     // MARK: - Card resolution
 
+    func setMarked(_ marked: Bool, card: GoDestination?) throws {
+        let index = try card.map { try resolveCardIndex($0) } ?? cardIndex
+        stack.cards[index].isMarked = marked
+    }
+
     func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }
@@ -218,20 +227,47 @@ final class WebHost: HyperTalkHost {
             }
             return i
         case .inBackground(let inner, let background):
-            let indices = stack.cards.indices.filter {
-                backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
+            let indices: [Int]
+            if let background {
+                indices = stack.cards.indices.filter {
+                    backgroundName(ofCardAt: $0)?.caseInsensitiveCompare(background) == .orderedSame
+                }
+                guard !indices.isEmpty else { throw HostError("There is no background named \"\(background)\".") }
+            } else {
+                // Unnamed (`of bkgnd` / `of this bkgnd`) — the current card's.
+                let wanted = stack.cards[cardIndex].backgroundID
+                indices = stack.cards.indices.filter { stack.cards[$0].backgroundID == wanted }
             }
-            guard !indices.isEmpty else { throw HostError("There is no background named \"\(background)\".") }
             switch inner {
             case .first: return indices.first!
             case .last: return indices.last!
             case .number(let n):
                 guard (1...indices.count).contains(n) else {
-                    throw HostError("There is no card \(n) in background \"\(background)\".")
+                    throw HostError("There is no card \(n) in that background.")
                 }
                 return indices[n - 1]
+            case .named(let name):
+                guard let i = indices.first(where: { stack.cards[$0].name.caseInsensitiveCompare(name) == .orderedSame }) else {
+                    throw HostError("There is no card named \"\(name)\" in that background.")
+                }
+                return i
+            case .id(let id):
+                let wanted = id.trimmingCharacters(in: .whitespaces)
+                guard let i = indices.first(where: { String(stack.cards[$0].scriptID) == wanted }) else {
+                    throw HostError("There is no card with id \(id) in that background.")
+                }
+                return i
             default: throw HostError("That card reference isn't supported within a background.")
             }
+        case .markedCard(let n):
+            let marked = stack.cards.indices.filter { stack.cards[$0].isMarked }
+            guard (1...marked.count).contains(n) else { throw HostError("There is no marked card \(n).") }
+            return marked[n - 1]
+        case .relativeMarked(let forward):
+            let marked = stack.cards.indices.filter { stack.cards[$0].isMarked }
+            guard !marked.isEmpty else { throw HostError("There are no marked cards.") }
+            return forward ? (marked.first { $0 > cardIndex } ?? marked.first!)
+                           : (marked.last { $0 < cardIndex } ?? marked.last!)
         case .home, .back, .stack:
             throw HostError("Can't address a field of that card.")
         }
@@ -267,6 +303,7 @@ final class WebHost: HyperTalkHost {
         switch field {
         case .line: clickLine
         case .text: clickText
+        case .location: "" // the page doesn't report press coordinates yet
         }
     }
 
@@ -358,6 +395,7 @@ final class WebHost: HyperTalkHost {
 
     func answer(_ prompt: String, buttons: [String]) async -> String { await interaction.answer(prompt, buttons) }
     func ask(_ prompt: String, initialAnswer: String) async -> String? { await interaction.ask(prompt, initialAnswer) }
+    func answerFile(_ prompt: String, type: String?) async -> String? { await interaction.answerFile(prompt, type) }
     func wait(seconds: Double) async { await interaction.wait(seconds) }
 
     // MARK: - Exists
@@ -366,8 +404,8 @@ final class WebHost: HyperTalkHost {
         switch object {
         case .part(let kind, let domain, let reference, let onCard):
             return (try? locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)) != nil
-        case .card(let reference):
-            return (try? cardIndexFor(reference)) != nil
+        case .card(let destination):
+            return (try? resolveCardIndex(destination)) != nil
         case .thisCard: return !stack.cards.isEmpty
         case .thisBackground:
             let card = stack.cards[cardIndex]

@@ -58,6 +58,32 @@ import Testing
     #expect(host.fields["out"] == "no menu")
 }
 
+@Test func showHideCardPictureSynonymsAreNoOps() async throws {
+    // CUTLURE's closeCard uses `show cd picture` (the `cd` synonym). Card
+    // pictures aren't modeled, so show/hide of them — spelled card/cd/bg —
+    // must parse cleanly and no-op, not fall through to object parsing.
+    _ = try await run("""
+    on mouseUp
+      show cd picture
+      hide cd picture
+      show card picture
+      show bg picture
+    end mouseUp
+    """)
+}
+
+@Test func showCardButtonSynonymStillTogglesThePart() async throws {
+    // The widened ignorable check must not swallow a real `cd btn …`.
+    let host = MockHost()
+    host.properties["card button Go.visible"] = "false"
+    _ = try await run("""
+    on mouseUp
+      show cd btn "Go"
+    end mouseUp
+    """, host: host)
+    #expect(host.properties["card button Go.visible"] == "true")
+}
+
 @Test func thisAcceptsCdAndBgAbbreviations() async throws {
     // The Home stack writes `short name of this cd` and `this bg` throughout.
     let host = MockHost(fields: ["out": ""])
@@ -231,6 +257,41 @@ import Testing
     end mouseUp
     """, host: host)
     #expect(host.destinations.last == .inBackground(.number(1), background: "Weekly"))
+}
+
+@Test func goCardScopedToTheCurrentBackgroundBare() async throws {
+    // `go to last card of bkgnd` with no name scopes to the CURRENT
+    // background (DateBook's `on doMenu` extends its own section) — it must
+    // not degrade to the stack's last card.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      go to last card of bkgnd
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .inBackground(.last, background: nil))
+}
+
+@Test func goCardScopedToThisBackground() async throws {
+    // `of this bkgnd` is the explicit spelling of the same scope.
+    let host = MockHost()
+    _ = try await run("""
+    on mouseUp
+      go first card of this bkgnd
+    end mouseUp
+    """, host: host)
+    #expect(host.destinations.last == .inBackground(.first, background: nil))
+}
+
+@Test func fieldOfLastCardOfThisBackground() async throws {
+    // The CardRef form: `field "X" of last card of this bkgnd`.
+    let host = MockHost(fields: ["last card.this bg.weeksecs": "12345", "out": ""])
+    _ = try await run("""
+    on mouseUp
+      put field "WeekSecs" of last card of this bkgnd into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "12345")
 }
 
 @Test func clickAtTwoNumbers() async throws {
@@ -421,4 +482,17 @@ import Testing
     """, host: host)
     #expect(host.fields["out"] == "card id 7")
     #expect(host.destinations.isEmpty) // "into" doesn't navigate
+}
+
+@Test func thereIsAMenuItemInMenuParsesAndIsFalse() async throws {
+    // Audio Help / Power Tools: `if there is a menuItem N in menu X` — menus
+    // aren't modeled, so it parses and reads false (no "Expected 'then'").
+    let host = MockHost(fields: ["out": ""])
+    _ = try await run("""
+    on mouseUp
+      if there is a menuItem 6 in menu "Edit" then put "has" into field "out"
+      if there is not a menuItem "Finder" in menu "Apple" then put "none" into field "out"
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "none")
 }

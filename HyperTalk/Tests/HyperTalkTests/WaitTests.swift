@@ -55,6 +55,19 @@ import Testing
     }
 }
 
+@Test func dialIsAcceptedAsANoOp() async throws {
+    // `dial <number>` needs telephony Contrapt hasn't got; it's accepted and
+    // ignored (like the paint verbs) rather than raising "Can't understand".
+    let host = try await run("""
+    on mouseUp
+      dial "555-1234"
+      dial the selection
+      beep
+    end mouseUp
+    """)
+    #expect(host.beeps == 1) // reached the line after the dials
+}
+
 @Test func zeroWaitDoesNothing() async throws {
     let host = try await run("""
     on mouseUp
