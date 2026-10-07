@@ -711,7 +711,27 @@ private extension LegacyStackImporter {
             let (contents, contentsEnd): ([Int: ParsedObject.FieldContent], Int)
             if headerDelta > 0 {
                 let known = knownPartIDs.union(parts.map(\.part.id))
-                (contents, contentsEnd) = parseContentsV2(from: afterParts, end: end, knownIDs: known)
+                if parts.isEmpty {
+                    // A card with no card-layer parts (e.g. book body pages whose
+                    // fields are all background templates) still carries its
+                    // per-card field text in a content section — but `afterParts`
+                    // is only the base+0x24 guess, so parseContentsV2 (which needs
+                    // the first word to BE a known part id) would break instantly
+                    // and drop every field's text. Scan the header window for the
+                    // start that yields the most content (an off-by-N start reads
+                    // a bad id/length and parses to ~nothing), like the 1.x path.
+                    func totalText(_ c: [Int: ParsedObject.FieldContent]) -> Int {
+                        c.values.reduce(0) { $0 + $1.text.count }
+                    }
+                    var best = parseContentsV2(from: afterParts, end: end, knownIDs: known)
+                    for o in stride(from: base + 0x20, to: min(base + 0x60, end - 4), by: 2) {
+                        let trial = parseContentsV2(from: o, end: end, knownIDs: known)
+                        if totalText(trial.contents) > totalText(best.contents) { best = trial }
+                    }
+                    (contents, contentsEnd) = best
+                } else {
+                    (contents, contentsEnd) = parseContentsV2(from: afterParts, end: end, knownIDs: known)
+                }
             } else {
                 let fieldIDs = knownFieldIDs.union(ownFieldIDs)
                 // 1.x stores contents as consecutive `[i16 partID][NUL text]`
