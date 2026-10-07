@@ -196,6 +196,14 @@ public protocol HyperTalkHost: AnyObject {
     /// screen unlocks, so the classic invisible peek-and-pop at Home doesn't
     /// reorder windows. Optional; the default ignores it.
     func setScreenLocked(_ locked: Bool)
+    /// Window properties — `the rect of card window` / `set the rect of card
+    /// window to …`. Classic stacks crop a large card by shrinking the card
+    /// window (The Hacker Crackdown's resizable pages). `window` is the
+    /// window's qualifier/name, lowercased ("card", "tool", a palette name…).
+    /// The getter returns nil to fall back to the absent-object default
+    /// (`visible` false, everything else empty); the setter defaults to no-op.
+    func windowProperty(_ property: String, window: String) -> String?
+    func setWindowProperty(_ property: String, window: String, to value: String) throws
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
     /// optionally restricted to the card or background layer. `onCard` names a
     /// different card the field lives on (`field "X" of prev card`); nil means
@@ -388,6 +396,10 @@ public extension HyperTalkHost {
 
     /// Single-window hosts (and tests) don't defer navigation; ignore the lock.
     func setScreenLocked(_ locked: Bool) {}
+
+    /// Hosts without window objects fall back to the absent-object defaults.
+    func windowProperty(_ property: String, window: String) -> String? { nil }
+    func setWindowProperty(_ property: String, window: String, to value: String) throws {}
 
     /// Hosts without live mouse tracking read `the mouse` as up and the
     /// pointer as unknown.

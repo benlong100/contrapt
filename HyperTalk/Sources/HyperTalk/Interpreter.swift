@@ -582,10 +582,13 @@ final class Runtime {
                 _ = try await evaluate(valueExpression, line: statement.line)
                 return .normal
             }
-            if case .window = objectExpression {
-                // Contrapt has no window objects; `set the loc/mode/visible of
-                // window "X"` is a no-op. Evaluate the value for side effects.
-                _ = try await evaluate(valueExpression, line: statement.line)
+            if case .window(let nameExpression) = objectExpression {
+                // Window properties go to the host — `set the rect of card
+                // window` crops the card viewport (the Hacker Crackdown's
+                // resizable pages); hosts without windows no-op.
+                let windowName = try await evaluate(nameExpression, line: statement.line).lowercased()
+                let value = try await evaluate(valueExpression, line: statement.line)
+                try host.setWindowProperty(property, window: windowName, to: value)
                 return .normal
             }
             if case .menu = objectExpression {
@@ -1417,9 +1420,11 @@ final class Runtime {
                 // visibility reads false (hidden until a `put` shows it).
                 return property == "visible" ? "false" : ""
             }
-            if case .window = objectExpression {
-                // Contrapt has no window objects; a window's `visible` reads
-                // false and every other property reads empty.
+            if case .window(let nameExpression) = objectExpression {
+                // Ask the host first (`the rect of card window` on a viewport-
+                // cropping host); absent windows read visible=false, else empty.
+                let windowName = try await evaluate(nameExpression, line: line).lowercased()
+                if let value = host.windowProperty(property, window: windowName) { return value }
                 return property == "visible" ? "false" : ""
             }
             if case .menu = objectExpression {
