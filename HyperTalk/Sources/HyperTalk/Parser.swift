@@ -553,6 +553,63 @@ struct Parser {
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
+        case "open":
+            // `open file <path>` starts file I/O. Other opens (`open printing`,
+            // `open <document> with <app>`) are accepted and ignored.
+            advance()
+            if consumeWord("file") {
+                let path = try parseExpression()
+                try expectNewline()
+                return Stmt(kind: .openFile(path), line: line)
+            }
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        case "close":
+            // `close file <path>`; `close printing`/`close window …` no-op.
+            advance()
+            if consumeWord("file") {
+                let path = try parseExpression()
+                try expectNewline()
+                return Stmt(kind: .closeFile(path), line: line)
+            }
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        case "read":
+            // `read from file <path> [until <char>|for <count>]` — into `it`.
+            advance()
+            _ = consumeWord("from")
+            guard consumeWord("file") else {
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
+            let path = try parseExpression()
+            var until: Expr? = nil
+            var count: Expr? = nil
+            if consumeWord("until") { until = try parseExpression() }
+            else if consumeWord("for") { count = try parseExpression() }
+            try expectNewline()
+            return Stmt(kind: .readFile(file: path, until: until, count: count), line: line)
+        case "write":
+            // `write <expr> to file <path> [at end|eof|<pos>]`.
+            advance()
+            let value = try parseExpression()
+            guard consumeWord("to"), consumeWord("file") else {
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
+            let path = try parseExpression()
+            var atEOF = false
+            var at: Expr? = nil
+            if consumeWord("at") {
+                if consumeWord("end") || consumeWord("eof") { atEOF = true }
+                else { at = try parseExpression() }
+            }
+            try expectNewline()
+            return Stmt(kind: .writeFile(value: value, file: path, atEOF: atEOF, at: at), line: line)
         case "delete":
             // `delete <chunk> of <container>` removes the chunk and its
             // delimiter (oracle-verified against HC 2.3 — the old assumption

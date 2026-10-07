@@ -14,6 +14,15 @@ public enum ClockField: Sendable, Equatable {
     case seconds, ticks
 }
 
+/// Where `write … to file` lands: the file's current mark (a fresh open
+/// writes from the top), the end (`at eof`/`at end` appends), or an absolute
+/// 1-based character position (`at 100`).
+public enum FileWritePosition: Sendable, Equatable {
+    case mark
+    case eof
+    case offset(Int)
+}
+
 /// A date/time format for the `convert` command. `convert` reads a value
 /// (in the `from` format, or auto-detected) and rewrites it in the `to`
 /// format. `dateItems` is the seven comma-separated numbers year, month,
@@ -227,6 +236,16 @@ public protocol HyperTalkHost: AnyObject {
     /// (`visible` false, everything else empty); the setter defaults to no-op.
     func windowProperty(_ property: String, window: String) -> String?
     func setWindowProperty(_ property: String, window: String, to value: String) throws
+    /// File I/O for `open/read/write/close file`. Paths are classic-style
+    /// (colon-separated or bare names); the host owns the mapping to real
+    /// storage. `fileRead` consumes from the file's mark and reports whether
+    /// it hit end-of-file; `until` reads through the delimiter (inclusive),
+    /// `count` reads that many characters, neither reads the rest. Throwing
+    /// HostError surfaces as `the result`, not a script error (as HyperCard).
+    func fileOpen(_ path: String) throws
+    func fileClose(_ path: String) throws
+    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool)
+    func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
     /// optionally restricted to the card or background layer. `onCard` names a
     /// different card the field lives on (`field "X" of prev card`); nil means
@@ -423,6 +442,16 @@ public extension HyperTalkHost {
     /// Hosts without window objects fall back to the absent-object defaults.
     func windowProperty(_ property: String, window: String) -> String? { nil }
     func setWindowProperty(_ property: String, window: String, to value: String) throws {}
+
+    /// Hosts without file access report HyperCard's classic failure.
+    func fileOpen(_ path: String) throws { throw HostError("Can't open that file.") }
+    func fileClose(_ path: String) throws { throw HostError("File not open.") }
+    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool) {
+        throw HostError("File not open.")
+    }
+    func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws {
+        throw HostError("File not open.")
+    }
 
     /// Hosts without live mouse tracking read `the mouse` as up and the
     /// pointer as unknown.

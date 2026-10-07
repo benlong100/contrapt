@@ -133,6 +133,44 @@ import HyperTalk
 }
 
 @MainActor
+@Test func fileIORoundTripsOnDisk() async throws {
+    // open/write/close then open/read/close against the REAL sandboxed disk
+    // (Application Support/HyperTalk Files), classic colon path mapped to its
+    // last component. Failures report via `the result`, not script errors.
+    var stack = Stack.makeNew()
+    var index = 0
+    var shown: [String] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { shown.append($0) },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("probeFileIO", along: [ScriptLayer(name: "t", source: """
+    on probeFileIO
+      open file "HD:Data:contrapt-test-file"
+      write "hello" & return & "disk" to file "HD:Data:contrapt-test-file"
+      close file "HD:Data:contrapt-test-file"
+      open file "contrapt-test-file"
+      read from file "contrapt-test-file" until return
+      put it into one
+      read from file "contrapt-test-file" for 99
+      put one & it & "|" & the result
+      close file "contrapt-test-file"
+    end probeFileIO
+    """, object: .thisCard)] + layers, host: host)
+    #expect(shown.last == "hello\ndisk|eof")
+    // Cleanup the real file.
+    let url = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                          appropriateFor: nil, create: false)
+        .appendingPathComponent("HyperTalk Files/contrapt-test-file")
+    try? FileManager.default.removeItem(at: url)
+}
+
+@MainActor
 @Test func scrollOfFieldRoundTrips() throws {
     // `the scroll of field` is modeled: set stores the offset on the field,
     // get reads it back, negatives clamp to 0, and buttons have no scroll.

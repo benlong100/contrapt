@@ -921,6 +921,86 @@ final class DocumentScriptHost: HyperTalkHost {
         Beeper.shared.beep()
     }
 
+    // MARK: - File I/O
+
+    /// Open files for `open/read/write/close file`: the buffered text, the
+    /// read/write mark, and where the file lives on disk. Keyed by the
+    /// script's path string, so close/read refer to the same open.
+    private struct OpenFile {
+        var characters: [Character]
+        var mark: Int
+        var url: URL
+    }
+    private var openFiles: [String: OpenFile] = [:]
+
+    /// Where script-created files live: a "HyperTalk Files" folder in the
+    /// app's container (sandbox-safe, no user grant needed). A classic
+    /// colon path ("HD:Data:scores") maps to its last component.
+    private func fileURL(for path: String) throws -> URL {
+        let name = path.split(separator: ":").last.map(String.init) ?? path
+        let safe = name.replacingOccurrences(of: "/", with: "-")
+        guard !safe.isEmpty else { throw HostError("Can't open that file.") }
+        let base = try FileManager.default.url(for: .applicationSupportDirectory,
+                                               in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("HyperTalk Files", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent(safe)
+    }
+
+    func fileOpen(_ path: String) throws {
+        let url = try fileURL(for: path)
+        // Open creates the file if it doesn't exist, as in HyperCard. Classic
+        // CR (and CRLF) line endings read as the model's \n.
+        let raw = (try? String(contentsOf: url, encoding: .utf8))
+            ?? (try? String(contentsOf: url, encoding: .macOSRoman)) ?? ""
+        let text = raw.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        openFiles[path] = OpenFile(characters: Array(text), mark: 0, url: url)
+    }
+
+    func fileClose(_ path: String) throws {
+        guard let file = openFiles.removeValue(forKey: path) else { throw HostError("File not open.") }
+        try String(file.characters).write(to: file.url, atomically: true, encoding: .utf8)
+    }
+
+    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool) {
+        guard var file = openFiles[path] else { throw HostError("File not open.") }
+        guard file.mark < file.characters.count else { return ("", true) }
+        var end = file.characters.count
+        if let count { end = min(end, file.mark + max(0, count)) }
+        else if let delimiter, let d = delimiter.first {
+            if let found = file.characters[file.mark...].firstIndex(of: d) { end = found + 1 }
+        }
+        let text = String(file.characters[file.mark..<end])
+        file.mark = end
+        openFiles[path] = file
+        return (text, end >= file.characters.count)
+    }
+
+    func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws {
+        guard var file = openFiles[path] else { throw HostError("File not open.") }
+        let start: Int
+        switch position {
+        case .mark: start = file.mark
+        case .eof: start = file.characters.count
+        case .offset(let n): start = max(0, n - 1) // 1-based, as in HC
+        }
+        let incoming = Array(text)
+        if start >= file.characters.count {
+            file.characters.append(contentsOf: Array(repeating: " ", count: start - file.characters.count))
+            file.characters.append(contentsOf: incoming)
+        } else {
+            // Overwrite at the mark without inserting, keeping any tail.
+            let overwriteEnd = min(file.characters.count, start + incoming.count)
+            file.characters.replaceSubrange(start..<overwriteEnd, with: incoming)
+            if start + incoming.count > overwriteEnd {
+                file.characters.append(contentsOf: incoming[(overwriteEnd - start)...])
+            }
+        }
+        file.mark = start + incoming.count
+        openFiles[path] = file
+    }
+
     // MARK: - Globals
 
     func globalValue(_ name: String) -> String? {

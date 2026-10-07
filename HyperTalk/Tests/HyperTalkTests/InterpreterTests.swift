@@ -234,6 +234,58 @@ final class MockHost: HyperTalkHost {
     var answerFilePrompts: [String] = []
     var answerFileTypes: [String?] = []
 
+    // In-memory file system for `open/read/write/close file` tests.
+    var diskFiles: [String: String] = [:]
+    var openFiles: [String: Int] = [:] // path -> read/write mark
+
+    func fileOpen(_ path: String) throws {
+        if diskFiles[path] == nil { diskFiles[path] = "" } // open creates, as in HC
+        openFiles[path] = 0
+    }
+
+    func fileClose(_ path: String) throws {
+        guard openFiles.removeValue(forKey: path) != nil else { throw HostError("File not open.") }
+    }
+
+    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool) {
+        guard let mark = openFiles[path], let content = diskFiles[path] else { throw HostError("File not open.") }
+        let characters = Array(content)
+        guard mark < characters.count else { return ("", true) }
+        var end = characters.count
+        if let count { end = min(characters.count, mark + max(0, count)) }
+        else if let delimiter, let d = delimiter.first {
+            if let found = characters[mark...].firstIndex(of: d) { end = found + 1 }
+        }
+        openFiles[path] = end
+        return (String(characters[mark..<end]), end >= characters.count)
+    }
+
+    func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws {
+        guard let mark = openFiles[path], let content = diskFiles[path] else { throw HostError("File not open.") }
+        var characters = Array(content)
+        let start: Int
+        switch position {
+        case .mark: start = mark
+        case .eof: start = characters.count
+        case .offset(let n): start = max(0, n - 1) // 1-based, as in HC
+        }
+        let incoming = Array(text)
+        if start >= characters.count {
+            characters.append(contentsOf: Array(repeating: " ", count: start - characters.count))
+            characters.append(contentsOf: incoming)
+        } else {
+            // Overwrite in place (HC writes at the mark without inserting),
+            // keeping any tail beyond the written span.
+            let overwriteEnd = min(characters.count, start + incoming.count)
+            characters.replaceSubrange(start..<overwriteEnd, with: incoming)
+            if start + incoming.count > overwriteEnd {
+                characters.append(contentsOf: incoming[(overwriteEnd - start)...])
+            }
+        }
+        diskFiles[path] = String(characters)
+        openFiles[path] = start + incoming.count
+    }
+
     func answerFile(_ prompt: String, type: String?) async -> String? {
         answerFilePrompts.append(prompt)
         answerFileTypes.append(type)

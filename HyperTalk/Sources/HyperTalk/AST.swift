@@ -84,6 +84,13 @@ indirect enum StmtKind {
     /// `delete <chunk> of <container>` — removes the chunk and its
     /// delimiter (delete item 2 of "a,b,c" is "a,c"). Always a `.chunk`.
     case deleteChunk(Container)
+    /// File I/O — `open file f`, `read from file f until d / for n`,
+    /// `write x to file f [at eof/N]`, `close file f`. Failures report via
+    /// `the result` (not script errors), as in HyperCard. `read` fills `it`.
+    case openFile(Expr)
+    case closeFile(Expr)
+    case readFile(file: Expr, until: Expr?, count: Expr?)
+    case writeFile(value: Expr, file: Expr, atEOF: Bool, at: Expr?)
     /// `pass <message>` — stop this handler and let the message continue down
     /// the object path to the next handler.
     case passMessage

@@ -212,6 +212,14 @@ final class Runtime {
 
     /// The value of the last `return`, read by `the result`.
     private var lastResult = ""
+
+    /// Runs a file-I/O host call; HyperCard reports file failures via
+    /// `the result` (scripts probe it) rather than aborting the handler.
+    private func fileCall(_ body: () throws -> Void) {
+        do { try body(); lastResult = "" }
+        catch let error as HostError { lastResult = error.message }
+        catch { lastResult = "\(error)" }
+    }
     /// Set by a `return` statement while a handler/function body runs.
     private var pendingReturn: String?
 
@@ -739,6 +747,50 @@ final class Runtime {
                 Int(try Value.number(from: try await evaluate($0, line: statement.line), line: statement.line))
             }
             try await setContainer(base, to: updated, line: statement.line)
+            return .normal
+
+        case .openFile(let pathExpression):
+            let path = try await evaluate(pathExpression, line: statement.line)
+            fileCall { try host.fileOpen(path) }
+            return .normal
+
+        case .closeFile(let pathExpression):
+            let path = try await evaluate(pathExpression, line: statement.line)
+            fileCall { try host.fileClose(path) }
+            return .normal
+
+        case .readFile(let fileExpression, let untilExpression, let countExpression):
+            let path = try await evaluate(fileExpression, line: statement.line)
+            var delimiter: String? = nil
+            var count: Int? = nil
+            if let untilExpression {
+                let d = try await evaluate(untilExpression, line: statement.line)
+                // `read until eof` means the rest of the file, not a literal.
+                if d.lowercased() == "eof" || d.lowercased() == "end" { delimiter = nil }
+                else { delimiter = String(d.prefix(1)) }
+            }
+            if let countExpression {
+                count = Int(try Value.number(from: try await evaluate(countExpression, line: statement.line), line: statement.line))
+            }
+            do {
+                let (text, atEOF) = try host.fileRead(path, until: delimiter, count: count)
+                setVariable("it", to: text)
+                lastResult = atEOF ? "eof" : ""
+            } catch let error as HostError {
+                setVariable("it", to: "")
+                lastResult = error.message
+            }
+            return .normal
+
+        case .writeFile(let valueExpression, let fileExpression, let atEOF, let atExpression):
+            let text = try await evaluate(valueExpression, line: statement.line)
+            let path = try await evaluate(fileExpression, line: statement.line)
+            let position: FileWritePosition
+            if atEOF { position = .eof }
+            else if let atExpression {
+                position = .offset(Int(try Value.number(from: try await evaluate(atExpression, line: statement.line), line: statement.line)))
+            } else { position = .mark }
+            fileCall { try host.fileWrite(path, text: text, at: position) }
             return .normal
 
         case .noOp:
