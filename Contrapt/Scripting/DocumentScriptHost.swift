@@ -195,7 +195,8 @@ final class DocumentScriptHost: HyperTalkHost {
         onClickPart: @escaping (Part) -> Void = { _ in },
         onGoStack: @escaping (String, GoDestination?) -> Void = { _, _ in },
         onCardMenu: @escaping (String) -> Void = { _ in },
-        assetData: @escaping (String) -> Data? = { _ in nil }
+        assetData: @escaping (String) -> Data? = { _ in nil },
+        cardWindowViewport: Binding<CGSize?> = .constant(nil)
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
@@ -211,6 +212,62 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onGoStack = onGoStack
         self.onCardMenu = onCardMenu
         self.assetData = assetData
+        self.cardWindowViewport = cardWindowViewport
+    }
+
+    /// The card-window viewport (nil = show the whole card). A stack that
+    /// "resizes" its card window (`set the rect of card window to …`) really
+    /// crops the card to this size — the classic big-card-small-window idiom.
+    private let cardWindowViewport: Binding<CGSize?>
+
+    func windowProperty(_ property: String, window: String) -> String? {
+        guard window == "card" || window == "cd" else { return nil }
+        let size = cardWindowViewport.wrappedValue
+            ?? CGSize(width: stack.cardSize.width, height: stack.cardSize.height)
+        switch property {
+        case "rect", "rectangle":
+            return "0,0,\(Int(size.width)),\(Int(size.height))"
+        case "width": return String(Int(size.width))
+        case "height": return String(Int(size.height))
+        case "scroll": return "0,0" // the idle "fault recovery" reset idiom
+        case "visible": return "true"
+        default: return nil
+        }
+    }
+
+    func setWindowProperty(_ property: String, window: String, to value: String) throws {
+        guard window == "card" || window == "cd" else { return }
+        let current = cardWindowViewport.wrappedValue
+            ?? CGSize(width: stack.cardSize.width, height: stack.cardSize.height)
+        switch property {
+        case "rect", "rectangle":
+            let parts = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            guard parts.count == 4 else { return }
+            applyViewport(CGSize(width: parts[2] - parts[0], height: parts[3] - parts[1]))
+        // The Hacker Crackdown sizes its card window one dimension at a time:
+        // `set width of card window to item 1 of line sizeNumber of …`.
+        case "width":
+            guard let width = Double(value) else { return }
+            applyViewport(CGSize(width: width, height: current.height))
+        case "height":
+            guard let height = Double(value) else { return }
+            applyViewport(CGSize(width: current.width, height: height))
+        default:
+            break // loc/scroll/visible of card window stay cosmetic no-ops
+        }
+    }
+
+    /// Clamp and store a card-window viewport; a size at least the card's in
+    /// both dimensions means "no crop" (nil, so the window hugs the full card).
+    private func applyViewport(_ size: CGSize) {
+        guard size.width >= 64, size.height >= 64 else { return }
+        if size.width >= stack.cardSize.width, size.height >= stack.cardSize.height {
+            cardWindowViewport.wrappedValue = nil
+        } else {
+            cardWindowViewport.wrappedValue = CGSize(
+                width: min(size.width, stack.cardSize.width),
+                height: min(size.height, stack.cardSize.height))
+        }
     }
 
     private var stack: Stack { stackBinding.wrappedValue }

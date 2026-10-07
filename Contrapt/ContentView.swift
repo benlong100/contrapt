@@ -126,6 +126,22 @@ struct ContentView: View {
     @State private var runningScriptCount = 0
     /// The visual effect for the current scripted card transition, if any.
     @State private var cardTransition: ScreenEffect?
+    /// `set the rect of card window` viewport — the classic big-card-small-
+    /// window crop (the Hacker Crackdown trims its card's blank right/bottom
+    /// margins this way). nil = show the whole card. Runtime-only state; a
+    /// stack's openStack sets it each open.
+    @State private var cardWindowViewport: CGSize?
+    #if os(macOS)
+    /// Window content size that hugs the card (or the stack's card-window
+    /// viewport crop of it) + the stage padding, matching `cardStage`.
+    private var windowHugTarget: CGSize? {
+        guard !document.stack.cards.isEmpty else { return nil }
+        let pad: CGFloat = document.stack.presentAtActualSize ? 6 : 16
+        let size = cardWindowViewport ?? CGSize(width: document.stack.cardSize.width,
+                                                height: document.stack.cardSize.height)
+        return CGSize(width: size.width + pad * 2, height: size.height + pad * 2)
+    }
+    #endif
     /// Editing habit, not document data — persists across stacks.
     @AppStorage("snapToGuides") private var isSnappingEnabled = true
 
@@ -202,6 +218,14 @@ struct ContentView: View {
                             .transition(cardTransition?.transition ?? .identity)
                     }
                 }
+                // `set the rect of card window`: show the card 1:1 through a
+                // smaller viewport, cropping its right/bottom — HyperCard's
+                // big-card-small-window idiom (browse mode only; editing shows
+                // the whole card).
+                .modifier(CardWindowCrop(
+                    viewport: isEditing ? nil : cardWindowViewport,
+                    cardSize: CGSize(width: document.stack.cardSize.width,
+                                     height: document.stack.cardSize.height)))
                 // Actual-size stacks hug the card (small margin for the card
                 // shadow); otherwise the usual breathing room.
                 .padding(document.stack.presentAtActualSize ? 6 : 16)
@@ -390,7 +414,7 @@ struct ContentView: View {
 
     var body: some View {
         decoratedStage
-        .onChange(of: cardIndex) { _, newIndex in
+        .onChange(of: cardIndex) { oldIndex, newIndex in
             // The script selection doesn't survive leaving the card — this
             // catches UI navigation too, not just scripted `go`.
             if scriptSelection != nil {
@@ -400,8 +424,29 @@ struct ContentView: View {
             // A cross-stack swap drives its own openStack+openCard in order;
             // don't double-fire openCard for the index change it causes.
             if suppressNextOpenCard { suppressNextOpenCard = false; return }
-            sendSystemMessage("openCard", toCardAt: newIndex)
+            sendCloseThenOpenCard(from: oldIndex, to: newIndex)
         }
+        #if os(macOS)
+        // Size the window to hug the card AFTER it's actually on screen (the
+        // existing WindowBinder below captures `hostWindow`). The earlier
+        // attempt called window.setFrame from inside a representable's update
+        // at launch and crashed in AppKit's restoration/toolbar layout.
+        .task(id: windowHugTarget) {
+            guard let target = windowHugTarget else { return }
+            // Let launch/state restoration settle; wait for a visible window.
+            for _ in 0..<40 {
+                if let window = hostWindow, window.isVisible { break }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            guard let window = hostWindow, window.isVisible else { return }
+            let frameForContent = window.frameRect(
+                forContentRect: NSRect(origin: .zero, size: target))
+            var frame = window.frame
+            frame.origin.y += frame.height - frameForContent.height // anchor top
+            frame.size = frameForContent.size
+            window.setFrame(frame, display: true, animate: false)
+        }
+        #endif
         .task {
             // Remember this stack so other stacks' `go stack "<name>"` can
             // find it later.
@@ -819,10 +864,13 @@ struct ContentView: View {
         }
     }
 
-    private func makeHost() -> DocumentScriptHost {
+    private func makeHost(cardIndex: Binding<Int>? = nil) -> DocumentScriptHost {
         DocumentScriptHost(
             stack: stack,
-            currentCardIndex: $currentCardIndex,
+            // closeCard runs with the OUTGOING card as context (HyperCard sends
+            // it before the current card changes); callers pass a fixed index so
+            // `this card` / `cd field …` resolve against the card being left.
+            currentCardIndex: cardIndex ?? $currentCardIndex,
             onMessage: { text in
                 // `put` with no destination opens the message box, as in
                 // HyperCard.
@@ -889,7 +937,9 @@ struct ContentView: View {
                 }
             },
             // `play` reads its imported sound (WAV) bytes from the document.
-            assetData: { document.assets[$0] }
+            assetData: { document.assets[$0] },
+            // `set the rect of card window` — the big-card-small-window crop.
+            cardWindowViewport: $cardWindowViewport
         )
     }
 
@@ -963,12 +1013,44 @@ struct ContentView: View {
         sendOpenSequence(toCardAt: target)
     }
 
+    /// Navigation between cards: send `closeCard` to the card being LEFT, then
+    /// `openCard` to the card arriving — in that order, as one guarded task
+    /// (two `sendSystemMessage` calls would drop the second). closeCard runs
+    /// with the outgoing card as context so `this card` / its card fields
+    /// resolve correctly (e.g. The Hacker Crackdown's closeCard re-enables the
+    /// "Prior" button when you leave the title card).
+    private func sendCloseThenOpenCard(from oldIndex: Int, to newIndex: Int) {
+        guard !isEditing, !isSendingSystemMessage else { return }
+        guard oldIndex >= 0, oldIndex < document.stack.cards.count else {
+            sendSystemMessage("openCard", toCardAt: newIndex); return
+        }
+        isSendingSystemMessage = true
+        let closeHost = makeHost(cardIndex: .constant(oldIndex))
+        let closePath = scriptPath(cardAt: oldIndex, part: nil)
+        let openHost = makeHost()
+        let openPath = scriptPath(cardAt: newIndex, part: nil)
+        Task { @MainActor in
+            defer { isSendingSystemMessage = false }
+            do {
+                // A closeCard error shouldn't block arriving at the new card.
+                do { try await HyperTalk.send("closeCard", along: closePath, host: closeHost) }
+                catch { scriptErrorText = error.localizedDescription }
+                try await HyperTalk.send("openCard", along: openPath, host: openHost)
+            } catch {
+                scriptErrorText = error.localizedDescription
+            }
+        }
+    }
+
     /// Sends `openStack` then `openCard` to a card as one ordered task — used
     /// when a cross-stack swap lands on a card. (`sendSystemMessage` guards
     /// against overlapping system messages, so two separate calls would drop
     /// the second; this runs both inside one guarded task.)
     private func sendOpenSequence(toCardAt index: Int) {
         guard !isEditing, !isSendingSystemMessage else { return }
+        // A stale viewport from the previous stack mustn't crop the new one;
+        // its openStack re-establishes a crop if the stack wants one.
+        cardWindowViewport = nil
         isSendingSystemMessage = true
         let host = makeHost()
         let path = scriptPath(cardAt: index, part: nil)
@@ -986,6 +1068,27 @@ struct ContentView: View {
     struct PendingGoStack {
         let name: String
         let card: GoDestination?
+    }
+
+    /// Crops the (fixed-size) card to the stack's card-window viewport,
+    /// top-left anchored, as HyperCard crops a card larger than its window.
+    /// No viewport = pass through untouched (the normal scale-to-fit path).
+    struct CardWindowCrop: ViewModifier {
+        let viewport: CGSize?
+        let cardSize: CGSize
+
+        func body(content: Content) -> some View {
+            if let viewport {
+                content
+                    .frame(width: cardSize.width, height: cardSize.height)
+                    .frame(width: min(viewport.width, cardSize.width),
+                           height: min(viewport.height, cardSize.height),
+                           alignment: .topLeading)
+                    .clipped()
+            } else {
+                content
+            }
+        }
     }
 
     /// Runs a line typed into the message box in the current card's
@@ -1969,3 +2072,5 @@ extension FocusedValues {
 #Preview {
     ContentView(document: StackDocument())
 }
+
+

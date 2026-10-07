@@ -162,6 +162,120 @@ import HyperTalk
 }
 
 @MainActor
+@Test func closeCardReenablesPriorButton() async throws {
+    // The Hacker Crackdown's title card disables bg button "Prior" in openCard
+    // and re-enables it in closeCard (via its DisableOrEnable handler). Leaving
+    // the title card must therefore send closeCard so Prior isn't stuck gray.
+    // This exercises the script chain (bare-word enable/disable, the handler,
+    // and `set the enabled`) end-to-end against the app host.
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch"
+    guard let path = classicStackFiles(under: root).first(where: {
+        ($0 as NSString).lastPathComponent.lowercased().contains("hacker crackdown")
+    }) else { return }
+    var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
+    var index = 0
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    func priorEnabled() -> Bool {
+        for p in stack.backgrounds[0].parts where p.name.lowercased() == "prior" { return p.isEnabled }
+        Issue.record("no bg button named Prior"); return true
+    }
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    #expect(priorEnabled() == true)                               // imported enabled
+    try await HyperTalk.send("openCard", along: layers, host: host)
+    #expect(priorEnabled() == false)                              // title card disables it
+    try await HyperTalk.send("closeCard", along: layers, host: host)
+    #expect(priorEnabled() == true)                               // leaving re-enables it
+}
+
+@MainActor
+@Test func hackerOpenStackCropsCardWindow() async throws {
+    // The Hacker Crackdown's openStack sizes its card window one dimension at
+    // a time (`set width/height of card window to …`). Running the REAL stack
+    // script must yield a cropped viewport (600×440) — the big-card-small-
+    // window idiom that hides the card's blank right/bottom margins.
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch"
+    guard let path = classicStackFiles(under: root).first(where: {
+        ($0 as NSString).lastPathComponent.lowercased().contains("hacker crackdown")
+    }) else { return }
+    var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
+    var index = 0
+    var viewport: CGSize?
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i },
+        cardWindowViewport: Binding(get: { viewport }, set: { viewport = $0 })
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("openStack", along: layers, host: host)
+    let size = try #require(viewport)
+    #expect(size.width < 640 && size.height < 480)
+    #expect(size.width >= 500 && size.height >= 400) // a "Large"-ish page, not a sliver
+}
+
+@MainActor
+@Test func cardWindowRectCropsViewport() async throws {
+    // `set the rect of card window to 0,0,612,442` (The Hacker Crackdown's
+    // resizable pages) crops the card viewport; reading it back reports the
+    // viewport, and a full-size rect clears the crop.
+    var stack = Stack.makeNew()
+    var index = 0
+    var viewport: CGSize?
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i },
+        cardWindowViewport: Binding(get: { viewport }, set: { viewport = $0 })
+    )
+    try host.setWindowProperty("rect", window: "card", to: "0,0,612,442")
+    #expect(viewport == CGSize(width: 612, height: 442))
+    #expect(host.windowProperty("rect", window: "card") == "0,0,612,442")
+    #expect(host.windowProperty("scroll", window: "card") == "0,0")
+    // Restoring a rect at least the card size clears the crop.
+    try host.setWindowProperty("rect", window: "card", to: "0,0,2000,2000")
+    #expect(viewport == nil)
+    // Other windows stay unmodeled (absent-object defaults).
+    #expect(host.windowProperty("rect", window: "tool") == nil)
+}
+
+@MainActor
+@Test func importsBodyTextForPartlessCards() throws {
+    // The Hacker Crackdown's book pages (card 2+) have NO card-layer parts —
+    // every field is a background template — so the 2.x content section starts
+    // at a header-relative offset, not right after a (nonexistent) part list.
+    // Regression: those pages must still import their per-card body text (the
+    // scan that finds the real content start), not come through blank.
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch"
+    guard let path = classicStackFiles(under: root).first(where: {
+        ($0 as NSString).lastPathComponent.lowercased().contains("hacker crackdown")
+    }) else { return }
+    let stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
+    #expect(stack.cards.count > 1)
+    let page2 = stack.cards[1]
+    func text(_ card: Card, _ name: String) -> String {
+        for p in card.parts { if p.name == name, case .field(let f) = p.kind { return f.text } }
+        return ""
+    }
+    // The preface body is thousands of characters; it was empty before the fix.
+    #expect(text(page2, "Text").count > 2000)
+    #expect(text(page2, "Text").contains("Austin"))
+    #expect(text(page2, "Page Number") == "Page 2 of 52")
+}
+
+@MainActor
 @Test func importsRealCardSizeAndThinParts() throws {
     // The Hacker Crackdown is a 640×480 (2.x) stack with a 2px-tall "divider"
     // rule. Regression: honor the real card size (not 512×342) and the thin
