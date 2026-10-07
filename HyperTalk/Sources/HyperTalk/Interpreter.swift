@@ -134,10 +134,15 @@ enum Value {
     }
 
     static func number(from text: String, line: Int) throws -> Double {
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        var trimmed = text.trimmingCharacters(in: .whitespaces)
         // Empty counts as zero in numeric context — so uninitialized
         // globals and counters (`put counter + 1 into counter`) just work.
         if trimmed.isEmpty { return 0 }
+        // HyperCard allows space between the sign and digits: "- 3" + 1 = -2
+        // (oracle-verified, HC 2.3).
+        if trimmed.hasPrefix("-") {
+            trimmed = "-" + trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+        }
         guard let number = Double(trimmed) else {
             throw ScriptError(line: line, message: "Expected a number here, but got \"\(text)\".")
         }
@@ -1486,7 +1491,9 @@ final class Runtime {
             }
 
         case .chunkCount(let kind, let sourceExpression):
-            let source = try await chunkSource(sourceExpression, line: line)
+            // The source becomes text here, so numberFormat applies — the
+            // number of chars in (10/3) is 8 (oracle-verified, HC 2.3).
+            let source = Value.displayString(try await chunkSource(sourceExpression, line: line))
             return String(ChunkResolver.count(kind: kind, in: source, itemDelimiter: itemDelimiter))
 
         case .countDynamic(let expression):

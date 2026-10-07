@@ -1770,13 +1770,28 @@ struct Parser {
 
     private mutating func parseUnary() throws -> Expr {
         if consumeSymbol("-") {
-            return .unary(.minus, try parseUnary())
+            // Unary minus binds TIGHTER than ^: -2 ^ 2 is (-2)^2 = 4
+            // (oracle-verified, HC 2.3) — so negate the primary, then let a
+            // following ^ take the negated value as its base.
+            let base = Expr.unary(.minus, try parseNegationOperand())
+            if consumeSymbol("^") {
+                return .binary(.power, base, try parseUnary())
+            }
+            return base
         }
         if peekIdentifier() == "not" {
             advance()
             return .unary(.not, try parseUnary())
         }
         return try parsePower()
+    }
+
+    /// The operand of a unary minus: another sign, a `not`, or a primary —
+    /// but never a power (the minus must bind tighter than `^`).
+    private mutating func parseNegationOperand() throws -> Expr {
+        if consumeSymbol("-") { return .unary(.minus, try parseNegationOperand()) }
+        if peekIdentifier() == "not" { advance(); return .unary(.not, try parseUnary()) }
+        return try parsePrimary()
     }
 
     /// `base ^ exponent`, right-associative and binding tighter than * and /,

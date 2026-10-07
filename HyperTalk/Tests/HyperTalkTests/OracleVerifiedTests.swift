@@ -86,6 +86,21 @@ import Testing
     #expect(host.messages.last == "8")
 }
 
+@Test func unaryMinusBindsTighterThanPower() async throws {
+    let host = try await run("on p\nput -2 ^ 2 & \",\" & 2 ^ -1\nend p", handler: "p")
+    #expect(host.messages.last == "4,0.5")
+}
+
+@Test func chunkCountAppliesNumberFormat() async throws {
+    let host = try await run("on p\nput the number of chars in (10/3)\nend p", handler: "p")
+    #expect(host.messages.last == "8")
+}
+
+@Test func arithmeticAcceptsSignSpaceNumbers() async throws {
+    let host = try await run("on p\nput \"- 3\" + 1\nend p", handler: "p")
+    #expect(host.messages.last == "-2")
+}
+
 @Test func theNumberFormatReadsTheDefault() async throws {
     let host = try await run("on p\nput the numberFormat\nend p", handler: "p")
     #expect(host.messages.last == "0.######")
