@@ -158,11 +158,22 @@ enum ChunkResolver {
         case .item:
             // Delimited by the itemDelimiter (comma by default); empties kept
             // (item 2 of "a,,c" is empty). An empty delimiter yields one item.
+            // A TRAILING delimiter makes no final empty item — HyperCard counts
+            // ",a,,b," as 4 items and `last item of "a,b,"` is b (oracle-
+            // verified against HyperCard 2.3).
             guard !itemDelimiter.isEmpty else { return [source] }
-            return source.components(separatedBy: itemDelimiter)
+            return dropTrailingEmpty(source.components(separatedBy: itemDelimiter))
         case .line:
-            return source.components(separatedBy: "\n")
+            // Same trailing rule: `the number of lines in return` is 1.
+            return dropTrailingEmpty(source.components(separatedBy: "\n"))
         }
+    }
+
+    /// HyperCard ignores the empty chunk a trailing delimiter would create
+    /// (but keeps leading/middle empties, and "" still has zero chunks).
+    private static func dropTrailingEmpty(_ parts: [String]) -> [String] {
+        if parts.count > 1, parts.last == "" { return Array(parts.dropLast()) }
+        return parts
     }
 
     /// Whitespace-separated words, where a double-quoted span (quotes

@@ -229,7 +229,9 @@ final class Runtime {
         "tab": "\t",
         "true": "true",
         "false": "false",
-        "pi": "3.14159265358979",
+        // HyperCard's pi is a 20-digit literal constant, not a computed double
+        // (oracle-verified against HyperCard 2.3).
+        "pi": "3.14159265358979323846",
         "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
         "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
     ]
@@ -1716,8 +1718,10 @@ final class Runtime {
             // it, so this is just the arguments.)
             return (frames.last?.arguments ?? []).joined(separator: ",")
         case "round":
+            // Banker's rounding, as in HyperCard: round(2.5)=2, round(3.5)=4
+            // (oracle-verified against HyperCard 2.3).
             let x = try number(arguments, count: 1, line: line, name: "round")[0]
-            return Value.string(from: x.rounded(.toNearestOrAwayFromZero))
+            return Value.string(from: x.rounded(.toNearestOrEven))
         case "trunc":
             let x = try number(arguments, count: 1, line: line, name: "trunc")[0]
             return Value.string(from: x.rounded(.towardZero))

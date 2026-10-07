@@ -1,0 +1,63 @@
+# Starter oracle corpus — deterministic expressions only (no date/time/random).
+# Arithmetic & number formatting
+2+2
+1/3
+10/4
+2^10
+7 div 2
+7 mod 2
+-7 div 2
+-7 mod 2
+sqrt(2)
+round(2.5)
+round(3.5)
+trunc(-1.7)
+abs(-4.2)
+average(1,2,3,4)
+min(3,1,2)
+max(3,1,2)
+annuity(.05,10)
+exp(1)
+ln(1)
+0.1 + 0.2
+3 * 0.0001
+# String & chunk semantics
+the number of chars in "héllo"
+the number of words in "  two   words  "
+the number of items in ",a,,b,"
+item 2 of ",a,,b,"
+last item of "a,b,"
+word 2 of "one  two three"
+char 2 to 4 of "abcdef"
+line 2 of ("a" & return & "b")
+the length of ""
+offset("b","abc")
+offset("x","abc")
+the number of words in ""
+the number of items in ""
+the number of lines in ""
+the number of lines in return
+item 1 to 2 of "a,b,c,d"
+word 1 of "   "
+# Case/comparison/coercion
+"A" = "a"
+"abc" contains "B"
+"2" + 3
+"3" & 4
+2 = 2.0
+"true" and true
+# not "" -- ERRORS in real HC (no empty-as-false); Contrapt diverges deliberately
+1 < "02"
+"apple" < "banana"
+"a10" < "a9"
+# Constants & conversions
+the value of "2+3"
+numToChar(65)
+charToNum("A")
+the paramCount
+pi
+tan(0)
+true and false
+two
+space & "x"
+quote & "q" & quote
