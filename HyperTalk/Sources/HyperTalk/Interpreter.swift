@@ -127,6 +127,9 @@ enum Value {
         var formatted = String(format: "%.6f", number)
         while formatted.hasSuffix("0") { formatted.removeLast() }
         if formatted.hasSuffix(".") { formatted.removeLast() }
+        // HyperCard drops the zero of a negative fraction: -0.5 shows as
+        // "-.5" (positives keep it: "0.5"). Oracle-verified, HC 2.3.
+        if formatted.hasPrefix("-0.") { formatted = "-" + formatted.dropFirst(2) }
         return formatted
     }
 
@@ -1675,7 +1678,13 @@ final class Runtime {
         case .modulo:
             let (a, b) = try numbers()
             guard b != 0 else { throw ScriptError(line: line, message: "Can't divide by zero.") }
-            return Value.string(from: a.truncatingRemainder(dividingBy: b))
+            // Integer mod truncates toward zero (-7 mod 2 = -1), but float mod
+            // floors (-7.5 mod 2 = 0.5) — both oracle-verified against HC 2.3.
+            if a == a.rounded(), b == b.rounded() {
+                return Value.string(from: a.truncatingRemainder(dividingBy: b))
+            }
+            let r = a.truncatingRemainder(dividingBy: b)
+            return Value.string(from: r != 0 && (r < 0) != (b < 0) ? r + b : r)
         case .power:
             let (a, b) = try numbers(); return Value.string(from: pow(a, b))
         case .within:
@@ -1727,7 +1736,9 @@ final class Runtime {
             guard arguments.count == 1 else {
                 throw ScriptError(line: line, message: "length expects one value, like length(field \"Name\").")
             }
-            return String(arguments[0].count)
+            // A number becomes text here, so numberFormat applies:
+            // length(1/3) is 8 ("0.333333"), oracle-verified.
+            return String(Value.displayString(arguments[0]).count)
         case "random":
             guard arguments.count == 1 else {
                 throw ScriptError(line: line, message: "random expects one number, like random(6).")
@@ -2000,11 +2011,20 @@ final class Runtime {
     /// `date` isn't handled here (it would need the host's calendar).
     private static func matchesType(_ value: String, _ type: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
+        // HyperCard's numeric lexicon (oracle-verified, HC 2.3): no exponent
+        // notation ("1e3" isn't a number), no leading + ("+3" isn't), but a
+        // space between the sign and digits is fine ("- 3" is).
+        func classicNumber(_ s: String) -> Double? {
+            var t = s
+            if t.hasPrefix("-") { t = "-" + t.dropFirst().trimmingCharacters(in: .whitespaces) }
+            guard !t.lowercased().contains("e"), !t.contains("+") else { return nil }
+            return Double(t)
+        }
         switch type {
         case "number":
-            return Double(trimmed) != nil
+            return classicNumber(trimmed) != nil
         case "integer":
-            guard let number = Double(trimmed) else { return false }
+            guard let number = classicNumber(trimmed) else { return false }
             return number.rounded() == number
         case "logical", "boolean":
             let lowercased = trimmed.lowercased()

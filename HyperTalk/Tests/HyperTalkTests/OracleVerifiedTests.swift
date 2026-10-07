@@ -60,6 +60,32 @@ import Testing
     #expect(host.messages.last == "true13")
 }
 
+@Test func tabIsNotAWordSeparator() async throws {
+    let host = try await run("on p\nput the number of words in (\"a\" & tab & \"b\")\nend p", handler: "p")
+    #expect(host.messages.last == "1")
+}
+
+@Test func classicNumericLexicon() async throws {
+    // No exponent notation, no leading +, but a space after the sign is fine.
+    let host = try await run("on p\nput (\"1e3\" is a number) & (\"+3\" is a number) & (\"- 3\" is a number)\nend p", handler: "p")
+    #expect(host.messages.last == "falsefalsetrue")
+}
+
+@Test func negativeFractionDropsTheZero() async throws {
+    let host = try await run("on p\nput -0.5 + 0 & \",\" & 0.5 + 0\nend p", handler: "p")
+    #expect(host.messages.last == "-.5,0.5")
+}
+
+@Test func floatModFloorsIntegerModTruncates() async throws {
+    let host = try await run("on p\nput -7.5 mod 2 & \",\" & -7 mod 2 & \",\" & 7 mod -2\nend p", handler: "p")
+    #expect(host.messages.last == "0.5,-1,1")
+}
+
+@Test func lengthAppliesNumberFormat() async throws {
+    let host = try await run("on p\nput length(1/3)\nend p", handler: "p")
+    #expect(host.messages.last == "8")
+}
+
 @Test func theNumberFormatReadsTheDefault() async throws {
     let host = try await run("on p\nput the numberFormat\nend p", handler: "p")
     #expect(host.messages.last == "0.######")

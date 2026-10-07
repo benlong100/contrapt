@@ -171,3 +171,72 @@ round(-0.5)
 exp2(3)
 ln1(0)
 atan(1) * 4
+# --- batch 3: conversion points & length coercion
+length(1/3)
+the length of (1/4)
+length(2/2)
+1/4 & "x"
+0.5 && 0.25
+"3" * "4"
+"3.5" * 2
+charToNum(numToChar(65))
+numToChar(charToNum("z"))
+the value of "1/4"
+the value of "(2+2)*2"
+the value of quote & "hi" & quote
+# --- batch 3: nested chunks & punctuation words
+char 2 of item 2 of "ab,cd"
+word 2 of line 1 of "a b c"
+last word of "one two "
+the number of words in "a,b"
+word 1 of "a,b"
+the number of words in ("a" & tab & "b")
+first item of last line of ("a,b" & return & "c,d")
+char 1 to 2 of item 2 of "ab,cdef"
+the number of chars in (1/8)
+item 2 to 9 of "a,b,c"
+the number of items in ",,"
+last line of (return & "x")
+line 1 of (return & "x")
+word 3 of "  spaced   out   words  "
+# --- batch 3: predicates on odd shapes
+"1,2 " is a point
+" 1,2" is a point
+"1, 2" is a point
+"1,2,3" is a rect
+"-1,-2" is a point
+"1.5,2" is a point
+"12/25/94" is a date
+"not a date" is a date
+"1e3" is a number
+"-3" is an integer
+"- 3" is a number
+"+3" is a number
+"3." is a number
+".5" is an integer
+# --- batch 3: more formatting & arithmetic shapes
+1/8
+2 ^ -1
+-0.5 + 0
+.5 * 2
+123456.654321 * 1
+1 / 16
+7 mod -2
+-7.5 mod 2
+0 * -1
+1 - 1.0
+100 div 7
+sum(0.1,0.2,0.3)
+average(1,2)
+min("3","20")
+max("3","20")
+abs("-7")
+# --- batch 3: comparisons (canonical forms only)
+2 >= 2
+"b" > "a"
+"3" < "20"
+" b " = "b"
+"B " = "b"
+"AB" < "b"
+offset("B","abc")
+offset("c","abcabc")

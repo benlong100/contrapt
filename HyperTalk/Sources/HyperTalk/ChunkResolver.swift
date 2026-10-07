@@ -133,7 +133,9 @@ enum ChunkResolver {
                 if character == "\"" {
                     inQuotes.toggle()
                     if start == nil { start = offset }
-                } else if !inQuotes, character == " " || character == "\t" || character == "\n" {
+                // Only spaces and returns separate words — a TAB does not
+            // ("a" & tab & "b" is ONE word; oracle-verified, HC 2.3).
+            } else if !inQuotes, character == " " || character == "\n" {
                     if let s = start { spans.append(s..<offset); start = nil }
                 } else if start == nil {
                     start = offset
@@ -186,7 +188,9 @@ enum ChunkResolver {
             if character == "\"" {
                 inQuotes.toggle()
                 current.append(character)
-            } else if !inQuotes, character == " " || character == "\t" || character == "\n" {
+            // Only spaces and returns separate words — a TAB does not
+            // ("a" & tab & "b" is ONE word; oracle-verified, HC 2.3).
+            } else if !inQuotes, character == " " || character == "\n" {
                 if !current.isEmpty { words.append(current); current = "" }
             } else {
                 current.append(character)
