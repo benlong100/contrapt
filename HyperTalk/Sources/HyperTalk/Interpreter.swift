@@ -124,9 +124,13 @@ enum Value {
         guard text != "3.14159265358979323846" else { return text }
         guard text.contains("."), text.first != ".", let number = Double(text) else { return text }
         if number.rounded() == number, abs(number) < 1e15 { return String(Int64(number)) }
-        var formatted = String(format: "%.6f", number)
+        // Round half away from zero at the 6th decimal (0.0000005 shows as
+        // 0.000001, not 0 — %.6f alone rounds it down). Oracle-verified.
+        let scaled = (number * 1_000_000).rounded(.toNearestOrAwayFromZero) / 1_000_000
+        var formatted = String(format: "%.6f", scaled)
         while formatted.hasSuffix("0") { formatted.removeLast() }
         if formatted.hasSuffix(".") { formatted.removeLast() }
+        if formatted == "-0" { return "0" } // a negative that rounded to zero
         // HyperCard drops the zero of a negative fraction: -0.5 shows as
         // "-.5" (positives keep it: "0.5"). Oracle-verified, HC 2.3.
         if formatted.hasPrefix("-0.") { formatted = "-" + formatted.dropFirst(2) }
@@ -1736,7 +1740,9 @@ final class Runtime {
         case .contains:
             // Empty is contained in nothing: `"abc" contains ""` and
             // `"" is in "abc"` are both false (oracle-verified, HC 2.3).
-            return bool(!right.isEmpty && left.range(of: right, options: .caseInsensitive) != nil)
+            // Classic Mac string matching ignores case AND diacritics —
+            // "é" is in "abe" is true (oracle-verified, HC 2.3).
+            return bool(!right.isEmpty && left.range(of: right, options: [.caseInsensitive, .diacriticInsensitive]) != nil)
 
         case .and:
             let (a, b) = try bools(); return bool(a && b)
@@ -1805,7 +1811,7 @@ final class Runtime {
             // 1-based position of the first argument in the second, 0 if
             // absent; case-insensitive, as in HyperCard.
             if arguments[0].isEmpty { return "0" }
-            guard let range = arguments[1].range(of: arguments[0], options: .caseInsensitive) else {
+            guard let range = arguments[1].range(of: arguments[0], options: [.caseInsensitive, .diacriticInsensitive]) else {
                 return "0"
             }
             return String(arguments[1].distance(from: arguments[1].startIndex, to: range.lowerBound) + 1)
@@ -2086,7 +2092,9 @@ final class Runtime {
             if a > b { return .orderedDescending }
             return .orderedSame
         }
-        return left.compare(right, options: .caseInsensitive)
+        // Case- AND diacritic-insensitive, like classic Mac string compare:
+        // "é" = "e" and "café" = "cafe" (oracle-verified, HC 2.3).
+        return left.compare(right, options: [.caseInsensitive, .diacriticInsensitive])
     }
 
     // MARK: Budget and host bridging

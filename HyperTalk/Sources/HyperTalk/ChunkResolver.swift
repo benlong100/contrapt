@@ -31,7 +31,8 @@ enum ChunkResolver {
         }
 
         let units = split(source, kind: kind, itemDelimiter: itemDelimiter)
-        let (start, end) = try await bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
+        let (start, rawEnd) = try await bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
+        let end = max(rawEnd, start) // item 3 to 2 is item 3 (oracle-verified)
         guard start <= end, start >= 1, start <= units.count else { return "" }
         let lo = max(1, start) - 1
         let hi = min(units.count, end)
@@ -246,7 +247,10 @@ enum ChunkResolver {
         case .range(let startExpression, let endExpression):
             let a = try await evaluateIndex(startExpression)
             let b = try await evaluateIndex(endExpression)
-            return (min(a, b), max(a, b))
+            // Reversed ranges are NOT swapped: char 3 to 2 is empty, while
+            // item 3 to 2 yields just the start item (oracle-verified, HC 2.3;
+            // the unit path clamps end up to start, the char path reads empty).
+            return (a, b)
         case .last:
             return (count, count)
         case .middle:
