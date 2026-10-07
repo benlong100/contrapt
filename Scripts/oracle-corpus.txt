@@ -296,3 +296,45 @@ sum(1,2,3,4,5)
 compound(.05,10)
 log2(8)
 exp(0)
+# --- batch 5: statement mode (@ = statements separated by |)
+@put 5 into x | add 3 to x | put x into probeResult
+@put 10 into n | subtract 4 from n | divide n by 3 | put n into probeResult
+@put 7 into n | multiply n by 1.5 | put n into probeResult
+@put 0 into n | repeat with i = 1 to 5 | add i to n | end repeat | put n into probeResult
+@put empty into s | repeat with i = 3 down to 1 | put i after s | end repeat | put s into probeResult
+@put 0 into n | repeat 4 times | add 2 to n | end repeat | put n into probeResult
+@put 1 into n | repeat while n < 100 | multiply n by 3 | end repeat | put n into probeResult
+@if 2 > 1 then put "yes" into probeResult else put "no" into probeResult
+@do "put 42 into probeResult"
+# --- batch 5: chunk writes
+@put "hello" into s | put "X" into char 2 of s | put s into probeResult
+@put "a b c" into s | put "Q" into word 2 of s | put s into probeResult
+@put "1,2" into s | put "z" after item 1 of s | put s into probeResult
+@put "1,2" into s | put "z" before item 2 of s | put s into probeResult
+@put "a,c" into s | put "b" into item 5 of s | put s into probeResult
+@put "abcdef" into s | delete char 2 to 4 of s | put s into probeResult
+@put "a,b,c" into s | delete item 2 of s | put s into probeResult
+@put "a,b,c" into s | delete last item of s | put s into probeResult
+@put ("x" & return & "y") into s | delete line 1 of s | put s into probeResult
+@put "a,b" into s | put "c" into item 3 of s | put s into probeResult
+@put "word" into s | put "pre " before s | put " post" after s | put s into probeResult
+# --- batch 5: sort (items keep results single-line)
+# sort items of <container> ERRORS in real HC 2.3 (container sort is lines-only there)
+# @put "banana" & return & "apple" & return & "Cherry" into L | sort lines of L | put line 1 of L & "," & line 2 of L & "," & line 3 of L into probeResult  -- container sort ERRORS in HC 2.3 (cards-only there); Contrapt superset
+# @put "10" & return & "9" & return & "2" into L | sort lines of L | put line 1 of L & "," & line 2 of L & "," & line 3 of L into probeResult  -- container sort ERRORS in HC 2.3 (cards-only there); Contrapt superset
+# @put "10" & return & "9" & return & "2" into L | sort lines of L numeric | put line 1 of L & "," & line 2 of L & "," & line 3 of L into probeResult  -- container sort ERRORS in HC 2.3 (cards-only there); Contrapt superset
+# @put "b" & return & "A" & return & "a" into L | sort lines of L descending | put line 1 of L & "," & line 2 of L & "," & line 3 of L into probeResult  -- container sort ERRORS in HC 2.3 (cards-only there); Contrapt superset
+# @put "ab" & return & "aa" & return & "a" into L | sort lines of L | put line 1 of L & "," & line 2 of L & "," & line 3 of L into probeResult  -- container sort ERRORS in HC 2.3 (cards-only there); Contrapt superset
+# --- batch 5: convert (fixed dates = deterministic)
+# @put "1/15/94" into d | convert d to long date ... -- guest long-date format quirk (HC leaves container unchanged); environment-dependent
+# @put "1/15/94" into d | convert d to abbreviated date ... -- guest intermittently fails named-format convert (env-flaky); verified once: "Fri, Jan 15, 2094" (weekday + current-century pivot), which Contrapt matches
+@put "1/15/94" into d | convert d to dateItems | put d into probeResult
+@put "1/15/94" into d | convert d to seconds | put d into probeResult
+@put "2841955200" into d | convert d to short date | put d into probeResult
+@put "1994,1,15,13,5,0,7" into d | convert d to short time | put d into probeResult
+@put "1994,2,30,0,0,0,1" into d | convert d to short date | put d into probeResult
+# --- batch 5: numberFormat and itemDelimiter statements
+@set the numberFormat to "0.00" | put 1/3 into probeResult | set the numberFormat to "0.######"
+@set the numberFormat to "#.##" | put 1/3 into probeResult | set the numberFormat to "0.######"
+@set the itemDelimiter to ";" | put item 2 of "a;b;c" into probeResult | set the itemDelimiter to ","
+@put the itemDelimiter into probeResult

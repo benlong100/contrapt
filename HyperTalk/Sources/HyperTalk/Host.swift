@@ -19,6 +19,29 @@ public enum ClockField: Sendable, Equatable {
 /// format. `dateItems` is the seven comma-separated numbers year, month,
 /// day, hour, minute, second, and day-of-week; `seconds` is a count from a
 /// fixed epoch. Date and time components combine with `and`.
+/// HyperCard's clock: `the seconds` and `convert … to seconds` count from
+/// January 1, 1904 (local time), not the Unix epoch — 2841955200 seconds is
+/// 1/21/94, not a 2060 date (oracle-verified against HC 2.3). Two-digit years
+/// pivot to the CURRENT century ("1/15/94" on a 2026 clock is 2094), exactly
+/// as real HyperCard resolves them.
+public enum HyperCardDate {
+    public static func epoch1904(in calendar: Calendar = .current) -> Date {
+        calendar.date(from: DateComponents(year: 1904, month: 1, day: 1)) ?? Date(timeIntervalSince1970: -2_082_844_800)
+    }
+    public static func seconds(of date: Date, calendar: Calendar = .current) -> Int {
+        Int(date.timeIntervalSince(epoch1904(in: calendar)))
+    }
+    public static func date(fromSeconds seconds: Double, calendar: Calendar = .current) -> Date {
+        epoch1904(in: calendar).addingTimeInterval(seconds)
+    }
+    /// Jan 1 of the current century — DateFormatter.twoDigitStartDate, so
+    /// "94" resolves into the century we're in (HyperCard's rule).
+    public static var centuryStart: Date {
+        let year = (Calendar.current.component(.year, from: Date()) / 100) * 100
+        return Calendar.current.date(from: DateComponents(year: year, month: 1, day: 1)) ?? Date()
+    }
+}
+
 public enum ConvertFormat: Sendable, Equatable {
     case seconds
     case dateItems

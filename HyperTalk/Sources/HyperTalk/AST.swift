@@ -81,6 +81,9 @@ indirect enum StmtKind {
     /// A recognized-but-ignored statement (e.g. `show menuBar`) — parsed so
     /// old stacks don't error on things Contrapt has no concept of.
     case noOp
+    /// `delete <chunk> of <container>` — removes the chunk and its
+    /// delimiter (delete item 2 of "a,b,c" is "a,c"). Always a `.chunk`.
+    case deleteChunk(Container)
     /// `pass <message>` — stop this handler and let the message continue down
     /// the object path to the next handler.
     case passMessage

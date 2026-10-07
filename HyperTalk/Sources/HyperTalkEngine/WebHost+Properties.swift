@@ -547,7 +547,7 @@ extension WebHost {
         }
         if from == [.seconds] || (from.isEmpty && Double(trimmed) != nil) {
             guard let seconds = Double(trimmed) else { throw HostError("Can't read \"\(value)\" as seconds.") }
-            return Date(timeIntervalSince1970: seconds)
+            return HyperCardDate.date(fromSeconds: seconds) // 1904 epoch (oracle-verified)
         }
         if from == [.dateItems] || (from.isEmpty && trimmed.contains(",")) {
             // Missing/empty components inherit from the current date/time.
@@ -581,7 +581,7 @@ extension WebHost {
     }
 
     func convertRender(_ date: Date, to: [ConvertFormat]) throws -> String {
-        if to == [.seconds] { return String(Int(date.timeIntervalSince1970)) }
+        if to == [.seconds] { return String(HyperCardDate.seconds(of: date)) } // 1904 epoch
         if to == [.dateItems] {
             let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: date)
             return [c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!, c.weekday!].map(String.init).joined(separator: ",")

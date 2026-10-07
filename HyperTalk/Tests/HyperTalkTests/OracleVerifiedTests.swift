@@ -105,3 +105,20 @@ import Testing
     let host = try await run("on p\nput the numberFormat\nend p", handler: "p")
     #expect(host.messages.last == "0.######")
 }
+
+@Test func deleteChunkRemovesChunkAndDelimiter() async throws {
+    // delete <chunk> of <container> was a silent no-op before the oracle
+    // caught it (HC 2.3: removes the chunk and its delimiter).
+    let host = try await run("""
+    on p
+      put "a,b,c" into s
+      delete item 2 of s
+      put "abcdef" into t
+      delete char 2 to 4 of t
+      put "a,b,c" into u
+      delete last item of u
+      put s & "|" & t & "|" & u
+    end p
+    """, handler: "p")
+    #expect(host.messages.last == "a,c|aef|a,b")
+}

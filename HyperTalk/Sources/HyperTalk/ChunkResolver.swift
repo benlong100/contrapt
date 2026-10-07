@@ -171,6 +171,29 @@ enum ChunkResolver {
         }
     }
 
+    /// `delete <chunk> of <container>`: removes the chunk AND its delimiter
+    /// (delete item 2 of "a,b,c" is "a,c"; delete line 1 of "x¶y" is "y").
+    static func deleting(
+        kind: ChunkKind,
+        selector: ChunkSelector,
+        in source: String,
+        itemDelimiter: String = ",",
+        evaluateIndex: (Expr) async throws -> Int
+    ) async throws -> String {
+        if kind == .character {
+            var characters = Array(source)
+            let (start, end) = try await bounds(selector, count: characters.count, evaluateIndex: evaluateIndex)
+            guard start <= end, start >= 1, start <= characters.count else { return source }
+            characters.removeSubrange((max(1, start) - 1)..<min(characters.count, end))
+            return String(characters)
+        }
+        var units = split(source, kind: kind, itemDelimiter: itemDelimiter)
+        let (start, end) = try await bounds(selector, count: units.count, evaluateIndex: evaluateIndex)
+        guard start <= end, start >= 1, start <= units.count else { return source }
+        units.removeSubrange((max(1, start) - 1)..<min(units.count, end))
+        return units.joined(separator: delimiter(kind, itemDelimiter: itemDelimiter))
+    }
+
     /// HyperCard ignores the empty chunk a trailing delimiter would create
     /// (but keeps leading/middle empties, and "" still has zero chunks).
     private static func dropTrailingEmpty(_ parts: [String]) -> [String] {

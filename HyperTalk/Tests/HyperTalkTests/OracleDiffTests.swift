@@ -23,8 +23,20 @@ import Testing
         if trimmed.isEmpty { answers.append(""); continue }
         do {
             let host = MockHost()
+            // "@stmt | stmt | …" runs statements that set probeResult (the
+            // probe stack's v3 protocol); a bare line is an expression.
+            let body: String
+            if trimmed.hasPrefix("@") {
+                let statements = trimmed.dropFirst()
+                    .split(separator: "|")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .joined(separator: "\n")
+                body = "\(statements)\nput probeResult"
+            } else {
+                body = "put (\(trimmed)) into probeResult\nput probeResult"
+            }
             try await HyperTalk.run(handler: "probe",
-                                    in: "on probe\nput (\(trimmed))\nend probe",
+                                    in: "on probe\n\(body)\nend probe",
                                     host: host, maxSteps: 100_000)
             // `put` with no destination lands in the host message box; a
             // multi-line value flattens so output stays line-per-expression.

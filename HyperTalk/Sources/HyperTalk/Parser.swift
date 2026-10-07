@@ -554,10 +554,22 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
         case "delete":
-            // `delete menu "X"`, `delete button …`, etc. Contrapt doesn't model
-            // object deletion via this verb (card deletion is `doMenu "Delete
-            // Card"`), and no sample uses chunk deletion — so accept and ignore
-            // so stacks that manage their own menus/objects don't error.
+            // `delete <chunk> of <container>` removes the chunk and its
+            // delimiter (oracle-verified against HC 2.3 — the old assumption
+            // that "no sample uses chunk deletion" silently no-op'd it).
+            // `delete menu "X"` / `delete button …` (object deletion) stay
+            // accepted-and-ignored so menu-managing stacks don't error.
+            do {
+                let saved = self
+                advance()
+                if let container = try? parseContainer(line: line),
+                   case .chunk = container,
+                   current.kind == .newline || current.kind == .endOfScript {
+                    try expectNewline()
+                    return Stmt(kind: .deleteChunk(container), line: line)
+                }
+                self = saved
+            }
             advance()
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()

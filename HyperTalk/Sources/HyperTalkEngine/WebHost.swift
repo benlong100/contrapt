@@ -371,7 +371,7 @@ final class WebHost: HyperTalkHost {
     func clock(_ field: ClockField) -> String {
         let now = Date()
         switch field {
-        case .seconds: return String(Int(now.timeIntervalSince1970))
+        case .seconds: return String(HyperCardDate.seconds(of: now)) // 1904 epoch, as in HyperCard
         case .ticks: return String(Int(now.timeIntervalSince1970 * 60))
         case .shortDate, .longDate, .abbreviatedDate, .shortTime, .longTime:
             let f = DateFormatter()

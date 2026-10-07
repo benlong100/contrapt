@@ -289,7 +289,7 @@ import Testing
     """, host: host)
     #expect(host.fields["a"] == "1/2/34")
     #expect(host.fields["b"] == "Monday, January 2, 2034")
-    #expect(host.fields["c"] == "Jan 2, 2034")
+    #expect(host.fields["c"] == "Mon, Jan 2, 2034" /* abbreviated date includes the weekday (oracle-verified) */)
     #expect(host.fields["d"] == "3:45 PM")
     #expect(host.fields["e"] == "3:45:07 PM")
 }

@@ -188,7 +188,7 @@ final class MockHost: HyperTalkHost {
         switch field {
         case .shortDate: "1/2/34"
         case .longDate: "Monday, January 2, 2034"
-        case .abbreviatedDate: "Jan 2, 2034"
+        case .abbreviatedDate: "Mon, Jan 2, 2034"
         case .shortTime: "3:45 PM"
         case .longTime: "3:45:07 PM"
         case .seconds: "2019686400"
@@ -447,7 +447,7 @@ final class MockHost: HyperTalkHost {
         switch format {
         case .shortDate: "M/d/yy"
         case .longDate: "EEEE, MMMM d, yyyy"
-        case .abbreviatedDate: "MMM d, yyyy"
+        case .abbreviatedDate: "EEE, MMM d, yyyy"
         case .shortTime: "h:mm a"
         case .longTime: "h:mm:ss a"
         case .seconds, .dateItems: nil
@@ -459,6 +459,7 @@ final class MockHost: HyperTalkHost {
         formatter.calendar = utcCalendar
         formatter.timeZone = utcCalendar.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.twoDigitStartDate = HyperCardDate.centuryStart // HC century pivot
         formatter.dateFormat = pattern
         return formatter
     }
@@ -476,7 +477,7 @@ final class MockHost: HyperTalkHost {
         if !from.isEmpty {
             effective = from
         } else if let seconds = Double(trimmed) {
-            return Date(timeIntervalSince1970: seconds)
+            return HyperCardDate.date(fromSeconds: seconds, calendar: utcCalendar) // 1904 epoch, UTC-consistent
         } else if trimmed.contains(",") {
             effective = [.dateItems]
         } else {
@@ -495,7 +496,7 @@ final class MockHost: HyperTalkHost {
 
         if effective == [.seconds] {
             guard let seconds = Double(trimmed) else { throw HostError("Can't read \"\(value)\" as seconds.") }
-            return Date(timeIntervalSince1970: seconds)
+            return HyperCardDate.date(fromSeconds: seconds, calendar: utcCalendar) // 1904 epoch, UTC-consistent
         }
         if effective == [.dateItems] {
             // Missing/empty components inherit from the current date/time.
@@ -520,7 +521,7 @@ final class MockHost: HyperTalkHost {
     }
 
     private func convertFormat(_ date: Date, to: [ConvertFormat]) throws -> String {
-        if to == [.seconds] { return String(Int(date.timeIntervalSince1970)) }
+        if to == [.seconds] { return String(HyperCardDate.seconds(of: date, calendar: utcCalendar)) } // 1904 epoch, UTC-consistent
         if to == [.dateItems] {
             let c = utcCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: date)
             return [c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!, c.weekday!].map(String.init).joined(separator: ",")

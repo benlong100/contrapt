@@ -727,6 +727,16 @@ final class Runtime {
             }
             return .normal
 
+        case .deleteChunk(let container):
+            // delete <chunk> of <container> — remove chunk AND delimiter.
+            guard case .chunk(let kind, let selector, let base) = container else { return .normal }
+            let source = try await containerValue(base, line: statement.line)
+            let updated = try await ChunkResolver.deleting(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
+                Int(try Value.number(from: try await evaluate($0, line: statement.line), line: statement.line))
+            }
+            try await setContainer(base, to: updated, line: statement.line)
+            return .normal
+
         case .noOp:
             return .normal
 

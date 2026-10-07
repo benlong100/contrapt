@@ -937,7 +937,7 @@ final class DocumentScriptHost: HyperTalkHost {
         let now = Date()
         switch field {
         case .seconds:
-            return String(Int(now.timeIntervalSince1970))
+            return String(HyperCardDate.seconds(of: now)) // 1904 epoch, as in HyperCard
         case .ticks:
             return String(Int(now.timeIntervalSince1970 * 60))
         case .shortDate, .longDate, .abbreviatedDate, .shortTime, .longTime:
@@ -945,7 +945,10 @@ final class DocumentScriptHost: HyperTalkHost {
             switch field {
             case .shortDate: formatter.dateStyle = .short
             case .longDate: formatter.dateStyle = .full
-            case .abbreviatedDate: formatter.dateStyle = .medium
+            case .abbreviatedDate:
+                // HC's abbreviated date includes the weekday:
+                // "Fri, Jan 15, 2094" (oracle-verified, HC 2.3).
+                formatter.dateFormat = "EEE, MMM d, yyyy"
             case .shortTime: formatter.timeStyle = .short
             case .longTime: formatter.timeStyle = .medium
             default: break
@@ -1161,11 +1164,17 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private func convertFormatter(_ formats: [ConvertFormat]) -> DateFormatter? {
         let formatter = DateFormatter()
+        // Two-digit years resolve into the CURRENT century, as in HyperCard
+        // ("1/15/94" on a 2026 clock is 2094) — oracle-verified.
+        formatter.twoDigitStartDate = HyperCardDate.centuryStart
         for format in formats {
             switch format {
             case .shortDate: formatter.dateStyle = .short
             case .longDate: formatter.dateStyle = .full
-            case .abbreviatedDate: formatter.dateStyle = .medium
+            case .abbreviatedDate:
+                // HC's abbreviated date includes the weekday:
+                // "Fri, Jan 15, 2094" (oracle-verified, HC 2.3).
+                formatter.dateFormat = "EEE, MMM d, yyyy"
             case .shortTime: formatter.timeStyle = .short
             case .longTime: formatter.timeStyle = .medium
             case .seconds, .dateItems: return nil
@@ -1188,7 +1197,7 @@ final class DocumentScriptHost: HyperTalkHost {
             guard let seconds = Double(trimmed) else {
                 throw HostError("Can't read \"\(value)\" as seconds.")
             }
-            return Date(timeIntervalSince1970: seconds)
+            return HyperCardDate.date(fromSeconds: seconds) // 1904 epoch (oracle-verified)
         }
         if from == [.dateItems] || (from.isEmpty && trimmed.contains(",")) {
             // Missing or empty components inherit from the current date/time,
@@ -1232,7 +1241,7 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     private func convertRender(_ date: Date, to: [ConvertFormat]) throws -> String {
-        if to == [.seconds] { return String(Int(date.timeIntervalSince1970)) }
+        if to == [.seconds] { return String(HyperCardDate.seconds(of: date)) } // 1904 epoch
         if to == [.dateItems] {
             let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: date)
             return [c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!, c.weekday!]
