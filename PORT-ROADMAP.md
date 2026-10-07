@@ -14,9 +14,11 @@ mark/unmark, lock/unlock screen, visual effects, play (incl. bare notes),
 ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
 
 ## Priority 1 — real scripts break or silently misbehave without these
-1. **`the scroll of field`** — get stubbed 0 / set no-op; scrolling fields are
-   everywhere (The Hacker Crackdown scrolls its body per page). Needs model
-   (per-part scroll offset) + CardView/RichText plumbing + web parity.
+1. **`the scroll of field`** — DONE 2026-10-07 (284bab0): FieldPart.scroll
+   persisted; host get/set (clamp ≥ 0); locked scrolling fields follow the
+   script and write user scrolls back on gesture end. Follow-ups live in
+   item 11 (web parity) and item 10b (import HyperCard's persisted scroll —
+   small; most stacks reset it in openCard).
 2. **File I/O: `open file` / `read from file` / `write to file` / `close file`**
    — missing entirely; utility stacks im/export data with it. Sandbox-safe
    design: map classic paths to user-granted folders (the oracle probe itself
