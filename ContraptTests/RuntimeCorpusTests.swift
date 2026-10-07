@@ -133,6 +133,47 @@ import HyperTalk
 }
 
 @MainActor
+@Test func perChunkTextStyleWritesSplitAndMergeRuns() async throws {
+    // `set the textStyle of word 2 of card field 1 to bold` — the write side
+    // of styled text. Reads confirm the span (bold), its neighbors (plain),
+    // replacement semantics (plain clears), and textSize over a chunk.
+    var stack = Stack.makeNew()
+    var index = 0
+    var shown: [String] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { shown.append($0) },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("probeStyle", along: [ScriptLayer(name: "t", source: """
+    on probeStyle
+      put "one two three" into card field 1
+      set the textStyle of word 2 of card field 1 to bold
+      put the textStyle of word 2 of card field 1 into a
+      put the textStyle of word 1 of card field 1 into b
+      put the textStyle of char 1 to 13 of card field 1 into c
+      set the textStyle of word 2 of card field 1 to plain
+      put the textStyle of char 1 to 13 of card field 1 into d
+      set the textSize of word 3 of card field 1 to 24
+      put the textSize of word 3 of card field 1 into e
+      put a & "|" & b & "|" & c & "|" & d & "|" & e
+    end probeStyle
+    """, object: .thisCard)] + layers, host: host)
+    #expect(shown.last == "bold|plain|mixed|plain|24")
+    // The runs themselves merged back: plain-everywhere leaves only the
+    // trailing 24pt run (word 3 starts at char 9).
+    var runs: [StyleRun] = []
+    for p in stack.cards[0].parts { if case .field(let f) = p.kind, !f.styleRuns.isEmpty { runs = f.styleRuns } }
+    #expect(runs.count == 1)
+    #expect(runs.first?.start == 8)
+    #expect(runs.first?.format.size == 24)
+}
+
+@MainActor
 @Test func xcmdShimRegistryRoutesExternals() async throws {
     // A recorded external with a native shim runs it (FontExists — headless-
     // safe); an unknown external stays accepted-and-ignored (empty value).

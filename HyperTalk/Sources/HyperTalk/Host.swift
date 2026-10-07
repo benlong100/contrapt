@@ -322,6 +322,11 @@ public protocol HyperTalkHost: AnyObject {
     /// `the textSize of line 2 of fld "Notes"`. Returns the uniform value over
     /// the range, or "mixed" when the runs disagree (as in HyperCard).
     func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String
+    /// The write side: `set the textStyle/textFont/textSize of <chunk> of
+    /// <field> to …` applies `value` over the character range, splitting and
+    /// merging style runs as needed. Default ignores it (hosts without styled
+    /// text keep the accept-and-ignore behavior).
+    func setTextRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>, to value: String) throws
     /// `the number of cards / backgrounds / [card|bkgnd] buttons / fields`.
     func count(_ countable: Countable) throws -> Int
     /// During `sort`, temporarily resolve field/property lookups against the
@@ -438,6 +443,8 @@ public extension HyperTalkHost {
 
     /// Hosts without per-run style storage fall back to the field's whole-field
     /// run property (the range is ignored).
+    func setTextRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>, to value: String) throws {}
+
     func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String {
         try propertyValue(property, of: .part(kind: "field", domain: domain, reference: reference, onCard: nil))
     }

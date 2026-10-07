@@ -76,3 +76,19 @@ private let styledJSON = """
     let engine = try StackEngine(stackJSON: styledJSON)
     #expect(try await engine.runMessage("textStyle of char 1 to 2 of field \"Styled\"") == "plain")
 }
+
+@Test func setChunkTextStyleWritesRuns() async throws {
+    // Write side on the engine host: bold word 2, verify the read side sees
+    // it and neighbors stay plain; "plain" clears it back; textSize sticks.
+    let engine = try StackEngine(stackJSON: styledJSON)
+    _ = try await engine.runMessage("put \"one two three\" into field \"Styled\"")
+    // The fixture ships styled runs; clear the whole span to a known base.
+    _ = try await engine.runMessage("set the textStyle of char 1 to 13 of field \"Styled\" to plain")
+    _ = try await engine.runMessage("set the textStyle of word 2 of field \"Styled\" to bold")
+    #expect(try await engine.runMessage("the textStyle of word 2 of field \"Styled\"") == "bold")
+    #expect(try await engine.runMessage("the textStyle of word 1 of field \"Styled\"") == "plain")
+    _ = try await engine.runMessage("set the textStyle of word 2 of field \"Styled\" to plain")
+    #expect(try await engine.runMessage("the textStyle of char 1 to 13 of field \"Styled\"") == "plain")
+    _ = try await engine.runMessage("set the textSize of word 3 of field \"Styled\" to 24")
+    #expect(try await engine.runMessage("the textSize of word 3 of field \"Styled\"") == "24")
+}

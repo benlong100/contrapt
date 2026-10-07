@@ -847,13 +847,22 @@ struct Parser {
                     try expectNewline()
                     return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
                 }
-                // The target isn't something we model as a settable object — a
-                // chunk of a field (`set textStyle of line 2 of fld "X"`), a menu
-                // item (`set name of last menuItem of menu "Y"`), or a function
-                // result (`set topLeft of popObject() to …`). Accept and no-op
-                // the whole line rather than failing the handler, as with other
-                // unmodeled sets. (Applying per-chunk textStyle is a separate,
-                // tracked feature.)
+                // A chunk-of-field target: `set textStyle of line 2 of fld
+                // "X" to bold` — a real per-run style write.
+                index = saved
+                if ["textstyle", "textfont", "textsize"].contains(property.lowercased()),
+                   let container = try? parseContainer(line: line),
+                   case .chunk = container,
+                   peekIdentifier() == "to" {
+                    advance() // to
+                    let value = try parseSetValue()
+                    try expectNewline()
+                    return Stmt(kind: .setChunkProperty(property: property.lowercased(), chunk: container, value: value), line: line)
+                }
+                // Other unmodeled targets — a menu item (`set name of last
+                // menuItem of menu "Y"`) or a function result (`set topLeft of
+                // popObject() to …`). Accept and no-op the whole line rather
+                // than failing the handler, as with other unmodeled sets.
                 index = saved
                 while current.kind != .newline, current.kind != .endOfScript { advance() }
                 try expectNewline()

@@ -44,6 +44,9 @@ indirect enum StmtKind {
     case get(Expr)
     /// `set [the] <property> of <object> to <value>`.
     case set(property: String, object: ObjectExpr, value: Expr)
+    /// `set the textStyle/textFont/textSize of <chunk> of <field> to …` —
+    /// per-run styled text written from script (import already carries runs).
+    case setChunkProperty(property: String, chunk: Container, value: Expr)
     /// `set the itemDelimiter to <value>` — a global (object-less) property.
     case setGlobalProperty(String, Expr)
     /// `convert <target> [from <format>] to <format>` — reformats a date or

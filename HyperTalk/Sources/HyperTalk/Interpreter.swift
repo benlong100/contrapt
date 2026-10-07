@@ -751,6 +751,21 @@ final class Runtime {
             try await setContainer(base, to: updated, line: statement.line)
             return .normal
 
+        case .setChunkProperty(let property, let chunk, let valueExpression):
+            // `set the textStyle of line 2 of field "X" to bold` — resolve the
+            // chunk to its field + character range (as the read side does) and
+            // let the host split/merge style runs. A container that doesn't
+            // bottom out in a field stays accepted-and-ignored.
+            let value = try await evaluate(valueExpression, line: statement.line)
+            guard let resolved = try await fieldAndRange(of: chunk, line: statement.line) else {
+                return .normal
+            }
+            try hostCall(line: statement.line) {
+                try host.setTextRunProperty(property, ofField: resolved.reference,
+                                            domain: resolved.domain, range: resolved.range, to: value)
+            }
+            return .normal
+
         case .openFile(let pathExpression):
             let path = try await evaluate(pathExpression, line: statement.line)
             fileCall { try host.fileOpen(path) }

@@ -335,6 +335,75 @@ extension WebHost {
         return Self.runProperty(property, text: f.text, base: f.format, runs: f.styleRuns, range: range)
     }
 
+    func setTextRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>, to value: String) throws {
+        let loc = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
+        var mutable = part(at: loc)
+        guard case .field(var f) = mutable.kind else { throw HostError("That part is not a field.") }
+        f.styleRuns = try Self.settingRuns(property, to: value, text: f.text,
+                                           base: f.format, runs: f.styleRuns, range: range)
+        mutable.kind = .field(f)
+        setPart(mutable, at: loc)
+    }
+
+    /// The write side of per-chunk styled text — mirror of the app host's
+    /// splitter/merger (`set the textStyle … to bold` REPLACES the span's
+    /// style set; "plain" clears it; an unmappable font leaves the design).
+    static func settingRuns(_ property: String, to value: String, text: String,
+                            base: TextFormat, runs: [StyleRun], range: Range<Int>) throws -> [StyleRun] {
+        let count = text.count
+        let lo = max(0, min(range.lowerBound, count))
+        let hi = max(lo, min(range.upperBound, count))
+        guard lo < hi else { return runs }
+        func mutated(_ format: TextFormat) throws -> TextFormat {
+            var f = format
+            switch property {
+            case "textsize":
+                guard let size = Double(value.trimmingCharacters(in: .whitespaces)) else {
+                    throw HostError("Expected a point size, like 12.")
+                }
+                f.size = min(max(size, 4), 256)
+            case "textfont":
+                if let design = Self.parseFontDesign(value) { f.fontDesign = design }
+            case "textstyle":
+                f.isBold = false; f.isItalic = false; f.isUnderline = false
+                f.isOutline = false; f.isGroup = false
+                for raw in value.lowercased().split(whereSeparator: { $0 == "," || $0 == " " }) {
+                    switch raw.trimmingCharacters(in: .whitespaces) {
+                    case "bold": f.isBold = true
+                    case "italic": f.isItalic = true
+                    case "underline": f.isUnderline = true
+                    case "outline", "shadow": f.isOutline = true
+                    case "group", "grp": f.isGroup = true
+                    default: break
+                    }
+                }
+            default:
+                throw HostError("There is no \(property) property of a chunk.")
+            }
+            return f
+        }
+        let sorted = runs.sorted { $0.start < $1.start }
+        var boundaries: [Int] = [0, lo, hi, count]
+        boundaries.append(contentsOf: sorted.map { min(max($0.start, 0), count) })
+        let starts = Array(Set(boundaries)).sorted().filter { $0 < count }
+        func formatInForce(at offset: Int) -> TextFormat {
+            var f = base
+            for run in sorted where run.start <= offset { f = run.format }
+            return f
+        }
+        var result: [StyleRun] = []
+        var current = base
+        for start in starts {
+            var format = formatInForce(at: start)
+            if start >= lo, start < hi { format = try mutated(format) }
+            if format != current {
+                result.append(StyleRun(start: start, format: format))
+                current = format
+            }
+        }
+        return result
+    }
+
     /// Reads a text-run property over a character range: the value if uniform
     /// across the range, else "mixed" (textStyle) / "" (textFont, textSize).
     static func runProperty(_ property: String, text: String, base: TextFormat, runs: [StyleRun], range: Range<Int>) -> String {
