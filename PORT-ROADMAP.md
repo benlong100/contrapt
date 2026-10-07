@@ -55,9 +55,10 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    statement in both hosts with a shared run split/merge writer (set replaces
    the span's styles; plain clears; runs re-merge). `group` settable from
    script. Web-player RENDERING of runs remains in item 11.
-6. **Runtime icon re-resolution** — `set the icon of btn to N` round-trips the
-   id but can't change the glyph (icon library isn't loaded at runtime).
-   Animation/toggle buttons look static.
+6. **Runtime icon re-resolution** — DONE 2026-10-07: Stack.icons (id→asset)
+   persisted at import (stack-fork icons pre-rendered; app icons on use);
+   set the icon swaps the drawn glyph, unknown ids show the missing fallback.
+   Needs re-import.
 
 ## Priority 2 — fidelity & authoring depth
 7. Background fields as true shared parts (today: per-card copies; property
