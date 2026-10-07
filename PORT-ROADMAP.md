@@ -24,10 +24,13 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    result). Classic colon paths map to Application Support/HyperTalk Files in
    the sandbox. Follow-up: optionally resolve reads from user-granted folders
    so stacks can read data files shipped beside them.
-3. **Custom menus** — all menu verbs no-op; games build File/game menus
-   (Adventures of Sean 2). Needs session menu model + in-window menu strip
-   (stacks hide the menubar) + `doMenu` routing + read-side properties.
-   Scoped in backlog.
+3. **Custom menus** — DONE 2026-10-07 (e929cbf): full verb set (create/
+   delete/put-into/enable/disable/reset), menu + menuItem as property
+   objects (name/enabled/checkMark/menuMessage, exists, counts, text),
+   doMenu menuMessage routing, in-window strip above the card. Verified
+   against Adventures of Sean 2's real setUpMenus (File[9] Sean[2]).
+   Follow-ups: web-player strip (item 11); standard File/Edit/Go default
+   menus if a stack ever deletes-from rather than creates.
 4. **Script error line numbers** — VERIFIED CORRECT 2026-10-07: tokenizer
    counts every continuation/comment/string form exactly (LineNumberTests),
    runtime errors report the editor line, and import preserves raw line
