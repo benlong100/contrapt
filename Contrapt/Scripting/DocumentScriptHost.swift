@@ -929,14 +929,24 @@ final class DocumentScriptHost: HyperTalkHost {
     func callExternal(_ name: String, arguments: [String]) async throws -> String? {
         switch name.lowercased() {
         case "popmenu", "popupmenu":
-            // PopMenu(itemList [, defaultLine [, left, top]]) — shows a pop-up
-            // and returns the chosen item NUMBER ("" if dismissed). Items are
-            // return- or comma-separated.
-            let list = arguments.first ?? ""
-            let items = list.contains("\n") ? list.components(separatedBy: "\n")
-                                             : list.components(separatedBy: ",")
-            let defaultLine = arguments.count > 1 ? Int(arguments[1]) ?? 0 : 0
-            return await presentPopUpMenu(items: items.filter { !$0.isEmpty }, defaultLine: defaultLine)
+            // Eric Celeste's popMenu.XFCN (1988, the Culture stacks):
+            // PopMenu(top, left, defaultLine, itemList) — items are comma-
+            // separated, "text|metas" carries Mac menu metacharacters
+            // ("-|(" = disabled separator). Returns empty when dismissed, else
+            // "line,text,level,text" — scripts read item 4 (the chosen text).
+            // A 1–2 argument call is the generic (itemList[, defaultLine]) form.
+            let list: String
+            let defaultLine: Int
+            if arguments.count >= 4 {
+                list = arguments[3]
+                defaultLine = Int(arguments[2]) ?? 0
+            } else {
+                list = arguments.first ?? ""
+                defaultLine = arguments.count > 1 ? Int(arguments[1]) ?? 0 : 0
+            }
+            let rawItems = list.contains("\n") ? list.components(separatedBy: "\n")
+                                                : list.components(separatedBy: ",")
+            return await presentPopUpMenu(rawItems: rawItems, defaultLine: defaultLine)
         case "filename":
             // FileName([type]) — a file-open dialog; the chosen path or "" on
             // cancel (the result carries "Cancel", as the classic XFCN did).
@@ -959,19 +969,27 @@ final class DocumentScriptHost: HyperTalkHost {
         }
     }
 
-    /// Shows a pop-up menu at the mouse and resumes with the chosen item's
-    /// 1-based number ("" if dismissed) — the classic PopMenu XFCN contract.
-    private func presentPopUpMenu(items: [String], defaultLine: Int) async -> String {
+    /// Shows a pop-up menu at the mouse; returns Celeste's popMenu record
+    /// "line,text,1,text" for the chosen item, or "" when dismissed.
+    private func presentPopUpMenu(rawItems: [String], defaultLine: Int) async -> String {
         #if canImport(AppKit)
+        let items = rawItems.filter { !$0.isEmpty }
         guard !items.isEmpty else { return "" }
         let menu = NSMenu()
-        for (i, title) in items.enumerated() {
+        for (i, raw) in items.enumerated() {
+            // "text|metas": classic menu metacharacters — "(" disables,
+            // "-" (as the text) is a separator.
+            let pieces = raw.components(separatedBy: "|")
+            let title = pieces[0]
+            let metas = pieces.count > 1 ? pieces[1] : ""
             if title == "-" { menu.addItem(.separator()); continue }
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.tag = i + 1
+            if metas.contains("(") { item.isEnabled = false }
             if i + 1 == defaultLine { item.state = .on }
             menu.addItem(item)
         }
+        menu.autoenablesItems = false
         let target = PopMenuTarget()
         for item in menu.items where !item.isSeparatorItem {
             item.target = target
@@ -981,7 +999,9 @@ final class DocumentScriptHost: HyperTalkHost {
         let location = contentView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
         let anchor = defaultLine > 0 && defaultLine <= menu.items.count ? menu.items[defaultLine - 1] : nil
         _ = menu.popUp(positioning: anchor, at: location, in: contentView)
-        return target.pickedTag > 0 ? String(target.pickedTag) : ""
+        guard target.pickedTag > 0 else { return "" }
+        let chosenTitle = menu.items.first { $0.tag == target.pickedTag }?.title ?? ""
+        return "\(target.pickedTag),\(chosenTitle),1,\(chosenTitle)"
         #else
         return ""
         #endif
