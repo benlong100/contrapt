@@ -25,9 +25,12 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    (Adventures of Sean 2). Needs session menu model + in-window menu strip
    (stacks hide the menubar) + `doMenu` routing + read-side properties.
    Scoped in backlog.
-4. **Script error line numbers** — reported lines drift from the editor's
-   (likely `¬` continuation counting). Makes every other debugging loop
-   cheaper; fix first for leverage.
+4. **Script error line numbers** — VERIFIED CORRECT 2026-10-07: tokenizer
+   counts every continuation/comment/string form exactly (LineNumberTests),
+   runtime errors report the editor line, and import preserves raw line
+   counts (landmark distances match the STAK bytes). The historical drift
+   is unreproducible — if it resurfaces, capture the object + both line
+   numbers and reopen.
 4b. **XCMD/XFCN native shims** — the #1 beta-tester request. Full support
    (executing 68K code resources) is explicitly OUT OF SCOPE: it means
    emulating the 68K ISA plus the Toolbox ABI the XCMDs call back into.
