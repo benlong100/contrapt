@@ -921,6 +921,94 @@ final class DocumentScriptHost: HyperTalkHost {
         Beeper.shared.beep()
     }
 
+    // MARK: - XCMD/XFCN native shims
+
+    /// Native implementations of the popular externals (corpus scan 2026-10-07:
+    /// FileName ×11, PopMenu ×9, NewFileName ×9, FontExists ×5 — the rest is a
+    /// 1–2-stack tail). Unknown names return nil → accepted-and-ignored.
+    func callExternal(_ name: String, arguments: [String]) async throws -> String? {
+        switch name.lowercased() {
+        case "popmenu", "popupmenu":
+            // PopMenu(itemList [, defaultLine [, left, top]]) — shows a pop-up
+            // and returns the chosen item NUMBER ("" if dismissed). Items are
+            // return- or comma-separated.
+            let list = arguments.first ?? ""
+            let items = list.contains("\n") ? list.components(separatedBy: "\n")
+                                             : list.components(separatedBy: ",")
+            let defaultLine = arguments.count > 1 ? Int(arguments[1]) ?? 0 : 0
+            return await presentPopUpMenu(items: items.filter { !$0.isEmpty }, defaultLine: defaultLine)
+        case "filename":
+            // FileName([type]) — a file-open dialog; the chosen path or "" on
+            // cancel (the result carries "Cancel", as the classic XFCN did).
+            let picked = await onAnswerFile("Choose a file", arguments.first.flatMap { $0.isEmpty ? nil : $0 })
+            return picked ?? ""
+        case "newfilename":
+            // NewFileName([prompt [, defaultName]]) — a save dialog.
+            return await presentSavePanel(prompt: arguments.first ?? "",
+                                          defaultName: arguments.count > 1 ? arguments[1] : "")
+        case "fontexists":
+            guard let fontName = arguments.first, !fontName.isEmpty else { return "false" }
+            #if canImport(AppKit)
+            let exists = NSFontManager.shared.availableFontFamilies.contains { $0.caseInsensitiveCompare(fontName) == .orderedSame }
+            #else
+            let exists = UIFont.familyNames.contains { $0.caseInsensitiveCompare(fontName) == .orderedSame }
+            #endif
+            return exists ? "true" : "false"
+        default:
+            return nil
+        }
+    }
+
+    /// Shows a pop-up menu at the mouse and resumes with the chosen item's
+    /// 1-based number ("" if dismissed) — the classic PopMenu XFCN contract.
+    private func presentPopUpMenu(items: [String], defaultLine: Int) async -> String {
+        #if canImport(AppKit)
+        guard !items.isEmpty else { return "" }
+        let menu = NSMenu()
+        for (i, title) in items.enumerated() {
+            if title == "-" { menu.addItem(.separator()); continue }
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.tag = i + 1
+            if i + 1 == defaultLine { item.state = .on }
+            menu.addItem(item)
+        }
+        let target = PopMenuTarget()
+        for item in menu.items where !item.isSeparatorItem {
+            item.target = target
+            item.action = #selector(PopMenuTarget.pick(_:))
+        }
+        guard let window = NSApp.keyWindow, let contentView = window.contentView else { return "" }
+        let location = contentView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let anchor = defaultLine > 0 && defaultLine <= menu.items.count ? menu.items[defaultLine - 1] : nil
+        _ = menu.popUp(positioning: anchor, at: location, in: contentView)
+        return target.pickedTag > 0 ? String(target.pickedTag) : ""
+        #else
+        return ""
+        #endif
+    }
+
+    #if canImport(AppKit)
+    /// Captures which pop-up item was chosen (NSMenu reports via action).
+    private final class PopMenuTarget: NSObject {
+        var pickedTag = 0
+        @objc func pick(_ sender: NSMenuItem) { pickedTag = sender.tag }
+    }
+    #endif
+
+    /// NSSavePanel for the NewFileName XFCN; the chosen path or "" on cancel.
+    private func presentSavePanel(prompt: String, defaultName: String) async -> String {
+        #if canImport(AppKit)
+        let panel = NSSavePanel()
+        if !prompt.isEmpty { panel.message = prompt }
+        if !defaultName.isEmpty { panel.nameFieldStringValue = defaultName }
+        let response = await panel.begin()
+        guard response == .OK, let url = panel.url else { return "" }
+        return url.path
+        #else
+        return ""
+        #endif
+    }
+
     // MARK: - File I/O
 
     /// Open files for `open/read/write/close file`: the buffered text, the

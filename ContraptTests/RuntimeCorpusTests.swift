@@ -133,6 +133,31 @@ import HyperTalk
 }
 
 @MainActor
+@Test func xcmdShimRegistryRoutesExternals() async throws {
+    // A recorded external with a native shim runs it (FontExists — headless-
+    // safe); an unknown external stays accepted-and-ignored (empty value).
+    var stack = Stack.makeNew()
+    stack.externalCommands = ["FontExists", "MysteryXCMD"]
+    var index = 0
+    var shown: [String] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { shown.append($0) },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("probeShims", along: [ScriptLayer(name: "t", source: """
+    on probeShims
+      put FontExists("Helvetica") & "|" & FontExists("NoSuchFontFace99") & "|" & MysteryXCMD("x")
+    end probeShims
+    """, object: .thisCard)] + layers, host: host)
+    #expect(shown.last == "true|false|")
+}
+
+@MainActor
 @Test func fileIORoundTripsOnDisk() async throws {
     // open/write/close then open/read/close against the REAL sandboxed disk
     // (Application Support/HyperTalk Files), classic colon path mapped to its

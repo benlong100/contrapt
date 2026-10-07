@@ -446,8 +446,10 @@ final class Runtime {
             return value
         }
         if isExternal(name) {
-            // An XFCN — external compiled code Contrapt can't run. Reads as
-            // empty, so callers like `get showList(…)` degrade to a cancel.
+            // An XFCN. A host shim (pop-up menus, file dialogs) supplies the
+            // value natively; otherwise external compiled code Contrapt can't
+            // run reads as empty, so `get showList(…)` degrades to a cancel.
+            if let value = try await host.callExternal(name, arguments: arguments) { return value }
             return ""
         }
         throw ScriptError(line: line, message: "Can't find a function named '\(name)'.")
@@ -1071,8 +1073,14 @@ final class Runtime {
             guard handled else {
                 if isSilentlyIgnorable(name) {
                     // An XCMD the import recorded (`palette`), or a HyperCard
-                    // system message (`openCard`, `idle`) with no handler —
-                    // recognized, so a no-op rather than an error. Clear result.
+                    // system message (`openCard`, `idle`) with no handler. A
+                    // host shim may run it natively (its return is the
+                    // result); otherwise recognized-but-ignored. 
+                    if isExternal(name),
+                       let result = try await host.callExternal(name, arguments: arguments) {
+                        lastResult = result
+                        return .normal
+                    }
                     lastResult = ""
                     return .normal
                 }

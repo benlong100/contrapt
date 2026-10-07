@@ -236,6 +236,12 @@ public protocol HyperTalkHost: AnyObject {
     /// (`visible` false, everything else empty); the setter defaults to no-op.
     func windowProperty(_ property: String, window: String) -> String?
     func setWindowProperty(_ property: String, window: String, to value: String) throws
+    /// A native shim for an XCMD/XFCN the stack recorded at import. Return
+    /// the external's value (functions) / its `the result` text (commands,
+    /// empty = success) — or nil when the host has no shim, which keeps the
+    /// accepted-and-ignored behavior. Async so a shim can present UI (pop-up
+    /// menus, file dialogs).
+    func callExternal(_ name: String, arguments: [String]) async throws -> String?
     /// File I/O for `open/read/write/close file`. Paths are classic-style
     /// (colon-separated or bare names); the host owns the mapping to real
     /// storage. `fileRead` consumes from the file's mark and reports whether
@@ -442,6 +448,9 @@ public extension HyperTalkHost {
     /// Hosts without window objects fall back to the absent-object defaults.
     func windowProperty(_ property: String, window: String) -> String? { nil }
     func setWindowProperty(_ property: String, window: String, to value: String) throws {}
+
+    /// Hosts without native XCMD/XFCN shims leave externals as no-ops.
+    func callExternal(_ name: String, arguments: [String]) async throws -> String? { nil }
 
     /// Hosts without file access report HyperCard's classic failure.
     func fileOpen(_ path: String) throws { throw HostError("Can't open that file.") }
