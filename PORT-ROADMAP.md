@@ -68,8 +68,9 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    edits don't propagate, counts lie). Architectural; backlog notes.
 8. Scripted painting (`choose <paint> tool` + `drag`/`click` drawing, paint
    globals currently ignored). PaintEditor exists; wire the tool verbs to it.
-9. `picture`/`show card picture` layer control beyond the no-op; `the
-   showPict` is modeled, per-layer hide/show of paint isn't rendered.
+9. show/hide card+bg pictures — DONE 2026-10-07 (60c38e1): Card/Background
+   .showPicture modeled+persisted, parser/host/CardView wired; Sean's title
+   curtain lifts. Engine-host storage with the web batch (item 11).
 10. Icon import breadth: `cicn`/`ICN#`, Home-stack icon search path.
 11. Web-player parity batch: `enabled` graying, missing-icon fallback,
     card-window viewport, scroll of field (once native lands).
