@@ -51,9 +51,10 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    HyPict×9, FontExists×5, long tail. Shipped shims: PopMenu/PopUpMenu,
    FileName, NewFileName, FontExists. Next candidates: HyPict (with P2
    picture work), Flash, ShowList, SysEnv — add as beta stacks surface them.
-5. **Per-chunk `set the textStyle/textFont/textSize of <chunk> of field`** —
-   read side done; write side doesn't parse. StyleRun split/merge exists for
-   import, needs script plumbing (both hosts). Backlog has the design.
+5. **Per-chunk textStyle/textFont/textSize writes** — DONE 2026-10-07: real
+   statement in both hosts with a shared run split/merge writer (set replaces
+   the span's styles; plain clears; runs re-merge). `group` settable from
+   script. Web-player RENDERING of runs remains in item 11.
 6. **Runtime icon re-resolution** — `set the icon of btn to N` round-trips the
    id but can't change the glyph (icon library isn't loaded at runtime).
    Animation/toggle buttons look static.
