@@ -22,7 +22,11 @@ import Testing
         let trimmed = expression.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { answers.append(""); continue }
         do {
-            let host = MockHost()
+            // Mirror the guest Probe stack's card field "pf" (probe v4) so
+            // field-context lines compare like for like.
+            // (MockHost keys card-domain fields as "card <name>"; corpus
+            // field lines must therefore say `card field`/`cd fld`.)
+            let host = MockHost(fields: ["card pf": ""])
             // "@stmt | stmt | …" runs statements that set probeResult (the
             // probe stack's v3 protocol); a bare line is an expression.
             let body: String

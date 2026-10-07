@@ -23,6 +23,14 @@ HyperCard 2.3** running in Basilisk II on this machine.
 2. `./Scripts/oracle-diff.sh` — 0 mismatches = Contrapt matches real HC on
    all ~300 corpus lines.
 
+## Probe v4 (current)
+`setupProbe` creates card field "pf" on the Probe card (once); corpus lines
+can test field semantics. MockHost mirrors it (key "card pf" — corpus lines
+must say `card field`/`cd fld`, and each line must SET the field before
+reading; guest field state persists between lines, MockHost's doesn't).
+Batch 7 result: all field-context behaviors matched (0 mismatches) —
+chunk writes/deletes on fields, field arithmetic, counting.
+
 ## Gotchas
 - An expression that **errors in real HC** pops a dialog in the guest and
   stops the batch (no try/catch in HyperTalk); the incremental output file

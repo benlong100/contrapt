@@ -390,3 +390,18 @@ last item of ",,x"
 @if false then put "a" into probeResult | else put "b" into probeResult
 @repeat with i = 1 to 3 | put i after probeResult | end repeat
 @put "x,y" into s | put item 2 of s into item 1 of s | put s into probeResult
+# --- batch 7 (probe v4): field object context — card field "pf" exists in
+# --- both worlds; every line sets the field before reading (no cross-line state)
+@put "hello" into card field "pf" | put card field "pf" into probeResult
+@put "a,b,c" into card field "pf" | delete item 2 of card field "pf" | put card field "pf" into probeResult
+@put "hello" into card field "pf" | put char 2 of card field "pf" into probeResult
+@put "x" into card field "pf" | put "y" after card field "pf" | put card field "pf" into probeResult
+@put "x" into card field "pf" | put "w" before card field "pf" | put card field "pf" into probeResult
+@put "5" into card field "pf" | put card field "pf" + 2 into probeResult
+@put "abc" into card field "pf" | put the length of card field "pf" into probeResult
+@put "a b" into card field "pf" | put "Q" into word 2 of card field "pf" | put card field "pf" into probeResult
+@put "one" & return & "two" into card field "pf" | put the number of lines in card field "pf" into probeResult
+@put "z" into card field "pf" | put the number of card fields into probeResult
+# @put "s" into cd fld "pf" | put the short name of cd fld 1 ... -- HARNESS limit: MockHost has no part-name property (verified in guest: "pf"; the app host models names)
+@put "t" into cd fld "pf" | put cd fld "pf" into probeResult
+@put empty into card field "pf" | put the length of card field "pf" into probeResult
