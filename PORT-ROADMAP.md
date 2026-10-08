@@ -87,7 +87,12 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
 9. show/hide card+bg pictures — DONE 2026-10-07 (60c38e1): Card/Background
    .showPicture modeled+persisted, parser/host/CardView wired; Sean's title
    curtain lifts. Engine-host storage with the web batch (item 11).
-10. Icon import breadth: `cicn`/`ICN#`, Home-stack icon search path.
+10. Icon import breadth — DONE 2026-10-07: resolution follows HyperCard's
+    resource path (stack fork → sibling "Home" stack → HyperCard app), each
+    trying ICON, then cicn (full color decode: 1/2/4/8-bit indexed + mask),
+    then ICN# (icon+mask). Pinned: Oblique Strategies' ICN# imports;
+    synthetic cicn decodes red/white. Follow-up: nothing known — revisit if a
+    stack ships SICN/ics# small icons.
 11. Web-player parity batch: `enabled` graying, missing-icon fallback,
     card-window viewport, scroll of field (once native lands).
 12. Printing (`print card/field`, `open/close report printing`) — decide

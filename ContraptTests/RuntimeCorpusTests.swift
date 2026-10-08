@@ -314,6 +314,50 @@ import HyperTalk
 }
 
 @MainActor
+@Test func icnSharpIconsImport() async throws {
+    // Oblique Strategies ships one of its button icons as an ICN# (icon +
+    // mask pair) rather than an ICON — the importer's fallback renders it
+    // into the runtime icon library.
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/hypercard_obliquestrategies"
+    guard let path = classicStackFiles(under: root).first else { return }
+    let url = URL(fileURLWithPath: path)
+    let imported = try LegacyStackImporter.importedStack(from: url)
+    guard let fork = ResourceFork.forkData(of: url) else { return }
+    let icnIDs = ResourceFork.iconLists(from: fork).keys
+    try #require(!icnIDs.isEmpty)
+    for id in icnIDs {
+        let asset = imported.stack.icons[String(id)]
+        #expect(asset != nil)
+        if let asset {
+            #expect((imported.assets[asset]?.count ?? 0) > 0)
+        }
+    }
+}
+
+@Test func cicnColorIconDecodes() throws {
+    // A minimal synthetic 8×8 1-bit cicn: left half color index 1 (red),
+    // right half index 0 (white), full mask.
+    var d = [UInt8](repeating: 0, count: 0x52)
+    func put16(_ o: Int, _ v: Int) { d[o] = UInt8(v >> 8); d[o+1] = UInt8(v & 0xFF) }
+    put16(0x04, 1)   // pixMap rowBytes
+    put16(0x0A, 8); put16(0x0C, 8) // bounds bottom/right (top/left 0)
+    put16(0x20, 1)   // pixelSize 1
+    put16(0x36, 1)   // mask rowBytes
+    put16(0x44, 1)   // icon bitmap rowBytes
+    d += [UInt8](repeating: 0xFF, count: 8)  // mask: all opaque
+    d += [UInt8](repeating: 0x00, count: 8)  // b/w icon bitmap (unused)
+    // Color table: seed(4) flags(2) size(2)=1, entries {0: white} {1: red}
+    d += [0,0,0,0, 0,0, 0,1]
+    d += [0,0, 0xFF,0xFF, 0xFF,0xFF, 0xFF,0xFF]
+    d += [0,1, 0xFF,0x00, 0x00,0x00, 0x00,0x00]
+    d += [UInt8](repeating: 0xF0, count: 8)  // pixels: left half index 1
+    let png = try #require(ResourceFork.cicnPNG(Data(d)))
+    let canvas = PaintRasterizer.canvas(from: png, width: 8, height: 8)
+    #expect(canvas[1, 4] == (255, 0, 0, 255))     // red left
+    #expect(canvas[6, 4] == (255, 255, 255, 255)) // white right
+}
+
+@MainActor
 @Test func dumpSeanSoundsAndLine251() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
     guard let path = classicStackFiles(under: root).first else { return }

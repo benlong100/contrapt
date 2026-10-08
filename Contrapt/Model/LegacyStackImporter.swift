@@ -38,7 +38,7 @@ enum LegacyStackImporter {
     /// button ICON bitmaps the stack references — embedded per-use as assets.
     /// `presentAtActualSize` opens the card at its true point size (1:1, small,
     /// like classic HyperCard) rather than scaled to fill the window.
-    static func stack(from data: Data, name: String, iconFork: Data? = nil, stackFork: Data? = nil, presentAtActualSize: Bool = false) throws -> Imported {
+    static func stack(from data: Data, name: String, iconFork: Data? = nil, stackFork: Data? = nil, homeFork: Data? = nil, presentAtActualSize: Bool = false) throws -> Imported {
         var reader = Reader(data)
         guard reader.tag(at: 0) == "STAK" else {
             throw ImportError(message: "This doesn't look like a HyperCard stack (no STAK header). If it came as a .hqx or .sit, unpack it first.")
@@ -77,12 +77,32 @@ enum LegacyStackImporter {
         }
         var assets: [String: Data] = [:]
         let bmapByID = Dictionary(blocks.filter { $0.type == "BMAP" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        // Icons come from the HyperCard app's fork plus the stack's own
-        // resource fork — custom icons (QuickTime, AppleScript…) that Apple
-        // ships inside the stack, not the app. Stack icons win on any id clash.
-        var iconLibrary = iconFork.map { ResourceFork.icons(from: $0) } ?? [:]
-        let stackOwnIcons = stackFork.map { ResourceFork.icons(from: $0) } ?? [:]
-        iconLibrary.merge(stackOwnIcons) { _, stackIcon in stackIcon }
+        // Icon resolution follows HyperCard's resource search path: the
+        // stack's own fork, then the Home stack beside it, then the HyperCard
+        // app — and within each, ICON first, then cicn (color), then ICN#
+        // (icon + mask). Only icons actually used are embedded as assets.
+        struct IconSource {
+            let icons: [Int: Data]
+            let colorIcons: [Int: Data]
+            let iconLists: [Int: Data]
+
+            init(fork: Data) {
+                icons = ResourceFork.icons(from: fork)
+                colorIcons = ResourceFork.colorIcons(from: fork)
+                iconLists = ResourceFork.iconLists(from: fork)
+            }
+
+            func png(for id: Int) -> Data? {
+                if let icon = icons[id], let png = ResourceFork.iconPNG(icon) { return png }
+                if let cicn = colorIcons[id], let png = ResourceFork.cicnPNG(cicn) { return png }
+                if let icn = iconLists[id], let png = ResourceFork.icnPNG(icn) { return png }
+                return nil
+            }
+
+            var allIDs: Set<Int> { Set(icons.keys).union(colorIcons.keys).union(iconLists.keys) }
+        }
+        let iconSources = [stackFork, homeFork, iconFork].compactMap { $0.map(IconSource.init) }
+        let stackOwnIconIDs = stackFork != nil ? iconSources[0].allIDs : []
         var iconAssetByID: [Int: String] = [:] // dedupe: one asset per icon id used
 
         // Render a BMAP block to a stored paint asset, returning its name.
@@ -94,11 +114,11 @@ enum LegacyStackImporter {
             return assetName
         }
 
-        // Render (once) a button's ICON to a stored asset, returning its name.
+        // Render (once) a button's icon to a stored asset, returning its name.
         func iconAsset(iconID: Int) -> String? {
             guard iconID != 0 else { return nil }
             if let existing = iconAssetByID[iconID] { return existing }
-            guard let icon = iconLibrary[iconID], let png = ResourceFork.iconPNG(icon) else { return nil }
+            guard let png = iconSources.lazy.compactMap({ $0.png(for: iconID) }).first else { return nil }
             let assetName = UUID().uuidString.lowercased() + ".png"
             assets[assetName] = png
             iconAssetByID[iconID] = assetName
@@ -221,7 +241,7 @@ enum LegacyStackImporter {
         // The runtime icon library: every icon in the stack's OWN fork (so
         // `set the icon` can swap to glyphs no button showed at import — the
         // animation-button idiom), plus whatever app icons buttons referenced.
-        for (id, _) in stackOwnIcons where iconAssetByID[id] == nil {
+        for id in stackOwnIconIDs where iconAssetByID[id] == nil {
             _ = iconAsset(iconID: id)
         }
         for (id, assetName) in iconAssetByID {
@@ -244,13 +264,17 @@ enum LegacyStackImporter {
         let name = source.deletingPathExtension().lastPathComponent
         // The stack's own resource fork carries any custom button icons.
         let stackFork = ResourceFork.forkData(of: source)
+        // HyperCard's resource search path runs through the Home stack: a
+        // sibling file named "Home" supplies icons the stack references but
+        // doesn't carry (multi-stack games keep shared art there).
+        let homeFork = homeSiblingFork(besides: source)
         var iconFork: Data?
         if let iconApp {
             let iconAccess = iconApp.startAccessingSecurityScopedResource()
             defer { if iconAccess { iconApp.stopAccessingSecurityScopedResource() } }
             iconFork = ResourceFork.forkData(of: iconApp)
         }
-        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, stackFork: stackFork, presentAtActualSize: presentAtActualSize)
+        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, stackFork: stackFork, homeFork: homeFork, presentAtActualSize: presentAtActualSize)
         var importedStack = imported.stack
         var importedAssets = imported.assets
         // Record the stack's XCMD/XFCN names so the interpreter can no-op
@@ -303,6 +327,18 @@ enum LegacyStackImporter {
             .appendingPathExtension("contrapt")
         try archive.write(to: url)
         return url
+    }
+
+    /// The resource fork of a sibling file named "Home" (any/no extension),
+    /// when the imported stack has one beside it.
+    private static func homeSiblingFork(besides source: URL) -> Data? {
+        let folder = source.deletingLastPathComponent()
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return nil }
+        for name in names where (name as NSString).deletingPathExtension.lowercased() == "home" {
+            let url = folder.appendingPathComponent(name)
+            if url != source, let fork = ResourceFork.forkData(of: url) { return fork }
+        }
+        return nil
     }
 
     /// Applies HyperCard-style block indentation to every script in the stack.

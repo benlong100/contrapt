@@ -197,6 +197,105 @@ enum ResourceFork {
         return data as Data
     }
 
+    /// Every `ICN#` resource — a 32×32 1-bit icon + mask pair (256 bytes).
+    static func iconLists(from fork: Data) -> [Int: Data] {
+        Dictionary(namedResources(ofType: "ICN#", from: fork).map { ($0.id, $0.data) },
+                   uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Every `cicn` (color icon) resource, raw.
+    static func colorIcons(from fork: Data) -> [Int: Data] {
+        Dictionary(namedResources(ofType: "cicn", from: fork).map { ($0.id, $0.data) },
+                   uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Render an `ICN#` (128 icon bytes + 128 mask bytes): transparent outside
+    /// the mask, black where the icon bit is set, white elsewhere inside the
+    /// mask — so solid-silhouette icons keep their white interiors on buttons.
+    static func icnPNG(_ data: Data) -> Data? {
+        guard data.count >= 256 else { return nil }
+        let bytes = [UInt8](data)
+        let size = 32
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        for y in 0..<size {
+            for x in 0..<size {
+                let iconBit = (bytes[y * 4 + x / 8] >> (7 - (x & 7))) & 1
+                let maskBit = (bytes[128 + y * 4 + x / 8] >> (7 - (x & 7))) & 1
+                guard maskBit == 1 else { continue }
+                let v: UInt8 = iconBit == 1 ? 0 : 255
+                let p = (y * size + x) * 4
+                pixels[p] = v; pixels[p+1] = v; pixels[p+2] = v; pixels[p+3] = 255
+            }
+        }
+        return pngFromRGBA(&pixels, width: size, height: size)
+    }
+
+    /// Render a `cicn` color icon: PixMap header, mask/icon bitmaps, color
+    /// table, then indexed pixel data (1/2/4/8-bit). The mask supplies alpha.
+    static func cicnPNG(_ data: Data) -> Data? {
+        let d = [UInt8](data)
+        guard d.count > 0x52 else { return nil }
+        func u16(_ o: Int) -> Int { Int((UInt16(d[o]) << 8) | UInt16(d[o+1])) }
+        func i16(_ o: Int) -> Int { Int(Int16(bitPattern: UInt16(u16(o)))) }
+
+        // IconPMap (a PixMap, 50 bytes from 0).
+        let pixRowBytes = u16(0x04) & 0x3FFF
+        let top = i16(0x06), left = i16(0x08), bottom = i16(0x0A), right = i16(0x0C)
+        let width = right - left, height = bottom - top
+        guard width > 0, height > 0, width <= 256, height <= 256 else { return nil }
+        let pixelSize = u16(0x20)
+        guard [1, 2, 4, 8].contains(pixelSize) else { return nil }
+        // IconMask (BitMap at 0x32) and IconBMap (BitMap at 0x40).
+        let maskRowBytes = u16(0x36)
+        let iconRowBytes = u16(0x44)
+        // Data follows the 4-byte iconData handle placeholder at 0x4E.
+        let maskStart = 0x52
+        let bmapStart = maskStart + maskRowBytes * height
+        let tableStart = bmapStart + iconRowBytes * height
+        guard tableStart + 8 <= d.count else { return nil }
+        let entryCount = u16(tableStart + 6) + 1
+        var colors: [Int: (UInt8, UInt8, UInt8)] = [:]
+        var o = tableStart + 8
+        for _ in 0..<entryCount {
+            guard o + 8 <= d.count else { return nil }
+            colors[u16(o)] = (d[o + 2], d[o + 4], d[o + 6]) // high byte of each 16-bit component
+            o += 8
+        }
+        let pixelStart = o
+        guard pixelStart + pixRowBytes * height <= d.count else { return nil }
+
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let perByte = 8 / pixelSize
+        let indexMask = (1 << pixelSize) - 1
+        for y in 0..<height {
+            for x in 0..<width {
+                let maskByte = maskStart + y * maskRowBytes + x / 8
+                guard maskByte < d.count, (d[maskByte] >> (7 - (x & 7))) & 1 == 1 else { continue }
+                let pixByte = pixelStart + y * pixRowBytes + x / perByte
+                guard pixByte < d.count else { continue }
+                let shift = (perByte - 1 - (x % perByte)) * pixelSize
+                let index = (Int(d[pixByte]) >> shift) & indexMask
+                let (r, g, b) = colors[index] ?? (0, 0, 0)
+                let p = (y * width + x) * 4
+                pixels[p] = r; pixels[p+1] = g; pixels[p+2] = b; pixels[p+3] = 255
+            }
+        }
+        return pngFromRGBA(&pixels, width: width, height: height)
+    }
+
+    private static func pngFromRGBA(_ pixels: inout [UInt8], width: Int, height: Int) -> Data? {
+        guard let context = CGContext(data: &pixels, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let cgImage = context.makeImage() else { return nil }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, cgImage, nil)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return data as Data
+    }
+
     /// A quick sanity check that data begins with a plausible resource-fork
     /// header (data offset and map offset within bounds).
     private static func looksLikeResourceMap(_ data: Data) -> Bool {
