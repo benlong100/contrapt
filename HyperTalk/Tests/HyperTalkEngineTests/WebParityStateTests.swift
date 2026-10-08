@@ -62,3 +62,19 @@ private let parityJSON = """
     _ = try await engine.runMessage("set the rect of card window to \"0,0,400,300\"")
     #expect(engine.currentCardState().viewportWidth == nil)
 }
+
+@Test func typeInsertsAtTheScriptSelection() async throws {
+    // `select after text of field` + `type` — the data-entry idiom. The typed
+    // text lands at the caret; a selected range is replaced.
+    let engine = try StackEngine(stackJSON: parityJSON)
+    _ = try await engine.runMessage("put \"abc\" into card field \"List\"")
+    _ = try await engine.runMessage("select after text of card field \"List\"")
+    _ = try await engine.runMessage("type \"XY\"")
+    #expect(engine.fieldText(named: "List") == "abcXY")
+    _ = try await engine.runMessage("select char 1 to 3 of card field \"List\"")
+    _ = try await engine.runMessage("type \"Z\"")
+    #expect(engine.fieldText(named: "List") == "ZXY")
+    // `type … with commandKey` is a shortcut, not text — accepted, no insert.
+    _ = try await engine.runMessage("type \"v\" with commandKey")
+    #expect(engine.fieldText(named: "List") == "ZXY")
+}

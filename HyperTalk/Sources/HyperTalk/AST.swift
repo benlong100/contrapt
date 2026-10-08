@@ -165,6 +165,9 @@ indirect enum StmtKind {
     case printCards(PrintCardSelection)
     /// `print [card|bkgnd] field <ref>` — the field's text.
     case printField(ObjectExpr)
+    /// `type <expr> [with commandKey]` — keystrokes at the insertion point
+    /// (the script selection); with commandKey it's a shortcut, not text.
+    case typeText(Expr, withCommandKey: Bool)
     /// `choose <name> tool` — switch the scripting tool. With the button or
     /// field tool chosen, `click at` *selects* the part under the point (for
     /// `doMenu "Clear Button"`) instead of clicking it; `choose browse tool`

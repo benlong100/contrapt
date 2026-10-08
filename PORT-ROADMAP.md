@@ -112,7 +112,14 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
     onPresentPrint closure — tests capture the PDF and assert page counts.
     `print <doc> with <app>` stays an accepted no-op. NOT YET LIVE-TESTED by
     Ben — print dialog behavior unverified on real hardware/printers.
-13. `type`/`drag` as real input synthesis in browse mode (now no-ops).
+13. `type`/`drag` input synthesis — DONE 2026-10-07: `type <expr>` inserts
+    at the script selection (the `select after text of field` + `type` data-
+    entry idiom; replaces a selected range, caret lands after; `with
+    commandKey` accepted as a shortcut, unmodeled). `drag` with the button/
+    field tool MOVES the part under the start point to the end point (the
+    scripted-authoring idiom); paint tools draw (item 8); browse-tool drag
+    stays a no-op (no OS-level synthesis). App + web hosts both. Note: shared
+    tool/selection singletons mean tool-using tests run in serialized suites.
 
 ## Priority 3 — long tail / environment
 14. Palettes & external windows (`palette`, tool/pattern windows, `the

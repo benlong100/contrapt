@@ -1051,6 +1051,11 @@ final class Runtime {
             host.resetPaint()
             return .normal
 
+        case .typeText(let valueExpression, let withCommandKey):
+            let text = try await evaluate(valueExpression, line: statement.line)
+            host.typeText(text, withCommandKey: withCommandKey)
+            return .normal
+
         case .openPrinting(let withDialog):
             host.openPrinting(withDialog: withDialog)
             return .normal

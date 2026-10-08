@@ -732,6 +732,19 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .resetPaint, line: line)
             }
+            if verb == "type", current.kind != .newline, current.kind != .endOfScript {
+                let value = try parseExpression()
+                var withCommand = false
+                if consumeWord("with") {
+                    while let modifier = peekIdentifier() {
+                        advance()
+                        if modifier == "commandkey" || modifier == "cmdkey" { withCommand = true }
+                        if !consumeSymbol(",") { break }
+                    }
+                }
+                try expectNewline()
+                return Stmt(kind: .typeText(value, withCommandKey: withCommand), line: line)
+            }
             if verb == "drag", consumeWord("from") {
                 let fromH = try parseExpression()
                 let fromV = consumeSymbol(",") ? try parseExpression() : nil

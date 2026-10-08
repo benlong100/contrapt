@@ -45,6 +45,21 @@ final class WebHost: HyperTalkHost {
     private var findState = FindState()
     private var sortContextIndex: Int?
 
+    /// `type <expr>` at the script selection — same semantics as the app
+    /// host: replace the selected range, caret after. No selection → no-op.
+    func typeText(_ text: String, withCommandKey: Bool) {
+        guard !withCommandKey, let selected = selection else { return }
+        let reference = HyperTalkObject.Reference.id(String(selected.scriptID))
+        guard let current = try? fieldText(reference, domain: .any, onCard: nil) else { return }
+        let characters = Array(current)
+        let lo = max(0, min(selected.range.lowerBound, characters.count))
+        let hi = max(lo, min(selected.range.upperBound, characters.count))
+        let updated = String(characters[0..<lo]) + text + String(characters[hi...])
+        guard (try? setFieldText(reference, domain: .any, onCard: nil, to: updated)) != nil else { return }
+        let caret = lo + text.count
+        selection = (scriptID: selected.scriptID, layer: selected.layer, range: caret..<caret)
+    }
+
     func menuBarSnapshot() -> [HyperTalkMenu] { scriptedMenus }
     func updateMenuBar(_ menus: [HyperTalkMenu]) { scriptedMenus = menus }
 

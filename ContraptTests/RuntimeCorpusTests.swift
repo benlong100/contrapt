@@ -247,71 +247,6 @@ import HyperTalk
     #expect(widthElsewhere == "123")
 }
 
-@MainActor
-@Test func scriptedPaintingDrawsOnTheCardLayer() async throws {
-    // `choose rect tool` + `drag from … to …` rasterizes onto the card's
-    // paint PNG: filled rect pixels are black, the eraser restores
-    // transparency, and the bucket floods a hollow shape's interior.
-    var stack = Stack(formatVersion: StackFormat.currentVersion, id: UUID(), name: "Paint",
-                      cardSize: CardSize(width: 100, height: 80),
-                      script: "", backgrounds: [], cards: [])
-    var background = Background(id: UUID(), name: "BG", script: "", parts: [])
-    background.scriptID = stack.claimScriptID()
-    stack.backgrounds.append(background)
-    var card = Card(id: UUID(), name: "C1", backgroundID: background.id, script: "", parts: [])
-    card.scriptID = stack.claimScriptID()
-    stack.cards.append(card)
-
-    var assets: [String: Data] = [:]
-    let host = DocumentScriptHost(
-        stack: Binding(get: { stack }, set: { stack = $0 }),
-        currentCardIndex: .constant(0),
-        onMessage: { _ in },
-        onAnswer: { _, buttons in buttons.first ?? "OK" },
-        onAsk: { _, initial in initial },
-        onNavigate: { _, _ in },
-        assetData: { assets[$0] },
-        onAssetWrite: { name, data in assets[name] = data }
-    )
-    host.resetPaint()
-    defer { host.resetPaint() } // session state — leave defaults for other tests
-
-    func pixel(_ x: Int, _ y: Int) -> (r: UInt8, a: UInt8) {
-        guard let asset = stack.cards[0].paintImageAsset, let data = assets[asset] else { return (0, 0) }
-        let canvas = PaintRasterizer.canvas(from: data, width: 100, height: 80)
-        let px = canvas[x, y]
-        return (px.r, px.a)
-    }
-
-    // Each line as its own dispatch — the message-box idiom. The chosen tool
-    // and paint settings must survive between dispatches (fresh host each).
-    for line in ["choose rect tool", "set the filled to true", "drag from 10,10 to 30,30"] {
-        _ = try await HyperTalk.execute(messageLine: line, along: [ScriptLayer(name: "card", source: "")], host: host)
-    }
-    #expect(pixel(20, 20) == (0, 255))   // black inside the filled rect
-    #expect(pixel(50, 50).a == 0)        // untouched canvas stays transparent
-
-    _ = try await HyperTalk.run(handler: "p", in: """
-    on p
-      choose eraser tool
-      drag from 20,20 to 20,20
-    end p
-    """, host: host, maxSteps: 1000)
-    #expect(pixel(20, 20).a == 0)        // erased back to transparent
-
-    _ = try await HyperTalk.run(handler: "p", in: """
-    on p
-      reset paint
-      choose rect tool
-      drag from 50,40 to 90,70
-      choose bucket tool
-      click at 70,55
-    end p
-    """, host: host, maxSteps: 1000)
-    #expect(pixel(50, 40) == (0, 255))   // hollow rect outline
-    #expect(pixel(70, 55) == (0, 255))   // bucket filled the interior
-    #expect(pixel(45, 55).a == 0)        // outside stays clear
-}
 
 @MainActor
 @Test func icnSharpIconsImport() async throws {
@@ -355,6 +290,201 @@ import HyperTalk
     let canvas = PaintRasterizer.canvas(from: png, width: 8, height: 8)
     #expect(canvas[1, 4] == (255, 0, 0, 255))     // red left
     #expect(canvas[6, 4] == (255, 255, 255, 255)) // white right
+}
+
+// Full openStack runs against real imported stacks touch app-global session
+// singletons (using-stack store, selection, menus) — serialized so two such
+// runs don't interleave.
+@Suite(.serialized) struct OpenStackSessionTests {
+    @MainActor
+    @Test func hackerOpenStackCropsCardWindow() async throws {
+        // The Hacker Crackdown's openStack sizes its card window one dimension at
+        // a time (`set width/height of card window to …`). Running the REAL stack
+        // script must yield a cropped viewport (600×440) — the big-card-small-
+        // window idiom that hides the card's blank right/bottom margins.
+        let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch"
+        guard let path = classicStackFiles(under: root).first(where: {
+            ($0 as NSString).lastPathComponent.lowercased().contains("hacker crackdown")
+        }) else { return }
+        var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
+        var index = 0
+        var viewport: CGSize?
+        let host = DocumentScriptHost(
+            stack: Binding(get: { stack }, set: { stack = $0 }),
+            currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+            onMessage: { _ in },
+            onAnswer: { _, buttons in buttons.first ?? "OK" },
+            onAsk: { _, initial in initial },
+            onNavigate: { i, _ in index = i },
+            cardWindowViewport: Binding(get: { viewport }, set: { viewport = $0 })
+        )
+        let layers = try #require(host.scriptLayers(for: .thisCard))
+        try await HyperTalk.send("openStack", along: layers, host: host)
+        let size = try #require(viewport)
+        #expect(size.width < 640 && size.height < 480)
+        #expect(size.width >= 500 && size.height >= 400) // a "Large"-ish page, not a sliver
+    }
+
+    @MainActor
+    @Test func seanOpenStackBuildsCustomMenus() async throws {
+        // Adventures of Sean 2's openStack runs setUpMenus (`create menu "File"`,
+        // `put "About…,Quit" into menu …`). Running the REAL stack's openStack
+        // must populate the scripted menu bar the strip renders.
+        let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
+        guard let path = classicStackFiles(under: root).first else { return }
+        var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
+        var index = 0
+        var menus: [HyperTalkMenu] = []
+        let host = DocumentScriptHost(
+            stack: Binding(get: { stack }, set: { stack = $0 }),
+            currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+            onMessage: { _ in },
+            onAnswer: { _, buttons in buttons.first ?? "OK" },
+            onAsk: { _, initial in initial },
+            onNavigate: { i, _ in index = i },
+            menuBar: Binding(get: { menus }, set: { menus = $0 })
+        )
+        let layers = try #require(host.scriptLayers(for: .thisCard))
+        try? await HyperTalk.send("openStack", along: layers, host: host)
+        try? await HyperTalk.send("openCard", along: layers, host: host)
+        print("SEAN-MENUS: \(menus.map { "\($0.name)[\($0.items.count)]" }.joined(separator: " "))")
+        #expect(!menus.isEmpty)
+        #expect(menus.contains { !$0.items.isEmpty })
+        // The title card's all-black CARD paint curtain must be lifted by the
+        // stack's own scripts (`hide picture of card 1`), revealing the bg art.
+        print("SEAN-PICT: card0.showPicture=\(stack.cards[0].showPicture)")
+        #expect(stack.cards[0].showPicture == false)
+    }
+}
+
+// The chosen tool and paint settings are session-global (HyperCard has one
+// tool), so tests that choose tools must not run in parallel with each other.
+@Suite(.serialized) struct ToolSessionTests {
+    @MainActor
+    @Test func scriptedPaintingDrawsOnTheCardLayer() async throws {
+        // `choose rect tool` + `drag from … to …` rasterizes onto the card's
+        // paint PNG: filled rect pixels are black, the eraser restores
+        // transparency, and the bucket floods a hollow shape's interior.
+        var stack = Stack(formatVersion: StackFormat.currentVersion, id: UUID(), name: "Paint",
+                          cardSize: CardSize(width: 100, height: 80),
+                          script: "", backgrounds: [], cards: [])
+        var background = Background(id: UUID(), name: "BG", script: "", parts: [])
+        background.scriptID = stack.claimScriptID()
+        stack.backgrounds.append(background)
+        var card = Card(id: UUID(), name: "C1", backgroundID: background.id, script: "", parts: [])
+        card.scriptID = stack.claimScriptID()
+        stack.cards.append(card)
+
+        var assets: [String: Data] = [:]
+        let host = DocumentScriptHost(
+            stack: Binding(get: { stack }, set: { stack = $0 }),
+            currentCardIndex: .constant(0),
+            onMessage: { _ in },
+            onAnswer: { _, buttons in buttons.first ?? "OK" },
+            onAsk: { _, initial in initial },
+            onNavigate: { _, _ in },
+            assetData: { assets[$0] },
+            onAssetWrite: { name, data in assets[name] = data }
+        )
+        host.resetPaint()
+        defer { host.resetPaint() } // session state — leave defaults for other tests
+
+        func pixel(_ x: Int, _ y: Int) -> (r: UInt8, a: UInt8) {
+            guard let asset = stack.cards[0].paintImageAsset, let data = assets[asset] else { return (0, 0) }
+            let canvas = PaintRasterizer.canvas(from: data, width: 100, height: 80)
+            let px = canvas[x, y]
+            return (px.r, px.a)
+        }
+
+        // Each line as its own dispatch — the message-box idiom. The chosen tool
+        // and paint settings must survive between dispatches (fresh host each).
+        for line in ["choose rect tool", "set the filled to true", "drag from 10,10 to 30,30"] {
+            _ = try await HyperTalk.execute(messageLine: line, along: [ScriptLayer(name: "card", source: "")], host: host)
+        }
+        #expect(pixel(20, 20) == (0, 255))   // black inside the filled rect
+        #expect(pixel(50, 50).a == 0)        // untouched canvas stays transparent
+
+        _ = try await HyperTalk.run(handler: "p", in: """
+        on p
+          choose eraser tool
+          drag from 20,20 to 20,20
+        end p
+        """, host: host, maxSteps: 1000)
+        #expect(pixel(20, 20).a == 0)        // erased back to transparent
+
+        _ = try await HyperTalk.run(handler: "p", in: """
+        on p
+          reset paint
+          choose rect tool
+          drag from 50,40 to 90,70
+          choose bucket tool
+          click at 70,55
+        end p
+        """, host: host, maxSteps: 1000)
+        #expect(pixel(50, 40) == (0, 255))   // hollow rect outline
+        #expect(pixel(70, 55) == (0, 255))   // bucket filled the interior
+        #expect(pixel(45, 55).a == 0)        // outside stays clear
+    }
+
+    @MainActor
+    @Test func typeTypesAndPartToolDragMovesButtons() async throws {
+        var stack = Stack(formatVersion: StackFormat.currentVersion, id: UUID(), name: "Input",
+                          cardSize: CardSize(width: 300, height: 200),
+                          script: "", backgrounds: [], cards: [])
+        var background = Background(id: UUID(), name: "BG", script: "", parts: [])
+        background.scriptID = stack.claimScriptID()
+        stack.backgrounds.append(background)
+        var card = Card(id: UUID(), name: "C1", backgroundID: background.id, script: "", parts: [])
+        card.scriptID = stack.claimScriptID()
+        var field = Part(id: UUID(), name: "Entry",
+                         frame: PartFrame(x: 10, y: 10, width: 200, height: 60),
+                         script: "", kind: .field(FieldPart(text: "ab", placeholder: "")))
+        field.scriptID = stack.claimScriptID()
+        card.parts.append(field)
+        var button = Part(id: UUID(), name: "Mover",
+                          frame: PartFrame(x: 20, y: 100, width: 60, height: 20),
+                          script: "", kind: .button(ButtonPart(title: "Mover")))
+        button.scriptID = stack.claimScriptID()
+        card.parts.append(button)
+        stack.cards.append(card)
+
+        var index = 0
+        let host = DocumentScriptHost(
+            stack: Binding(get: { stack }, set: { stack = $0 }),
+            currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+            onMessage: { _ in },
+            onAnswer: { _, buttons in buttons.first ?? "OK" },
+            onAsk: { _, initial in initial },
+            onNavigate: { i, _ in index = i }
+        )
+
+        // select-then-type: caret insert, range replace.
+        _ = try await HyperTalk.run(handler: "p", in: """
+        on p
+          select after text of card field "Entry"
+          type "cd" & return
+          type "e"
+        end p
+        """, host: host, maxSteps: 1000)
+        if case .field(let props) = stack.cards[0].parts[0].kind {
+            #expect(props.text == "abcd\ne")
+        } else {
+            Issue.record("field vanished")
+        }
+        host.clearSelection()
+
+        // drag with the button tool moves the part under the start point.
+        _ = try await HyperTalk.run(handler: "p", in: """
+        on p
+          choose button tool
+          drag from 50,110 to 200,150
+          choose browse tool
+        end p
+        """, host: host, maxSteps: 1000)
+        let moved = stack.cards[0].parts[1].frame
+        #expect(moved.x == 170) // 200 - 60/2
+        #expect(moved.y == 140) // 150 - 20/2
+    }
 }
 
 @MainActor
@@ -426,6 +556,7 @@ import HyperTalk
     #expect(printed.count == 3)
 }
 
+
 @MainActor
 @Test func dumpSeanSoundsAndLine251() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
@@ -461,36 +592,6 @@ import HyperTalk
     }
 }
 
-@MainActor
-@Test func seanOpenStackBuildsCustomMenus() async throws {
-    // Adventures of Sean 2's openStack runs setUpMenus (`create menu "File"`,
-    // `put "About…,Quit" into menu …`). Running the REAL stack's openStack
-    // must populate the scripted menu bar the strip renders.
-    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
-    guard let path = classicStackFiles(under: root).first else { return }
-    var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
-    var index = 0
-    var menus: [HyperTalkMenu] = []
-    let host = DocumentScriptHost(
-        stack: Binding(get: { stack }, set: { stack = $0 }),
-        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
-        onMessage: { _ in },
-        onAnswer: { _, buttons in buttons.first ?? "OK" },
-        onAsk: { _, initial in initial },
-        onNavigate: { i, _ in index = i },
-        menuBar: Binding(get: { menus }, set: { menus = $0 })
-    )
-    let layers = try #require(host.scriptLayers(for: .thisCard))
-    try? await HyperTalk.send("openStack", along: layers, host: host)
-    try? await HyperTalk.send("openCard", along: layers, host: host)
-    print("SEAN-MENUS: \(menus.map { "\($0.name)[\($0.items.count)]" }.joined(separator: " "))")
-    #expect(!menus.isEmpty)
-    #expect(menus.contains { !$0.items.isEmpty })
-    // The title card's all-black CARD paint curtain must be lifted by the
-    // stack's own scripts (`hide picture of card 1`), revealing the bg art.
-    print("SEAN-PICT: card0.showPicture=\(stack.cards[0].showPicture)")
-    #expect(stack.cards[0].showPicture == false)
-}
 
 @MainActor
 @Test func perChunkTextStyleWritesSplitAndMergeRuns() async throws {
@@ -693,34 +794,6 @@ import HyperTalk
     #expect(priorEnabled() == true)                               // leaving re-enables it
 }
 
-@MainActor
-@Test func hackerOpenStackCropsCardWindow() async throws {
-    // The Hacker Crackdown's openStack sizes its card window one dimension at
-    // a time (`set width/height of card window to …`). Running the REAL stack
-    // script must yield a cropped viewport (600×440) — the big-card-small-
-    // window idiom that hides the card's blank right/bottom margins.
-    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch"
-    guard let path = classicStackFiles(under: root).first(where: {
-        ($0 as NSString).lastPathComponent.lowercased().contains("hacker crackdown")
-    }) else { return }
-    var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
-    var index = 0
-    var viewport: CGSize?
-    let host = DocumentScriptHost(
-        stack: Binding(get: { stack }, set: { stack = $0 }),
-        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
-        onMessage: { _ in },
-        onAnswer: { _, buttons in buttons.first ?? "OK" },
-        onAsk: { _, initial in initial },
-        onNavigate: { i, _ in index = i },
-        cardWindowViewport: Binding(get: { viewport }, set: { viewport = $0 })
-    )
-    let layers = try #require(host.scriptLayers(for: .thisCard))
-    try await HyperTalk.send("openStack", along: layers, host: host)
-    let size = try #require(viewport)
-    #expect(size.width < 640 && size.height < 480)
-    #expect(size.width >= 500 && size.height >= 400) // a "Large"-ish page, not a sliver
-}
 
 @MainActor
 @Test func cardWindowRectCropsViewport() async throws {

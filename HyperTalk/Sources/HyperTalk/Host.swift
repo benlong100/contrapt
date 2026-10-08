@@ -468,6 +468,9 @@ public protocol HyperTalkHost: AnyObject {
     func printCards(_ selection: PrintCardSelection)
     /// `print field <ref>` — the field's text as a document.
     func printText(_ text: String, title: String)
+    /// `type <expr>` — keystrokes at the insertion point (the script
+    /// selection). With commandKey it's a menu shortcut, not text.
+    func typeText(_ text: String, withCommandKey: Bool)
     /// `the tool` — the chosen tool's name, e.g. "browse tool". Optional.
     func currentToolName() -> String
     /// `the sound` — the playing voice's name, or "done" when idle. Optional;
@@ -574,6 +577,8 @@ public extension HyperTalkHost {
     func closePrinting() {}
     func printCards(_ selection: PrintCardSelection) {}
     func printText(_ text: String, title: String) {}
+    /// Hosts without a keyboard focus model ignore `type`.
+    func typeText(_ text: String, withCommandKey: Bool) {}
     func currentToolName() -> String { "browse tool" }
 }
 

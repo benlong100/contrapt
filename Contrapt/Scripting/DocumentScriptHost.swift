@@ -501,6 +501,31 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func resetPaint() { PaintSession.shared.reset() }
 
+    /// `type <expr>`: keystrokes at the insertion point — the script
+    /// selection (`select after text of field X` then `type "…"`, the classic
+    /// data-entry idiom). The typed text replaces the selected range and the
+    /// caret lands after it. With commandKey it would be a menu shortcut —
+    /// unmodeled, accepted silently. No selection → nowhere to type → no-op,
+    /// as in HyperCard with no open insertion point.
+    func typeText(_ text: String, withCommandKey: Bool) {
+        guard !withCommandKey else { return }
+        let session = SelectionSession.shared
+        guard session.partID != nil else { return }
+        let domain: HyperTalkObject.PartDomain = session.layer == "bkgnd" ? .background : .card
+        let reference = HyperTalkObject.Reference.id(String(session.scriptID))
+        guard let current = try? fieldText(reference, domain: domain, onCard: nil) else { return }
+        let characters = Array(current)
+        let lo = max(0, min(session.range.lowerBound, characters.count))
+        let hi = max(lo, min(session.range.upperBound, characters.count))
+        let updated = String(characters[0..<lo]) + text + String(characters[hi...])
+        guard (try? setFieldText(reference, domain: domain, onCard: nil, to: updated)) != nil else { return }
+        let caret = lo + text.count
+        session.range = caret..<caret
+        if let partID = session.partID {
+            onSelection(FindHighlight(partID: partID, range: session.range))
+        }
+    }
+
     // MARK: - Printing
 
     /// `open printing` batches card indexes across dispatches (the classic
@@ -559,6 +584,13 @@ final class DocumentScriptHost: HyperTalkHost {
     /// `drag from … to …` with a paint tool: a scripted stroke on the current
     /// card's paint layer. (With any other tool, drag synthesis is unmodeled.)
     func drag(fromX: Int, fromY: Int, toX: Int, toY: Int) {
+        // With the button/field tool, dragging MOVES the part under the start
+        // point — HyperCard's scripted-authoring idiom
+        // (`choose button tool` / `drag from loc of btn 1 to 100,100`).
+        if chosenTool == "button" || chosenTool == "field" {
+            movePart(kind: chosenTool, from: (fromX, fromY), to: (toX, toY))
+            return
+        }
         guard isDrawingToolChosen else { return }
         paintOnCard { canvas in
             let paint = PaintSession.shared
@@ -584,6 +616,35 @@ final class DocumentScriptHost: HyperTalkHost {
             default:
                 break
             }
+        }
+    }
+
+    private func movePart(kind: String, from: (x: Int, y: Int), to: (x: Int, y: Int)) {
+        let px = Double(from.x), py = Double(from.y)
+        func hitIndex(in parts: [Part]) -> Int? {
+            for index in parts.indices.reversed() {
+                let part = parts[index]
+                guard part.kind.word == kind, part.isVisible else { continue }
+                let f = part.frame
+                if px >= f.x, px <= f.x + f.width, py >= f.y, py <= f.y + f.height { return index }
+            }
+            return nil
+        }
+        func moved(_ frame: PartFrame) -> PartFrame {
+            var f = frame
+            f.x = Double(to.x) - f.width / 2
+            f.y = Double(to.y) - f.height / 2
+            return f
+        }
+        let card = stack.cards[cardIndex]
+        if let index = hitIndex(in: card.parts) {
+            stackBinding.wrappedValue.cards[cardIndex].parts[index].frame = moved(card.parts[index].frame)
+            return
+        }
+        if let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+           let index = hitIndex(in: stack.backgrounds[backgroundIndex].parts) {
+            let frame = stack.backgrounds[backgroundIndex].parts[index].frame
+            stackBinding.wrappedValue.backgrounds[backgroundIndex].parts[index].frame = moved(frame)
         }
     }
 
