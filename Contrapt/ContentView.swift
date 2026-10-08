@@ -1150,7 +1150,14 @@ struct ContentView: View {
     /// when a cross-stack swap lands on a card. (`sendSystemMessage` guards
     /// against overlapping system messages, so two separate calls would drop
     /// the second; this runs both inside one guarded task.)
+    /// A freshly opened stack starts in the browse tool, whatever a previous
+    /// stack's scripts chose.
+    private func resetChosenTool() {
+        DocumentScriptHost.PaintSession.shared.tool = "browse"
+    }
+
     private func sendOpenSequence(toCardAt index: Int) {
+        resetChosenTool()
         guard !isEditing, !isSendingSystemMessage else { return }
         // Stale per-stack session state mustn't leak into the next stack; its
         // openStack re-establishes what it wants (crop, custom menus).

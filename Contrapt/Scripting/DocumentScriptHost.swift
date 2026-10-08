@@ -415,17 +415,20 @@ final class DocumentScriptHost: HyperTalkHost {
     /// the button/field tool makes it *select* the part under the point, so
     /// HyperCard's delete idiom works without re-running the part's script:
     ///   choose button tool / click at loc of btn "X" / doMenu "Clear Button".
-    /// Per-dispatch (the host is rebuilt per run), so a script that errors
-    /// mid-way can't leave the app stuck in a part tool. Paint tools no-op.
+    /// The tool persists across dispatches (in PaintSession), as in HyperCard
+    /// — the message box runs each line as its own dispatch, so `choose oval
+    /// tool` must still be in effect when the next line drags. It only
+    /// affects SCRIPTED click/drag; real mouse input never routes through it,
+    /// and opening another stack resets to browse.
     func chooseTool(_ name: String) {
-        chosenTool = name.lowercased()
+        PaintSession.shared.tool = name.lowercased()
     }
 
     func currentToolName() -> String {
         "\(chosenTool) tool"
     }
 
-    private var chosenTool = "browse"
+    private var chosenTool: String { PaintSession.shared.tool }
 
     /// The paint tools `drag`/`click` draw with. ("select"/"lasso"/"text"/
     /// "spray" are recognized as paint-family but don't draw yet.)
@@ -442,6 +445,7 @@ final class DocumentScriptHost: HyperTalkHost {
     /// even though each dispatch builds a fresh host.
     final class PaintSession {
         static let shared = PaintSession()
+        var tool = "browse"
         var lineSize = 1      // 1…8
         var pattern = 12      // 12 = black; 1 = white
         var filled = false
@@ -450,6 +454,8 @@ final class DocumentScriptHost: HyperTalkHost {
         var multiple = false
 
         func reset() {
+            // `reset paint` resets settings; the tool is separate (HyperCard
+            // keeps the chosen tool).
             lineSize = 1; pattern = 12; filled = false
             centered = false; brush = 8; multiple = false
         }

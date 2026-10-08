@@ -283,13 +283,11 @@ import HyperTalk
         return (px.r, px.a)
     }
 
-    _ = try await HyperTalk.run(handler: "p", in: """
-    on p
-      choose rect tool
-      set the filled to true
-      drag from 10,10 to 30,30
-    end p
-    """, host: host, maxSteps: 1000)
+    // Each line as its own dispatch — the message-box idiom. The chosen tool
+    // and paint settings must survive between dispatches (fresh host each).
+    for line in ["choose rect tool", "set the filled to true", "drag from 10,10 to 30,30"] {
+        _ = try await HyperTalk.execute(messageLine: line, along: [ScriptLayer(name: "card", source: "")], host: host)
+    }
     #expect(pixel(20, 20) == (0, 255))   // black inside the filled rect
     #expect(pixel(50, 50).a == 0)        // untouched canvas stays transparent
 
