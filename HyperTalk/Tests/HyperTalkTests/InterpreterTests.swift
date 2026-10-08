@@ -20,6 +20,14 @@ final class MockHost: HyperTalkHost {
     /// The effects passed with each `go`, in order.
     var goEffects: [[ScreenEffect]] = []
 
+    /// Every setScreenLocked call, in order — a dispatch that locks must end
+    /// with the interpreter's end-of-dispatch unlock (false last).
+    var screenLockHistory: [Bool] = []
+
+    func setScreenLocked(_ locked: Bool) {
+        screenLockHistory.append(locked)
+    }
+
     func goToCard(_ destination: GoDestination, effects: [ScreenEffect]) async throws {
         destinations.append(destination)
         goEffects.append(effects)

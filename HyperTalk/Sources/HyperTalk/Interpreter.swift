@@ -77,6 +77,12 @@ public enum HyperTalk {
     ) async throws -> String? {
         let effectivePath = path.isEmpty ? [ScriptLayer(name: "message box", source: "")] : path
         let runtime = Runtime(host: host, path: effectivePath, stepsRemaining: maxSteps)
+        // Same end-of-dispatch unlock as send() — a doMenu dispatched from the
+        // app's menu strip travels this path, and a handler that locks the
+        // screen and `go`es to another stack parks that go until unlock
+        // (Sean's Help). Without this, the parked navigation died with the
+        // dispatch's host.
+        defer { host.setScreenLocked(false) }
         do {
             let statements = try Parser.parseLooseStatements(line)
             try await runtime.runLoose(statements)
