@@ -141,6 +141,9 @@ struct FieldPart: Codable, Hashable {
     var multipleLines: Bool
     var fixedLineHeight: Bool
     var styleRuns: [StyleRun]
+    /// HyperCard's sharedText — one text on every card; false means the text
+    /// lives per card in Card.backgroundFieldContent.
+    var sharedText: Bool
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -159,7 +162,28 @@ struct FieldPart: Codable, Hashable {
         multipleLines = try c.decodeIfPresent(Bool.self, forKey: .multipleLines) ?? false
         fixedLineHeight = try c.decodeIfPresent(Bool.self, forKey: .fixedLineHeight) ?? false
         styleRuns = try c.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
+        sharedText = try c.decodeIfPresent(Bool.self, forKey: .sharedText) ?? false
     }
+}
+
+/// The per-card content of a non-sharedText background field, keyed in
+/// Card.backgroundFieldContent by the part's UUID string (app-model parity).
+struct BackgroundFieldContent: Codable, Hashable {
+    var text: String
+    var styleRuns: [StyleRun]
+
+    init(text: String = "", styleRuns: [StyleRun] = []) {
+        self.text = text
+        self.styleRuns = styleRuns
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        styleRuns = try c.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey { case text, styleRuns }
 }
 
 /// Per-run styled text — a Character offset into the field's text plus the
@@ -271,6 +295,9 @@ struct Card: Codable, Hashable {
     var cantDelete: Bool = false
     var dontSearch: Bool = false
     var highlightColor: String? = nil
+    /// This card's text for each non-sharedText background field (part UUID →
+    /// content) — the HyperCard storage model, mirrored from the app.
+    var backgroundFieldContent: [String: BackgroundFieldContent] = [:]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -284,10 +311,12 @@ struct Card: Codable, Hashable {
         cantDelete = try c.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try c.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
         highlightColor = try c.decodeIfPresent(String.self, forKey: .highlightColor)
+        backgroundFieldContent = try c.decodeIfPresent([String: BackgroundFieldContent].self, forKey: .backgroundFieldContent) ?? [:]
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, backgroundID, script, parts, scriptID, isMarked, cantDelete, dontSearch, highlightColor
+        case backgroundFieldContent
     }
     func encode(to encoder: Encoder) throws { throw EngineError("read-only") }
 

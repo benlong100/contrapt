@@ -601,8 +601,14 @@ final class DocumentScriptHost: HyperTalkHost {
     func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) throws -> String {
         let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
         let location = try locateField(reference: reference, domain: domain, cardIndex: ci)
-        guard case .field(let properties) = fieldPart(at: location).kind else {
+        let part = fieldPart(at: location)
+        guard case .field(let properties) = part.kind else {
             throw HostError("That part is not a field.")
+        }
+        // A non-sharedText background field's text is per card (the overlay);
+        // a missing entry reads empty, as in HyperCard.
+        if case .background = location, !properties.sharedText {
+            return stack.cards[ci].backgroundFieldContent[part.id.uuidString]?.text ?? ""
         }
         return properties.text
     }
@@ -610,8 +616,15 @@ final class DocumentScriptHost: HyperTalkHost {
     func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?, to text: String) throws {
         let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
         let location = try locateField(reference: reference, domain: domain, cardIndex: ci)
-        guard case .field(var properties) = fieldPart(at: location).kind else {
+        let part = fieldPart(at: location)
+        guard case .field(var properties) = part.kind else {
             throw HostError("That part is not a field.")
+        }
+        if case .background = location, !properties.sharedText {
+            var content = stack.cards[ci].backgroundFieldContent[part.id.uuidString] ?? BackgroundFieldContent()
+            content.text = text
+            stackBinding.wrappedValue.cards[ci].backgroundFieldContent[part.id.uuidString] = content
+            return
         }
         properties.text = text
         switch location {
@@ -647,10 +660,9 @@ final class DocumentScriptHost: HyperTalkHost {
                   let partIndex = index(ofKind: "field", matching: reference, in: stack.backgrounds[backgroundIndex].parts) else { return nil }
             return .background(backgroundIndex: backgroundIndex, partIndex: partIndex)
         }
-        // Honor the requested layer first, then fall back to the other.
-        // HyperCard background fields import as per-card card parts, so a
-        // `background field "X"` reference actually lives on the card — the
-        // fallback finds it (and vice versa) rather than failing.
+        // Honor the requested layer first, then fall back to the other —
+        // kept for documents from before background fields became true shared
+        // parts (their copies live on cards), and for loose references.
         if domain != .background, let found = onCard() { return found }
         if domain != .card, let found = onBackground() { return found }
         if let found = onCard() ?? onBackground() { return found }
@@ -909,7 +921,15 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     private func fieldContents(of part: Part) -> String {
-        if case .field(let properties) = part.kind { return properties.text }
+        if case .field(let properties) = part.kind {
+            // Only non-sharedText background fields have overlay entries;
+            // card fields fall through to their own text.
+            if !properties.sharedText,
+               let content = stack.cards[cardIndex].backgroundFieldContent[part.id.uuidString] {
+                return content.text
+            }
+            return properties.text
+        }
         return ""
     }
 
@@ -1335,7 +1355,10 @@ final class DocumentScriptHost: HyperTalkHost {
             guard case .field(let properties) = part.kind else { continue }
             ordinal += 1
             if let reference, !fieldMatches(part: part, ordinal: ordinal, reference: reference) { continue }
-            slots.append(FieldSlot(cardIndex: cardIndex, isBackground: isBackground, ordinal: ordinal, partID: part.id, text: properties.text))
+            let text = (isBackground && !properties.sharedText)
+                ? (stack.cards[cardIndex].backgroundFieldContent[part.id.uuidString]?.text ?? "")
+                : properties.text
+            slots.append(FieldSlot(cardIndex: cardIndex, isBackground: isBackground, ordinal: ordinal, partID: part.id, text: text))
         }
     }
 
@@ -1475,7 +1498,8 @@ final class DocumentScriptHost: HyperTalkHost {
             if property == "number" {
                 return String(ordinal(of: location, kind: kind))
             }
-            return try partProperty(property, of: part(at: location), kind: kind)
+            let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
+            return try partProperty(property, of: effectivePart(at: location, cardIndex: ci), kind: kind)
         case .card(let destination):
             let index = try resolveCardIndex(destination)
             return try cardProperty(property, cardAt: index)
@@ -1530,6 +1554,11 @@ final class DocumentScriptHost: HyperTalkHost {
         switch object {
         case .part(let kind, let domain, let reference, let onCard):
             let location = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
+            if property == "text", usesOverlay(location) {
+                let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
+                writeOverlay(text: value, partID: part(at: location).id, cardIndex: ci)
+                return
+            }
             var updated = part(at: location)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: location)
@@ -1860,7 +1889,7 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String {
         let location = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
-        guard case .field(let properties) = part(at: location).kind else {
+        guard case .field(let properties) = effectivePart(at: location, cardIndex: cardIndex).kind else {
             throw HostError("That part is not a field.")
         }
         return Self.runProperty(property, text: properties.text, base: properties.format,
@@ -1869,12 +1898,17 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func setTextRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>, to value: String) throws {
         let location = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
-        guard case .field(var properties) = part(at: location).kind else {
+        guard case .field(var properties) = effectivePart(at: location, cardIndex: cardIndex).kind else {
             throw HostError("That part is not a field.")
         }
-        properties.styleRuns = try Self.settingRuns(property, to: value, text: properties.text,
-                                                    base: properties.format, runs: properties.styleRuns,
-                                                    range: range)
+        let newRuns = try Self.settingRuns(property, to: value, text: properties.text,
+                                           base: properties.format, runs: properties.styleRuns,
+                                           range: range)
+        if usesOverlay(location) {
+            writeOverlay(runs: newRuns, partID: part(at: location).id, cardIndex: cardIndex)
+            return
+        }
+        properties.styleRuns = newRuns
         setKind(.field(properties), at: location)
     }
 
@@ -2173,6 +2207,31 @@ final class DocumentScriptHost: HyperTalkHost {
         case .background(let backgroundIndex, let partIndex):
             stack.backgrounds[backgroundIndex].parts[partIndex]
         }
+    }
+
+    /// The part as seen from a card: a non-sharedText background field carries
+    /// that card's text and runs from the overlay (missing entry = empty).
+    private func effectivePart(at location: FieldLocation, cardIndex ci: Int) -> Part {
+        var found = part(at: location)
+        guard case .background = location, case .field(var props) = found.kind, !props.sharedText else { return found }
+        let content = stack.cards[ci].backgroundFieldContent[found.id.uuidString]
+        props.text = content?.text ?? ""
+        props.styleRuns = content?.styleRuns ?? []
+        found.kind = .field(props)
+        return found
+    }
+
+    /// Whether text/runs at this location live in the per-card overlay.
+    private func usesOverlay(_ location: FieldLocation) -> Bool {
+        guard case .background = location, case .field(let props) = part(at: location).kind else { return false }
+        return !props.sharedText
+    }
+
+    private func writeOverlay(text: String? = nil, runs: [StyleRun]? = nil, partID: UUID, cardIndex ci: Int) {
+        var content = stack.cards[ci].backgroundFieldContent[partID.uuidString] ?? BackgroundFieldContent()
+        if let text { content.text = text }
+        if let runs { content.styleRuns = runs }
+        stackBinding.wrappedValue.cards[ci].backgroundFieldContent[partID.uuidString] = content
     }
 
     private func setKind(_ kind: PartKind, at location: FieldLocation) {

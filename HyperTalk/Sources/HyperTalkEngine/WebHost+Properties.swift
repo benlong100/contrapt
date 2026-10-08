@@ -18,7 +18,8 @@ extension WebHost {
         case .part(let kind, let domain, let reference, let onCard):
             let loc = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
             if property == "number" { return String(ordinal(of: loc, kind: kind)) }
-            return try partProperty(property, of: part(at: loc), kind: kind)
+            let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
+            return try partProperty(property, of: effectivePart(at: loc, cardIndex: ci), kind: kind)
         case .card(let destination):
             return try cardProperty(property, cardAt: try resolveCardIndex(destination))
         case .thisCard:
@@ -62,6 +63,11 @@ extension WebHost {
         switch object {
         case .part(let kind, let domain, let reference, let onCard):
             let loc = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
+            if property == "text", usesOverlay(loc) {
+                let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
+                writeOverlay(text: value, partID: part(at: loc).id, cardIndex: ci)
+                return
+            }
             var updated = part(at: loc)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: loc)
@@ -331,16 +337,21 @@ extension WebHost {
 
     func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String {
         let loc = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
-        guard case .field(let f) = part(at: loc).kind else { throw HostError("That part is not a field.") }
+        guard case .field(let f) = effectivePart(at: loc, cardIndex: cardIndex).kind else { throw HostError("That part is not a field.") }
         return Self.runProperty(property, text: f.text, base: f.format, runs: f.styleRuns, range: range)
     }
 
     func setTextRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>, to value: String) throws {
         let loc = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
-        var mutable = part(at: loc)
+        var mutable = effectivePart(at: loc, cardIndex: cardIndex)
         guard case .field(var f) = mutable.kind else { throw HostError("That part is not a field.") }
-        f.styleRuns = try Self.settingRuns(property, to: value, text: f.text,
+        let newRuns = try Self.settingRuns(property, to: value, text: f.text,
                                            base: f.format, runs: f.styleRuns, range: range)
+        if usesOverlay(loc) {
+            writeOverlay(runs: newRuns, partID: mutable.id, cardIndex: cardIndex)
+            return
+        }
+        f.styleRuns = newRuns
         mutable.kind = .field(f)
         setPart(mutable, at: loc)
     }
@@ -580,6 +591,31 @@ extension WebHost {
         case .card(let ci, let i): stack.cards[ci].parts[i]
         case .background(let b, let i): stack.backgrounds[b].parts[i]
         }
+    }
+
+    /// The part as seen from a card: a non-sharedText background field carries
+    /// that card's overlay text/runs (app-host parity).
+    func effectivePart(at location: PartLocation, cardIndex ci: Int) -> Part {
+        var found = part(at: location)
+        guard case .background = location, case .field(var p) = found.kind, !p.sharedText else { return found }
+        let content = stack.cards[ci].backgroundFieldContent[found.id.uuidString]
+        p.text = content?.text ?? ""
+        p.styleRuns = content?.styleRuns ?? []
+        found.kind = .field(p)
+        return found
+    }
+
+    /// Whether text/runs at this location live in the per-card overlay.
+    func usesOverlay(_ location: PartLocation) -> Bool {
+        guard case .background = location, case .field(let p) = part(at: location).kind else { return false }
+        return !p.sharedText
+    }
+
+    func writeOverlay(text: String? = nil, runs: [StyleRun]? = nil, partID: UUID, cardIndex ci: Int) {
+        var content = stack.cards[ci].backgroundFieldContent[partID.uuidString] ?? BackgroundFieldContent()
+        if let text { content.text = text }
+        if let runs { content.styleRuns = runs }
+        stack.cards[ci].backgroundFieldContent[partID.uuidString] = content
     }
 
     private func setPart(_ part: Part, at location: PartLocation) {

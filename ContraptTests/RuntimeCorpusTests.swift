@@ -179,6 +179,75 @@ import HyperTalk
 }
 
 @MainActor
+@Test func backgroundFieldsAreSharedPartsWithPerCardText() async throws {
+    // The Hacker Crackdown is a book: ONE background field holds a different
+    // page of text on every card. True shared parts mean the field exists
+    // once on the background, each card reads its own text through the
+    // overlay, and a property write propagates everywhere at once.
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/hypercard_the-hacker-crackdown"
+    guard let path = classicStackFiles(under: root).first else { return }
+    let imported = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path))
+    var stack = imported.stack
+
+    // The text background has its fields ON the background, none copied to cards.
+    let background = stack.backgrounds.max(by: { $0.parts.count < $1.parts.count })!
+    let bgFieldIDs = Set(background.parts.filter { if case .field = $0.kind { true } else { false } }.map(\.id))
+    #expect(!bgFieldIDs.isEmpty)
+    for card in stack.cards {
+        let copied = card.parts.filter { bgFieldIDs.contains($0.id) }
+        #expect(copied.isEmpty)
+    }
+
+    // Find a background field whose per-card text differs across two cards —
+    // the book's page field.
+    let cardIndices = stack.cards.indices.filter { stack.cards[$0].backgroundID == background.id }
+    let bgFields = background.parts.filter { if case .field = $0.kind { true } else { false } }
+    var pageField: Part?
+    var withText: [Int] = []
+    for field in bgFields {
+        let key = field.id.uuidString
+        let indices = cardIndices.filter { !(stack.cards[$0].backgroundFieldContent[key]?.text ?? "").isEmpty }
+        if indices.count >= 2,
+           stack.cards[indices[0]].backgroundFieldContent[key]?.text != stack.cards[indices[1]].backgroundFieldContent[key]?.text {
+            pageField = field
+            withText = indices
+            break
+        }
+    }
+    let page = try #require(pageField)
+    let fieldRef = HyperTalkObject.Reference.id(String(page.scriptID))
+    let stackBinding = Binding(get: { stack }, set: { stack = $0 })
+    func host(onCard index: Int) -> DocumentScriptHost {
+        var card = index
+        return DocumentScriptHost(
+            stack: stackBinding,
+            currentCardIndex: Binding(get: { card }, set: { card = $0 }),
+            onMessage: { _ in },
+            onAnswer: { _, buttons in buttons.first ?? "OK" },
+            onAsk: { _, initial in initial },
+            onNavigate: { _, _ in }
+        )
+    }
+    let a = try host(onCard: withText[0]).fieldText(fieldRef, domain: .background, onCard: nil)
+    let b = try host(onCard: withText[1]).fieldText(fieldRef, domain: .background, onCard: nil)
+    #expect(!a.isEmpty)
+    #expect(a != b)
+
+    // Writing text on one card doesn't bleed into another.
+    try host(onCard: withText[0]).setFieldText(fieldRef, domain: .background, onCard: nil, to: "rewritten page")
+    let aAfter = try host(onCard: withText[0]).fieldText(fieldRef, domain: .background, onCard: nil)
+    let bAfter = try host(onCard: withText[1]).fieldText(fieldRef, domain: .background, onCard: nil)
+    #expect(aAfter == "rewritten page")
+    #expect(bAfter == b)
+
+    // A property write on one card reaches every card: it's the same part.
+    let fieldObject = HyperTalkObject.part(kind: "field", domain: .background, reference: fieldRef, onCard: nil)
+    try host(onCard: withText[0]).setProperty("width", of: fieldObject, to: "123")
+    let widthElsewhere = try host(onCard: withText[1]).propertyValue("width", of: fieldObject)
+    #expect(widthElsewhere == "123")
+}
+
+@MainActor
 @Test func dumpSeanSoundsAndLine251() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
     guard let path = classicStackFiles(under: root).first else { return }
@@ -516,7 +585,16 @@ import HyperTalk
     let stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
     #expect(stack.cards.count > 1)
     let page2 = stack.cards[1]
+    // Background fields are shared parts now; a card's text lives in its
+    // backgroundFieldContent overlay, keyed by the shared part's UUID.
+    let background = stack.backgrounds.first { $0.id == page2.backgroundID }
     func text(_ card: Card, _ name: String) -> String {
+        for p in background?.parts ?? [] where p.name == name {
+            if case .field(let f) = p.kind {
+                if f.sharedText { return f.text }
+                return card.backgroundFieldContent[p.id.uuidString]?.text ?? ""
+            }
+        }
         for p in card.parts { if p.name == name, case .field(let f) = p.kind { return f.text } }
         return ""
     }

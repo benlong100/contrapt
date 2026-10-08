@@ -64,8 +64,15 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    Needs re-import.
 
 ## Priority 2 — fidelity & authoring depth
-7. Background fields as true shared parts (today: per-card copies; property
-   edits don't propagate, counts lie). Architectural; backlog notes.
+7. Background fields as true shared parts — DONE 2026-10-07: all bg fields
+   live once on Background.parts (sharedText flag imported); per-card text +
+   style runs in Card.backgroundFieldContent (UUID-keyed overlay), exactly
+   HyperCard's storage model. Host + engine text/chunk/property/find paths
+   route through the overlay; property writes propagate (same part); counts
+   are true. CardView binds bg fields through a per-card proxy. Old documents
+   with per-card copies still resolve via the lookup fallback; re-import for
+   the new model. Verified against The Hacker Crackdown (page field: shared
+   part, differing per-card text, width write visible from every card).
 8. Scripted painting (`choose <paint> tool` + `drag`/`click` drawing, paint
    globals currently ignored). PaintEditor exists; wire the tool verbs to it.
 9. show/hide card+bg pictures — DONE 2026-10-07 (60c38e1): Card/Background

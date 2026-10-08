@@ -149,14 +149,26 @@ final class WebHost: HyperTalkHost {
     func fieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) throws -> String {
         let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
         let loc = try locateField(reference: reference, domain: domain, cardIndex: ci)
-        guard case .field(let p) = fieldPart(at: loc).kind else { throw HostError("That part is not a field.") }
+        let found = fieldPart(at: loc)
+        guard case .field(let p) = found.kind else { throw HostError("That part is not a field.") }
+        // Non-sharedText background fields read this card's overlay text.
+        if case .background = loc, !p.sharedText {
+            return stack.cards[ci].backgroundFieldContent[found.id.uuidString]?.text ?? ""
+        }
         return p.text
     }
 
     func setFieldText(_ reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, onCard: GoDestination?, to text: String) throws {
         let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
         let loc = try locateField(reference: reference, domain: domain, cardIndex: ci)
-        guard case .field(var p) = fieldPart(at: loc).kind else { throw HostError("That part is not a field.") }
+        let found = fieldPart(at: loc)
+        guard case .field(var p) = found.kind else { throw HostError("That part is not a field.") }
+        if case .background = loc, !p.sharedText {
+            var content = stack.cards[ci].backgroundFieldContent[found.id.uuidString] ?? BackgroundFieldContent()
+            content.text = text
+            stack.cards[ci].backgroundFieldContent[found.id.uuidString] = content
+            return
+        }
         p.text = text
         switch loc {
         case .card(let c, let i): stack.cards[c].parts[i].kind = .field(p)
@@ -511,8 +523,11 @@ final class WebHost: HyperTalkHost {
             guard case .field(let p) = part.kind else { continue }
             ordinal += 1
             if let reference, !fieldMatches(part: part, ordinal: ordinal, reference: reference) { continue }
+            let text = (isBackground && !p.sharedText)
+                ? (stack.cards[cardIndex].backgroundFieldContent[part.id.uuidString]?.text ?? "")
+                : p.text
             slots.append(FieldSlot(cardIndex: cardIndex, isBackground: isBackground, ordinal: ordinal,
-                                   partID: part.id, scriptID: part.scriptID, text: p.text))
+                                   partID: part.id, scriptID: part.scriptID, text: text))
         }
     }
 

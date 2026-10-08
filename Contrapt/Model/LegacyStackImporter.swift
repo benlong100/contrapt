@@ -112,8 +112,10 @@ enum LegacyStackImporter {
                                      knownIDs: Set(cardBlocks.map(\.id)))
         let orderedCardBlocks = order.isEmpty ? cardBlocks : order.compactMap { cardByID[$0] }
 
-        // Backgrounds → Contrapt backgrounds (buttons only; fields become
-        // per-card, since HyperCard background fields hold per-card text).
+        // Backgrounds → Contrapt backgrounds. ALL background parts live on the
+        // background, as in HyperCard: buttons, shared-text fields, and
+        // non-shared fields alike. A non-shared field's per-card TEXT goes in
+        // each card's backgroundFieldContent overlay, keyed by the part UUID.
         var stack = Stack(formatVersion: StackFormat.currentVersion,
                           id: UUID(), name: name,
                           cardSize: CardSize(width: Double(cardWidth), height: Double(cardHeight)),
@@ -132,6 +134,9 @@ enum LegacyStackImporter {
 
         var bgInfoByID: [Int: ParsedObject] = [:]
         var bgUUIDByID: [Int: UUID] = [:]
+        // HyperCard field id → (the one shared Part's UUID, its base format),
+        // per background — the key for filling each card's content overlay.
+        var bgFieldInfoByID: [Int: [Int: (uuid: UUID, format: TextFormat)]] = [:]
         var fieldIDs = Set<Int>()
         var partIDs = Set<Int>() // all background parts (fields + buttons) — 2.x card contents key on buttons too
         for block in blocks where block.type == "BKGD" {
@@ -142,22 +147,27 @@ enum LegacyStackImporter {
             var background = Background(id: UUID(), name: parsed.name.isEmpty ? "Background \(stack.backgrounds.count + 1)" : parsed.name,
                                         script: parsed.script, parts: [])
             background.scriptID = preservedScriptID(block.id, in: &stack)
-            // Buttons live on the background, as do shared-text fields —
-            // background labels (copyright, "Home") whose one value is stored
-            // in the background block. Other fields become per-card copies.
-            background.parts = parsed.parts.compactMap { raw -> Part? in
+            // Every part lives on the background, in original z-order. A
+            // shared-text field's one value is stored in the background block;
+            // a non-shared field stays EMPTY here (its text is per card).
+            var fieldInfo: [Int: (uuid: UUID, format: TextFormat)] = [:]
+            background.parts = parsed.parts.map { raw -> Part in
                 if raw.type == .button {
                     return part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID), fonts: embeddedFonts)
                 }
-                guard raw.sharedText else { return nil }
                 var fieldPart = part(from: raw, in: &stack, fonts: embeddedFonts)
-                if case .field(var props) = fieldPart.kind, let content = parsed.contents[raw.id] {
-                    props.text = content.text
-                    props.styleRuns = resolveStyleRuns(raw, content: content, decorations: styleTable, baseFormat: props.format, fonts: embeddedFonts)
+                if case .field(var props) = fieldPart.kind {
+                    props.sharedText = raw.sharedText
+                    if raw.sharedText, let content = parsed.contents[raw.id] {
+                        props.text = content.text
+                        props.styleRuns = resolveStyleRuns(raw, content: content, decorations: styleTable, baseFormat: props.format, fonts: embeddedFonts)
+                    }
+                    fieldInfo[raw.id] = (fieldPart.id, props.format)
                     fieldPart.kind = .field(props)
                 }
                 return fieldPart
             }
+            bgFieldInfoByID[block.id] = fieldInfo
             background.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
             bgUUIDByID[block.id] = background.id
             stack.backgrounds.append(background)
@@ -173,8 +183,8 @@ enum LegacyStackImporter {
             let parsed = reader.parseObject(block, knownFieldIDs: fieldIDs, knownPartIDs: partIDs)
             let bgID = parsed.ownerBackgroundID
             let backgroundUUID = bgUUIDByID[bgID] ?? stack.backgrounds[0].id
-            // Shared-text fields already live on the background; only per-card
-            // fields are copied onto the card and filled with this card's text.
+            // All background fields live on the background now; this card's
+            // text for the non-shared ones goes in the content overlay.
             let templateFields = (bgInfoByID[bgID]?.parts ?? []).filter { $0.type == .field && !$0.sharedText }
 
             var card = Card(id: UUID(),
@@ -183,16 +193,11 @@ enum LegacyStackImporter {
             card.scriptID = preservedScriptID(block.id, in: &stack)
             card.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
 
-            // Background fields, copied onto the card and filled with this
-            // card's text (mapped by HyperCard part id).
             for template in templateFields {
-                var fieldPart = part(from: template, in: &stack, fonts: embeddedFonts)
-                if case .field(var props) = fieldPart.kind, let content = parsed.contents[template.id] {
-                    props.text = content.text
-                    props.styleRuns = resolveStyleRuns(template, content: content, decorations: styleTable, baseFormat: props.format, fonts: embeddedFonts)
-                    fieldPart.kind = .field(props)
-                }
-                card.parts.append(fieldPart)
+                guard let info = bgFieldInfoByID[bgID]?[template.id],
+                      let content = parsed.contents[template.id] else { continue }
+                let runs = resolveStyleRuns(template, content: content, decorations: styleTable, baseFormat: info.format, fonts: embeddedFonts)
+                card.backgroundFieldContent[info.uuid.uuidString] = BackgroundFieldContent(text: content.text, styleRuns: runs)
             }
             // Any card-layer parts (rare in these samples) come across too,
             // with their own content.

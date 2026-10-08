@@ -188,6 +188,28 @@ extension Background: Codable {
     }
 }
 
+/// The per-card content of a non-sharedText background field — HyperCard
+/// stores a background field ONCE (geometry, style, script) and its text per
+/// card. Keyed in Card.backgroundFieldContent by the part's UUID string.
+nonisolated struct BackgroundFieldContent: Codable, Hashable {
+    var text: String = ""
+    /// Per-card styled runs, same semantics as FieldPart.styleRuns.
+    var styleRuns: [StyleRun] = []
+
+    private enum CodingKeys: String, CodingKey { case text, styleRuns }
+
+    init(text: String = "", styleRuns: [StyleRun] = []) {
+        self.text = text
+        self.styleRuns = styleRuns
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+        styleRuns = try container.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
+    }
+}
+
 nonisolated struct Card: Identifiable, Hashable {
     var id: UUID
     var name: String
@@ -213,12 +235,17 @@ nonisolated struct Card: Identifiable, Hashable {
     /// (Adventures of Sean hides an all-black card layer over its title art,
     /// and toggles pictures for dark rooms).
     var showPicture: Bool = true
+    /// This card's text for each non-sharedText background field, keyed by the
+    /// part's UUID string — the HyperCard storage model (one shared part, text
+    /// per card). A missing key reads as empty, as in HyperCard.
+    var backgroundFieldContent: [String: BackgroundFieldContent] = [:]
 }
 
 extension Card: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, backgroundID, script, parts, paintDrawingAsset, paintImageAsset, scriptID
         case isMarked, cantDelete, dontSearch, highlightColor, showPicture
+        case backgroundFieldContent
     }
 
     init(from decoder: Decoder) throws {
@@ -236,6 +263,7 @@ extension Card: Codable {
         dontSearch = try container.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
         highlightColor = try container.decodeIfPresent(String.self, forKey: .highlightColor)
         showPicture = try container.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
+        backgroundFieldContent = try container.decodeIfPresent([String: BackgroundFieldContent].self, forKey: .backgroundFieldContent) ?? [:]
     }
 }
 
@@ -507,6 +535,11 @@ nonisolated struct FieldPart: Hashable {
     /// The scroll offset (points) of a scrolling field — HyperCard's
     /// `the scroll of field`. Persisted like HyperCard persists it.
     var scroll: Double = 0
+    /// HyperCard's sharedText: a background field whose TEXT is the same on
+    /// every card (title banners). Non-shared background fields keep their
+    /// text per card in Card.backgroundFieldContent; this flag is meaningless
+    /// on card-layer fields. Default false matches HyperCard's default.
+    var sharedText: Bool = false
     /// Per-run character styling — HyperCard's styled text (a field whose text
     /// mixes fonts/sizes/styles). Empty means the whole field uses `format`.
     /// Each run styles from its `start` (a Character offset into `text`) until
@@ -533,6 +566,7 @@ extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
         case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins, style, textHeight
         case dontWrap, autoTab, autoSelect, multipleLines, fixedLineHeight, styleRuns, scroll
+        case sharedText
     }
 
     init(from decoder: Decoder) throws {
@@ -554,6 +588,7 @@ extension FieldPart: Codable {
         fixedLineHeight = try container.decodeIfPresent(Bool.self, forKey: .fixedLineHeight) ?? false
         styleRuns = try container.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
         scroll = try container.decodeIfPresent(Double.self, forKey: .scroll) ?? 0
+        sharedText = try container.decodeIfPresent(Bool.self, forKey: .sharedText) ?? false
     }
 }
 

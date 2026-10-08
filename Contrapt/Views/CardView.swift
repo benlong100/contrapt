@@ -85,7 +85,7 @@ struct CardView: View {
                     if stack.backgrounds[backgroundIndex].showPicture {
                         paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset)
                     }
-                    partViews(for: $stack.backgrounds[backgroundIndex].parts)
+                    partViews(for: backgroundParts(backgroundIndex))
                 }
             }
             if includeCard {
@@ -99,6 +99,47 @@ struct CardView: View {
             if peekButtons { peekOverlay(frames: peekFrames(buttons: true), color: .blue) }
             if peekFields { peekOverlay(frames: peekFrames(buttons: false), color: .green) }
         }
+    }
+
+    /// Background parts as seen from the current card: a non-sharedText
+    /// background field carries THIS card's text/runs from the overlay
+    /// (HyperCard's storage model — one shared part, text per card). Edits
+    /// route text back into the overlay and everything else (geometry,
+    /// options) into the shared background part.
+    private func backgroundParts(_ backgroundIndex: Int) -> Binding<[Part]> {
+        Binding(
+            get: {
+                stack.backgrounds[backgroundIndex].parts.map { part in
+                    guard case .field(var props) = part.kind, !props.sharedText else { return part }
+                    let content = stack.cards[cardIndex].backgroundFieldContent[part.id.uuidString]
+                    props.text = content?.text ?? ""
+                    props.styleRuns = content?.styleRuns ?? []
+                    var shown = part
+                    shown.kind = .field(props)
+                    return shown
+                }
+            },
+            set: { newParts in
+                for (i, newPart) in newParts.enumerated() {
+                    guard i < stack.backgrounds[backgroundIndex].parts.count else { break }
+                    if case .field(var props) = newPart.kind, !props.sharedText {
+                        let key = newPart.id.uuidString
+                        var content = stack.cards[cardIndex].backgroundFieldContent[key] ?? BackgroundFieldContent()
+                        content.text = props.text
+                        content.styleRuns = props.styleRuns
+                        stack.cards[cardIndex].backgroundFieldContent[key] = content
+                        // The shared part stores no per-card text.
+                        props.text = ""
+                        props.styleRuns = []
+                        var shared = newPart
+                        shared.kind = .field(props)
+                        stack.backgrounds[backgroundIndex].parts[i] = shared
+                    } else {
+                        stack.backgrounds[backgroundIndex].parts[i] = newPart
+                    }
+                }
+            }
+        )
     }
 
     /// Outlines the given frames — the ⌘⌥ (buttons) / ⌘⌥⇧ (fields) peek.
