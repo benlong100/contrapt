@@ -358,6 +358,75 @@ import HyperTalk
 }
 
 @MainActor
+@Test func printVerbsProduceCardAndTextPDFs() async throws {
+    // `open printing` / `print this card` / `close printing` batches card
+    // pages into one PDF; `print field` paginates text — the dialog is a
+    // closure, so the test captures the PDF bytes instead.
+    var stack = Stack(formatVersion: StackFormat.currentVersion, id: UUID(), name: "Printed",
+                      cardSize: CardSize(width: 200, height: 150),
+                      script: "", backgrounds: [], cards: [])
+    var background = Background(id: UUID(), name: "BG", script: "", parts: [])
+    background.scriptID = stack.claimScriptID()
+    stack.backgrounds.append(background)
+    for i in 1...3 {
+        var card = Card(id: UUID(), name: "C\(i)", backgroundID: background.id, script: "", parts: [])
+        card.scriptID = stack.claimScriptID()
+        if i == 1 {
+            var field = Part(id: UUID(), name: "Notes",
+                             frame: PartFrame(x: 10, y: 10, width: 180, height: 100),
+                             script: "", kind: .field(FieldPart(text: "Hello, printer.", placeholder: "")))
+            field.scriptID = stack.claimScriptID()
+            card.parts.append(field)
+        }
+        stack.cards.append(card)
+    }
+
+    var printed: [(pdf: Data, title: String)] = []
+    var index = 0
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i },
+        onPresentPrint: { pdf, title in printed.append((pdf, title)) }
+    )
+
+    func pageCount(_ data: Data) -> Int {
+        // Count page objects without PDFKit: "/Type /Page" minus "/Pages".
+        let text = String(decoding: data, as: UTF8.self)
+        return text.components(separatedBy: "/Type /Page").count - 1
+            - (text.components(separatedBy: "/Type /Pages").count - 1)
+    }
+
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      open printing with dialog
+      print this card
+      go next card
+      print this card
+      close printing
+    end p
+    """, host: host, maxSteps: 1000)
+    try #require(printed.count == 1)
+    #expect(pageCount(printed[0].pdf) == 2)
+    #expect(printed[0].title == "Printed")
+
+    _ = try await HyperTalk.run(handler: "p", in: "on p\nprint all cards\nend p", host: host, maxSteps: 1000)
+    try #require(printed.count == 2)
+    #expect(pageCount(printed[1].pdf) == 3)
+
+    _ = try await HyperTalk.run(handler: "p", in: "on p\ngo first card\nprint card field \"Notes\"\nend p", host: host, maxSteps: 1000)
+    try #require(printed.count == 3)
+    #expect(pageCount(printed[2].pdf) == 1)
+
+    // `print <document> with <app>` stays an accepted no-op.
+    _ = try await HyperTalk.run(handler: "p", in: "on p\nprint \"report\" with \"TeachText\"\nend p", host: host, maxSteps: 1000)
+    #expect(printed.count == 3)
+}
+
+@MainActor
 @Test func dumpSeanSoundsAndLine251() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
     guard let path = classicStackFiles(under: root).first else { return }

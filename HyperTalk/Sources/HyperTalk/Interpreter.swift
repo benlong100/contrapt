@@ -1051,6 +1051,27 @@ final class Runtime {
             host.resetPaint()
             return .normal
 
+        case .openPrinting(let withDialog):
+            host.openPrinting(withDialog: withDialog)
+            return .normal
+
+        case .closePrinting:
+            host.closePrinting()
+            return .normal
+
+        case .printCards(let selection):
+            host.printCards(selection)
+            return .normal
+
+        case .printField(let objectExpression):
+            let object = try await resolveObject(objectExpression, line: statement.line)
+            guard case .part(_, let domain, let reference, let onCard) = object else {
+                throw ScriptError(line: statement.line, message: "Print expects a field.")
+            }
+            let text = try host.fieldText(reference, domain: domain, onCard: onCard)
+            host.printText(text, title: "Field")
+            return .normal
+
         case .play(let voiceExpression, let tempoExpression, let notesExpression):
             let voice = try await evaluate(voiceExpression, line: statement.line)
             var tempo = 120.0 // HyperCard's default beat

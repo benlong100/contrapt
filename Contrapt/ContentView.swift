@@ -1040,6 +1040,8 @@ struct ContentView: View {
             // `play` reads its imported sound (WAV) bytes from the document.
             assetData: { document.assets[$0] },
             onAssetWrite: { name, data in document.assets[name] = data },
+            assetsSnapshot: { document.assets },
+            onPresentPrint: { pdf, title in PrintService.present(pdf: pdf, jobTitle: title) },
             // `set the rect of card window` — the big-card-small-window crop.
             cardWindowViewport: $cardWindowViewport,
             // `create menu` … — the scripted menu bar strip.

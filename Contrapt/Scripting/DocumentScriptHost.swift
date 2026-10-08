@@ -183,6 +183,12 @@ final class DocumentScriptHost: HyperTalkHost {
     /// Stores asset bytes on the document — scripted painting writes the
     /// card's updated paint PNG through this.
     private let onAssetWrite: (String, Data) -> Void
+    /// The document's full asset table — card rendering for print needs every
+    /// paint/icon image, not single lookups.
+    private let assetsSnapshot: () -> [String: Data]
+    /// Presents a print dialog for finished PDF data (title second). The app
+    /// wires the real dialog; tests capture the bytes.
+    private let onPresentPrint: (Data, String) -> Void
 
     init(
         stack: Binding<Stack>,
@@ -200,6 +206,8 @@ final class DocumentScriptHost: HyperTalkHost {
         onCardMenu: @escaping (String) -> Void = { _ in },
         assetData: @escaping (String) -> Data? = { _ in nil },
         onAssetWrite: @escaping (String, Data) -> Void = { _, _ in },
+        assetsSnapshot: @escaping () -> [String: Data] = { [:] },
+        onPresentPrint: @escaping (Data, String) -> Void = { _, _ in },
         cardWindowViewport: Binding<CGSize?> = .constant(nil),
         menuBar: Binding<[HyperTalkMenu]> = .constant([])
     ) {
@@ -218,6 +226,8 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onCardMenu = onCardMenu
         self.assetData = assetData
         self.onAssetWrite = onAssetWrite
+        self.assetsSnapshot = assetsSnapshot
+        self.onPresentPrint = onPresentPrint
         self.cardWindowViewport = cardWindowViewport
         self.menuBar = menuBar
     }
@@ -490,6 +500,61 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     func resetPaint() { PaintSession.shared.reset() }
+
+    // MARK: - Printing
+
+    /// `open printing` batches card indexes across dispatches (the classic
+    /// loop is go/print per card, often line by line) until `close printing`.
+    final class PrintSession {
+        static let shared = PrintSession()
+        var isOpen = false
+        var queued: [Int] = []
+    }
+
+    func openPrinting(withDialog: Bool) {
+        PrintSession.shared.isOpen = true
+        PrintSession.shared.queued = []
+    }
+
+    func closePrinting() {
+        let session = PrintSession.shared
+        guard session.isOpen else { return }
+        session.isOpen = false
+        let indexes = session.queued
+        session.queued = []
+        guard !indexes.isEmpty else { return }
+        renderAndPresent(cardIndexes: indexes)
+    }
+
+    func printCards(_ selection: PrintCardSelection) {
+        let indexes: [Int]
+        switch selection {
+        case .current:
+            indexes = [cardIndex]
+        case .all:
+            indexes = Array(stack.cards.indices)
+        case .marked:
+            indexes = stack.cards.indices.filter { stack.cards[$0].isMarked }
+        case .count(let n):
+            indexes = (0..<n).map { (cardIndex + $0) % max(1, stack.cards.count) }
+        }
+        let session = PrintSession.shared
+        if session.isOpen {
+            session.queued.append(contentsOf: indexes)
+        } else {
+            renderAndPresent(cardIndexes: indexes)
+        }
+    }
+
+    func printText(_ text: String, title: String) {
+        guard let pdf = PrintService.pdfData(text: text, title: title) else { return }
+        onPresentPrint(pdf, title.isEmpty ? stack.name : title)
+    }
+
+    private func renderAndPresent(cardIndexes: [Int]) {
+        guard let pdf = PrintService.pdfData(stack: stack, assets: assetsSnapshot(), cardIndexes: cardIndexes) else { return }
+        onPresentPrint(pdf, stack.name)
+    }
 
     /// `drag from … to …` with a paint tool: a scripted stroke on the current
     /// card's paint layer. (With any other tool, drag synthesis is unmodeled.)

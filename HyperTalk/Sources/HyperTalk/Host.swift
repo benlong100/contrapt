@@ -460,6 +460,14 @@ public protocol HyperTalkHost: AnyObject {
     func setPaintSetting(_ name: String, to value: String) -> Bool
     /// `reset paint` — paint globals back to HyperCard defaults.
     func resetPaint()
+    /// `open printing [with dialog]` — start batching `print card` calls.
+    func openPrinting(withDialog: Bool)
+    /// `close printing` — print the batched cards.
+    func closePrinting()
+    /// `print [this] card` / `all cards` / `marked cards` / `n cards`.
+    func printCards(_ selection: PrintCardSelection)
+    /// `print field <ref>` — the field's text as a document.
+    func printText(_ text: String, title: String)
     /// `the tool` — the chosen tool's name, e.g. "browse tool". Optional.
     func currentToolName() -> String
     /// `the sound` — the playing voice's name, or "done" when idle. Optional;
@@ -560,6 +568,12 @@ public extension HyperTalkHost {
     }
     func setPaintSetting(_ name: String, to value: String) -> Bool { false }
     func resetPaint() {}
+
+    /// Hosts without a printer accept print verbs silently.
+    func openPrinting(withDialog: Bool) {}
+    func closePrinting() {}
+    func printCards(_ selection: PrintCardSelection) {}
+    func printText(_ text: String, title: String) {}
     func currentToolName() -> String { "browse tool" }
 }
 

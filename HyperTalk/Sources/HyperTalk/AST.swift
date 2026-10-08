@@ -155,6 +155,16 @@ indirect enum StmtKind {
     case drag(fromH: Expr, fromV: Expr?, toH: Expr, toV: Expr?)
     /// `reset paint` — paint globals back to defaults.
     case resetPaint
+    /// `open printing [with dialog]` — start a print session batching every
+    /// `print card` until `close printing`.
+    case openPrinting(withDialog: Bool)
+    // (PrintCardSelection is declared at file scope below StmtKind.)
+    case closePrinting
+    /// `print [this] card` / `print all cards` / `print marked cards` /
+    /// `print <n> cards`.
+    case printCards(PrintCardSelection)
+    /// `print [card|bkgnd] field <ref>` — the field's text.
+    case printField(ObjectExpr)
     /// `choose <name> tool` — switch the scripting tool. With the button or
     /// field tool chosen, `click at` *selects* the part under the point (for
     /// `doMenu "Clear Button"`) instead of clicking it; `choose browse tool`
@@ -469,4 +479,13 @@ enum BinaryOp {
 enum UnaryOp {
     case minus
     case not
+}
+
+/// Which cards `print` renders.
+public enum PrintCardSelection: Sendable, Equatable {
+    case current
+    case all
+    case marked
+    /// This card and the next n-1 in order.
+    case count(Int)
 }

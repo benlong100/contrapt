@@ -553,25 +553,76 @@ struct Parser {
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
+        case "print":
+            // `print [this] card`, `print all/marked cards`, `print <n> cards`,
+            // `print [card|bkgnd] field <ref>` — real printing. Anything else
+            // (`print <document> with <app>`) is accepted and ignored.
+            advance()
+            if peekIdentifier() == "all", peekIdentifier(1) == "cards" {
+                advance(); advance()
+                try expectNewline()
+                return Stmt(kind: .printCards(.all), line: line)
+            }
+            if peekIdentifier() == "marked", peekIdentifier(1) == "cards" {
+                advance(); advance()
+                try expectNewline()
+                return Stmt(kind: .printCards(.marked), line: line)
+            }
+            if case .number(let n) = current.kind, peekIdentifier(1) == "cards" {
+                advance(); advance()
+                try expectNewline()
+                return Stmt(kind: .printCards(.count(max(1, Int(n)))), line: line)
+            }
+            if let word = peekIdentifier(),
+               ["field", "fld"].contains(word)
+                || (["card", "cd", "background", "bkgnd", "bg"].contains(word)
+                    && ["field", "fld"].contains(peekIdentifier(1) ?? "")) {
+                let object = try parseObjectExpr()
+                try expectNewline()
+                return Stmt(kind: .printField(object), line: line)
+            }
+            if peekIdentifier() == "this" || peekIdentifier() == "card" || peekIdentifier() == "cd" {
+                _ = consumeWord("this")
+                _ = consumeWord("card") || consumeWord("cd")
+                if current.kind == .newline || current.kind == .endOfScript {
+                    try expectNewline()
+                    return Stmt(kind: .printCards(.current), line: line)
+                }
+            }
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
         case "open":
-            // `open file <path>` starts file I/O. Other opens (`open printing`,
-            // `open <document> with <app>`) are accepted and ignored.
+            // `open file <path>` starts file I/O; `open printing [with dialog]`
+            // starts a print session. Other opens (`open <doc> with <app>`)
+            // are accepted and ignored.
             advance()
             if consumeWord("file") {
                 let path = try parseExpression()
                 try expectNewline()
                 return Stmt(kind: .openFile(path), line: line)
             }
+            if consumeWord("printing") {
+                var withDialog = false
+                if consumeWord("with") { withDialog = consumeWord("dialog") }
+                try expectNewline()
+                return Stmt(kind: .openPrinting(withDialog: withDialog), line: line)
+            }
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
         case "close":
-            // `close file <path>`; `close printing`/`close window …` no-op.
+            // `close file <path>`; `close printing` ends (and prints) the
+            // session; `close window …` no-ops.
             advance()
             if consumeWord("file") {
                 let path = try parseExpression()
                 try expectNewline()
                 return Stmt(kind: .closeFile(path), line: line)
+            }
+            if consumeWord("printing") {
+                try expectNewline()
+                return Stmt(kind: .closePrinting, line: line)
             }
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()

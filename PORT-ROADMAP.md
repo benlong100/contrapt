@@ -102,8 +102,16 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
     CardState carries enabled/scroll/showPicture/menus/viewport; wasm
     rebuilt (18 MB; stale .build had broken the build — rm -rf WasmPlayer/
     .build fixes toolchain/SDK module errors).
-12. Printing (`print card/field`, `open/close report printing`) — decide
-    no-op-with-dialog vs real PDF printing.
+12. Printing — DONE 2026-10-07 (real PDF printing): `print [this] card`,
+    `print all/marked/<n> cards`, `print [card|bkgnd] field <ref>`, and
+    `open printing [with dialog]` … `close printing` batching across
+    dispatches. Cards render offscreen (ImageRenderer over the real CardView,
+    2x) into a one-page-per-card PDF at card size; field text paginates via
+    CoreText (US Letter, 1" margins). The dialog is PDFKit's print operation
+    (macOS) / UIPrintInteractionController (iOS), reached through an
+    onPresentPrint closure — tests capture the PDF and assert page counts.
+    `print <doc> with <app>` stays an accepted no-op. NOT YET LIVE-TESTED by
+    Ben — print dialog behavior unverified on real hardware/printers.
 13. `type`/`drag` as real input synthesis in browse mode (now no-ops).
 
 ## Priority 3 — long tail / environment
