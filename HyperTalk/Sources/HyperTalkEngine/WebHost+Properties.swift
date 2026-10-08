@@ -37,6 +37,7 @@ extension WebHost {
             case "script": return bg.script
             case "cantdelete": return bg.cantDelete ? "true" : "false"
             case "dontsearch": return bg.dontSearch ? "true" : "false"
+            case "showpict", "showbgpict": return bg.showPicture ? "true" : "false"
             default: throw Self.noSuchProperty(property, of: "this background")
             }
         case .thisStack:
@@ -84,6 +85,7 @@ extension WebHost {
             case "name": stack.backgrounds[i].name = value
             case "cantdelete": stack.backgrounds[i].cantDelete = try boolean(value, for: property)
             case "dontsearch": stack.backgrounds[i].dontSearch = try boolean(value, for: property)
+            case "showpict", "showbgpict": stack.backgrounds[i].showPicture = try boolean(value, for: property)
             default: throw Self.noSuchProperty(property, of: "this background")
             }
         case .thisStack:
@@ -181,10 +183,10 @@ extension WebHost {
             guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.fixedLineHeight ? "true" : "false"
         case "enabled":
-            return "true" // disabled parts aren't modeled
+            return part.isEnabled ? "true" : "false"
         case "scroll":
-            guard case .field = part.kind else { throw Self.noSuchProperty(property, of: kind) }
-            return "0" // scroll offset isn't tracked
+            guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.scroll == p.scroll.rounded() ? String(Int(p.scroll)) : String(p.scroll)
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -194,7 +196,7 @@ extension WebHost {
         switch property {
         case "name": part.name = value
         case "visible": part.isVisible = try boolean(value, for: property)
-        case "enabled": break // disabled parts aren't modeled in the web player yet
+        case "enabled": part.isEnabled = try boolean(value, for: property)
         case "width": part.frame.width = max(16, try number(value, for: property))
         case "height": part.frame.height = max(16, try number(value, for: property))
         case "left": part.frame.x = try number(value, for: property)
@@ -279,8 +281,9 @@ extension WebHost {
         case "sharedtext":
             // Accepted and ignored — background fields inherently share text.
             _ = try boolean(value, for: property)
-        case "scroll", "enabled":
-            break // not modeled (field scroll offset; disabled part) — ignore
+        case "scroll":
+            let offset = max(0, try number(value, for: property))
+            try withField(&part, kind: kind) { $0.scroll = offset }
         default:
             throw Self.noSuchProperty(property, of: kind)
         }
@@ -457,9 +460,7 @@ extension WebHost {
         case "marked": return card.isMarked ? "true" : "false"
         case "cantdelete": return card.cantDelete ? "true" : "false"
         case "dontsearch": return card.dontSearch ? "true" : "false"
-        // The card picture is always shown (Contrapt doesn't model hiding the
-        // paint layer); `showPict` reads true and setting it is a no-op.
-        case "showpict": return "true"
+        case "showpict": return stack.cards[index].showPicture ? "true" : "false"
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }
@@ -471,7 +472,7 @@ extension WebHost {
         case "cantdelete": stack.cards[index].cantDelete = try boolean(value, for: property)
         case "dontsearch": stack.cards[index].dontSearch = try boolean(value, for: property)
         case "highlightcolor": stack.cards[index].highlightColor = value.isEmpty ? nil : value
-        case "showpict": break // the paint layer is always shown — no-op
+        case "showpict": stack.cards[index].showPicture = try boolean(value, for: property)
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }

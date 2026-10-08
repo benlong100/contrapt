@@ -33,11 +33,57 @@ final class WebHost: HyperTalkHost {
     var interaction: EngineInteraction
 
     // Session state.
+    /// The scripted menu bar (`create menu` / `put … into menu`) — rendered by
+    /// the page as a strip, like the app's.
+    var scriptedMenus: [HyperTalkMenu] = []
+    /// The card-window viewport (`set the rect/width/height of card window`):
+    /// nil shows the whole card; a size crops it, as in the app.
+    var cardWindowViewport: (width: Double, height: Double)?
     private var globals: [String: String] = [:]
     private var backStack: [String] = []      // push/pop card
     private var history: [String] = []         // go back
     private var findState = FindState()
     private var sortContextIndex: Int?
+
+    func menuBarSnapshot() -> [HyperTalkMenu] { scriptedMenus }
+    func updateMenuBar(_ menus: [HyperTalkMenu]) { scriptedMenus = menus }
+
+    func windowProperty(_ property: String, window: String) -> String? {
+        guard window == "card" || window == "cd" else { return nil }
+        let width = cardWindowViewport?.width ?? stack.cardSize.width
+        let height = cardWindowViewport?.height ?? stack.cardSize.height
+        switch property {
+        case "rect", "rectangle": return "0,0,\(Int(width)),\(Int(height))"
+        case "width": return String(Int(width))
+        case "height": return String(Int(height))
+        case "scroll": return "0,0"
+        default: return nil
+        }
+    }
+
+    func setWindowProperty(_ property: String, window: String, to value: String) throws {
+        guard window == "card" || window == "cd" else { return }
+        func apply(width: Double, height: Double) {
+            // A viewport at least the card's size means no crop.
+            if width >= stack.cardSize.width, height >= stack.cardSize.height {
+                cardWindowViewport = nil
+            } else {
+                cardWindowViewport = (max(64, width), max(64, height))
+            }
+        }
+        let numbers = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        switch property {
+        case "rect", "rectangle":
+            guard numbers.count == 4 else { return }
+            apply(width: numbers[2] - numbers[0], height: numbers[3] - numbers[1])
+        case "width" where numbers.count == 1:
+            apply(width: numbers[0], height: cardWindowViewport?.height ?? stack.cardSize.height)
+        case "height" where numbers.count == 1:
+            apply(width: cardWindowViewport?.width ?? stack.cardSize.width, height: numbers[0])
+        default:
+            break
+        }
+    }
 
     init(stack: Stack, interaction: EngineInteraction = EngineInteraction()) {
         self.stack = stack

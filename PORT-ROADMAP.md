@@ -93,8 +93,15 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
     then ICN# (icon+mask). Pinned: Oblique Strategies' ICN# imports;
     synthetic cicn decodes red/white. Follow-up: nothing known — revisit if a
     stack ships SICN/ics# small icons.
-11. Web-player parity batch: `enabled` graying, missing-icon fallback,
-    card-window viewport, scroll of field (once native lands).
+11. Web-player parity batch — DONE 2026-10-07: enabled graying (+ clicks
+    blocked), missing-icon placeholder (resource missing or asset 404),
+    scrolling fields (overflow + stored scroll + live `set the scroll`),
+    per-chunk style-run rendering (spans, locked fields), `show/hide picture`
+    (real engine state + paint toggling), scripted menu strip (create menu →
+    dropdown bar; doMenu dispatch), card-window viewport crop. Engine
+    CardState carries enabled/scroll/showPicture/menus/viewport; wasm
+    rebuilt (18 MB; stale .build had broken the build — rm -rf WasmPlayer/
+    .build fixes toolchain/SDK module errors).
 12. Printing (`print card/field`, `open/close report printing`) — decide
     no-op-with-dialog vs real PDF printing.
 13. `type`/`drag` as real input synthesis in browse mode (now no-ops).

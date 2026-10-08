@@ -129,7 +129,15 @@ public final class StackEngine {
             cardScriptID: card.scriptID,
             cardName: card.name,
             backgroundParts: stamped(background?.parts ?? []),
-            cardParts: stamped(card.parts)
+            cardParts: stamped(card.parts),
+            cardShowPicture: card.showPicture,
+            backgroundShowPicture: background?.showPicture ?? true,
+            menus: host.scriptedMenus.map { menu in
+                MenuState(name: menu.name, enabled: menu.enabled,
+                          items: menu.items.map { .init(name: $0.name, enabled: $0.enabled, checkMark: $0.checkMark) })
+            },
+            viewportWidth: host.cardWindowViewport?.width,
+            viewportHeight: host.cardWindowViewport?.height
         )
     }
 
@@ -185,9 +193,10 @@ public final class StackEngine {
     private static func render(_ part: Part) -> RenderPart {
         var text: String?
         var hilite: Bool?
+        var scroll: Double?
         switch part.kind {
         case .button(let b): text = b.showName ? b.title : ""; hilite = b.hilite
-        case .field(let f): text = f.text
+        case .field(let f): text = f.text; scroll = f.scroll
         case .label(let l): text = l.text
         case .image: text = nil
         }
@@ -197,8 +206,10 @@ public final class StackEngine {
             name: part.name,
             x: part.frame.x, y: part.frame.y, width: part.frame.width, height: part.frame.height,
             visible: part.isVisible,
+            enabled: part.isEnabled,
             text: text,
-            hilite: hilite
+            hilite: hilite,
+            scroll: scroll
         )
     }
 }
@@ -211,6 +222,27 @@ public struct CardState: Codable, Equatable, Sendable {
     public let cardName: String
     public let backgroundParts: [RenderPart]
     public let cardParts: [RenderPart]
+    /// `show/hide [background] picture` — whether each paint layer draws.
+    public let cardShowPicture: Bool
+    public let backgroundShowPicture: Bool
+    /// The scripted menu bar, rendered by the page as a strip.
+    public let menus: [MenuState]
+    /// The card-window viewport crop; nil shows the whole card.
+    public let viewportWidth: Double?
+    public let viewportHeight: Double?
+}
+
+/// A scripted menu, serialized for the page's menu strip.
+public struct MenuState: Codable, Equatable, Sendable {
+    public let name: String
+    public let enabled: Bool
+    public let items: [Item]
+
+    public struct Item: Codable, Equatable, Sendable {
+        public let name: String
+        public let enabled: Bool
+        public let checkMark: Bool
+    }
 }
 
 /// The mutable, script-visible bits of a part the page re-reads after each
@@ -225,8 +257,12 @@ public struct RenderPart: Codable, Equatable, Sendable {
     public let width: Double
     public let height: Double
     public let visible: Bool
+    /// `enable`/`disable` — a disabled part grays and ignores clicks.
+    public let enabled: Bool
     public let text: String?
     public let hilite: Bool?
+    /// A scrolling field's current offset (`the scroll of field`).
+    public let scroll: Double?
     /// The script selection's character range when it lies in this field
     /// (`select line 2 of field 1`); nil otherwise.
     public var selStart: Int?

@@ -39,11 +39,16 @@ private let twoBGJSON = """
     #expect(e.drainEffects().contains(.message("2,1")))
 }
 
-@Test func showPictOfCardReadsTrueAndSetIsNoOp() async throws {
+@Test func showPictOfCardIsRealState() async throws {
+    // Web parity with the app: `hide picture` state is modeled, not a no-op,
+    // and the page reads it from CardState to blank the paint layer.
     let e = try StackEngine(stackJSON: twoBGJSON)
     #expect(try await e.runMessage("the showPict of card 1") == "true")
-    _ = try await e.runMessage("set the showPict of this card to false") // no-op, no throw
-    #expect(try await e.runMessage("the showPict of this card") == "true")
+    _ = try await e.runMessage("set the showPict of this card to false")
+    #expect(try await e.runMessage("the showPict of this card") == "false")
+    #expect(e.currentCardState().cardShowPicture == false)
+    _ = try await e.runMessage("set the showPict of this card to true")
+    #expect(e.currentCardState().cardShowPicture == true)
 }
 
 @Test func anyChunkPicksAMember() async throws {

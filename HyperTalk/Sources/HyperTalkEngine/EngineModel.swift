@@ -112,6 +112,9 @@ struct ButtonPart: Codable, Hashable {
     var hilite: Bool
     var format: TextFormat
     var iconAsset: String?
+    /// The button wants an icon the import couldn't find — the player shows a
+    /// placeholder instead of nothing.
+    var iconMissing: Bool
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -122,6 +125,7 @@ struct ButtonPart: Codable, Hashable {
         hilite = try c.decodeIfPresent(Bool.self, forKey: .hilite) ?? false
         format = try c.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
         iconAsset = try c.decodeIfPresent(String.self, forKey: .iconAsset)
+        iconMissing = try c.decodeIfPresent(Bool.self, forKey: .iconMissing) ?? false
     }
 }
 
@@ -144,6 +148,8 @@ struct FieldPart: Codable, Hashable {
     /// HyperCard's sharedText — one text on every card; false means the text
     /// lives per card in Card.backgroundFieldContent.
     var sharedText: Bool
+    /// `the scroll of field` — scrolling fields' offset in points.
+    var scroll: Double
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -163,6 +169,7 @@ struct FieldPart: Codable, Hashable {
         fixedLineHeight = try c.decodeIfPresent(Bool.self, forKey: .fixedLineHeight) ?? false
         styleRuns = try c.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
         sharedText = try c.decodeIfPresent(Bool.self, forKey: .sharedText) ?? false
+        scroll = try c.decodeIfPresent(Double.self, forKey: .scroll) ?? 0
     }
 }
 
@@ -221,12 +228,13 @@ struct Part: Hashable {
     var script: String
     var kind: PartKind
     var isVisible: Bool = true
+    var isEnabled: Bool = true
     var scriptID: Int = 0
 }
 
 extension Part: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, name, frame, script, type, button, field, label, image, visible, scriptID
+        case id, name, frame, script, type, button, field, label, image, visible, scriptID, enabled
     }
 
     init(from decoder: Decoder) throws {
@@ -236,6 +244,7 @@ extension Part: Codable {
         frame = try c.decode(PartFrame.self, forKey: .frame)
         script = try c.decodeIfPresent(String.self, forKey: .script) ?? ""
         isVisible = try c.decodeIfPresent(Bool.self, forKey: .visible) ?? true
+        isEnabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         scriptID = try c.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
         switch try c.decode(String.self, forKey: .type) {
         case "button": kind = .button(try c.decode(ButtonPart.self, forKey: .button))
@@ -264,6 +273,8 @@ struct Background: Codable, Hashable {
     var scriptID: Int = 0
     var cantDelete: Bool = false
     var dontSearch: Bool = false
+    /// `show/hide background picture` — whether the paint layer draws.
+    var showPicture: Bool = true
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -274,9 +285,10 @@ struct Background: Codable, Hashable {
         scriptID = try c.decodeIfPresent(Int.self, forKey: .scriptID) ?? 0
         cantDelete = try c.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try c.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
+        showPicture = try c.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, script, parts, scriptID, cantDelete, dontSearch }
+    private enum CodingKeys: String, CodingKey { case id, name, script, parts, scriptID, cantDelete, dontSearch, showPicture }
     func encode(to encoder: Encoder) throws { throw EngineError("read-only") }
 
     init(id: UUID, name: String, script: String, parts: [Part]) {
@@ -295,6 +307,8 @@ struct Card: Codable, Hashable {
     var cantDelete: Bool = false
     var dontSearch: Bool = false
     var highlightColor: String? = nil
+    /// `show/hide [card] picture` — whether the paint layer draws.
+    var showPicture: Bool = true
     /// This card's text for each non-sharedText background field (part UUID →
     /// content) — the HyperCard storage model, mirrored from the app.
     var backgroundFieldContent: [String: BackgroundFieldContent] = [:]
@@ -311,12 +325,13 @@ struct Card: Codable, Hashable {
         cantDelete = try c.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try c.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
         highlightColor = try c.decodeIfPresent(String.self, forKey: .highlightColor)
+        showPicture = try c.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
         backgroundFieldContent = try c.decodeIfPresent([String: BackgroundFieldContent].self, forKey: .backgroundFieldContent) ?? [:]
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, backgroundID, script, parts, scriptID, isMarked, cantDelete, dontSearch, highlightColor
-        case backgroundFieldContent
+        case backgroundFieldContent, showPicture
     }
     func encode(to encoder: Encoder) throws { throw EngineError("read-only") }
 

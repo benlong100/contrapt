@@ -138,6 +138,25 @@ extension WebsiteExporter {
       .button.shadow { box-shadow: 3px 3px 0 rgba(0,0,0,.5); }
       .button.hilite { background: #000; color: #fff; }
       .button .icon { image-rendering: pixelated; }
+      .button .icon-missing { width: 24px; height: 24px; border: 1px dashed #999;
+        border-radius: 4px; flex: none; }
+      .part.disabled { opacity: .4; pointer-events: none; }
+      .field.scrolling { overflow-y: auto; border: 1px solid #000; background: #fff; }
+      #menus { position: absolute; top: 0; left: 0; right: 0; height: 28px;
+        display: none; align-items: center; gap: 18px; padding: 0 12px;
+        background: #fff; border-bottom: 1px solid #000; font-size: 14px;
+        z-index: 5; user-select: none; }
+      body.has-menus #menus { display: flex; }
+      body.has-menus #stage { top: 28px; }
+      #menus .menu { position: relative; cursor: default; }
+      #menus .menu.disabled { color: #999; pointer-events: none; }
+      #menus .menu .drop { display: none; position: absolute; top: 24px; left: -8px;
+        min-width: 160px; background: #fff; border: 1px solid #000;
+        box-shadow: 2px 2px 0 rgba(0,0,0,.4); padding: 4px 0; }
+      #menus .menu.open .drop { display: block; }
+      #menus .drop .item { padding: 3px 18px; white-space: nowrap; }
+      #menus .drop .item:hover { background: #000; color: #fff; }
+      #menus .drop .item.disabled { color: #999; pointer-events: none; }
       .label { display: flex; align-items: center; }
       #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 64px;
         display: flex; align-items: center; gap: 12px; padding: 0 16px;
@@ -165,6 +184,7 @@ extension WebsiteExporter {
     </style>
     </head>
     <body>
+      <div id="menus"></div>
       <div id="stage"><div id="card"></div></div>
       <div id="bar">
         <button id="prev">‹ Prev</button>
@@ -296,6 +316,34 @@ extension WebsiteExporter {
         }
         return ranges;
       }
+      function missingIconBox() {
+        const box = document.createElement('div');
+        box.className = 'icon-missing';
+        box.title = 'Icon not available';
+        return box;
+      }
+      // Styled text runs (per-chunk textFont/textSize/textStyle) as spans:
+      // the base format covers any gap before the first run; each run styles
+      // from its start to the next run's start.
+      function setRunStyledText(el, text, runs, baseFormat) {
+        el.textContent = '';
+        const sorted = runs.slice().sort((a, b) => a.start - b.start);
+        let cursor = 0;
+        function emit(upTo, fmt) {
+          if (upTo <= cursor) return;
+          const span = document.createElement('span');
+          styleText(span, fmt);
+          span.style.display = 'inline';
+          span.textContent = text.slice(cursor, upTo);
+          el.appendChild(span);
+          cursor = upTo;
+        }
+        for (let i = 0; i < sorted.length; i++) {
+          emit(Math.min(sorted[i].start, text.length), i === 0 ? baseFormat : sorted[i - 1].format);
+          if (cursor >= text.length) return;
+        }
+        emit(text.length, sorted.length ? sorted[sorted.length - 1].format : baseFormat);
+      }
       function paint(asset) {
         if (!asset) return null;
         const im = document.createElement('img');
@@ -311,6 +359,7 @@ extension WebsiteExporter {
         if (p.scriptID != null) { d.dataset.scriptId = p.scriptID; partEls[p.scriptID] = d; }
         d.style.left = p.frame.x + 'px'; d.style.top = p.frame.y + 'px';
         d.style.width = p.frame.width + 'px'; d.style.height = p.frame.height + 'px';
+        if (p.enabled === false) d.classList.add('disabled');
         if (p.visible === false) { d.style.display = 'none'; return d; }
         if (p.type === 'field') {
           const f = p.field || {};
@@ -320,7 +369,17 @@ extension WebsiteExporter {
           // stacks (the Tour) keep their vertical layout.
           if (f.textHeight) d.style.lineHeight = f.textHeight + 'px';
           const perCard = overlay && !f.sharedText ? overlay[p.id] : null;
-          d.textContent = (perCard ? perCard.text : f.text) || '';
+          const text = (perCard ? perCard.text : f.text) || '';
+          const runs = perCard ? (perCard.styleRuns || []) : (f.styleRuns || []);
+          // Styled runs render as spans in LOCKED fields (editable fields stay
+          // plain text so contentEditable editing isn't fighting markup).
+          if (runs.length && f.lockText) setRunStyledText(d, text, runs, f.format);
+          else d.textContent = text;
+          // A scrolling field starts at its stored scroll offset (layout must
+          // exist first, hence the frame callback).
+          if (f.style === 'scrolling' && f.scroll) {
+            requestAnimationFrame(() => { d.scrollTop = f.scroll; });
+          }
           // HyperCard "group" text style: the character ranges that click as a
           // unit, so the click handler can return the whole run as clickText
           // (the clickable-phrase navigation idiom). Stashed per-field.
@@ -335,7 +394,12 @@ extension WebsiteExporter {
           if (b.iconAsset) {
             const im = document.createElement('img');
             im.className = 'icon'; im.src = 'assets/' + b.iconAsset;
+            // A missing asset file degrades to the same placeholder as a
+            // missing icon resource.
+            im.onerror = () => { im.replaceWith(missingIconBox()); };
             d.appendChild(im);
+          } else if (b.iconMissing) {
+            d.appendChild(missingIconBox());
           }
           if (b.showName !== false && b.title) {
             const t = document.createElement('span'); t.textContent = b.title;
@@ -363,10 +427,20 @@ extension WebsiteExporter {
         const layer = document.createElement('div');
         layer.className = 'layer';
         if (bg) {
-          const bp = paint(bg.paintImageAsset); if (bp) layer.appendChild(bp);
+          const bp = paint(bg.paintImageAsset);
+          if (bp) {
+            bp.classList.add('bg-paint');
+            if (bg.showPicture === false) bp.style.display = 'none';
+            layer.appendChild(bp);
+          }
           (bg.parts || []).forEach(p => layer.appendChild(renderPart(p, card.backgroundFieldContent || {})));
         }
-        const cp = paint(card.paintImageAsset); if (cp) layer.appendChild(cp);
+        const cp = paint(card.paintImageAsset);
+        if (cp) {
+          cp.classList.add('card-paint');
+          if (card.showPicture === false) cp.style.display = 'none';
+          layer.appendChild(cp);
+        }
         (card.parts || []).forEach(p => layer.appendChild(renderPart(p)));
         return layer;
       }
@@ -523,6 +597,11 @@ extension WebsiteExporter {
           const el = partEls[rp.scriptID];
           if (!el) return;
           el.style.display = rp.visible === false ? 'none' : '';
+          el.classList.toggle('disabled', rp.enabled === false);
+          if (rp.kind === 'field' && rp.scroll != null && el !== document.activeElement
+              && Math.abs(el.scrollTop - rp.scroll) > 1) {
+            el.scrollTop = rp.scroll;
+          }
           if (rp.kind === 'field' || rp.kind === 'label') {
             // Never clobber the field the visitor is typing in.
             if (el === document.activeElement) return;
@@ -546,6 +625,68 @@ extension WebsiteExporter {
             if (span) span.textContent = rp.text || '';
           }
         });
+        // `show/hide picture` — blank the paint layers without a re-render.
+        const layer = Array.from(root.querySelectorAll('.layer')).pop();
+        if (layer) {
+          const cardPaint = layer.querySelector('.card-paint');
+          if (cardPaint) cardPaint.style.display = state.cardShowPicture === false ? 'none' : '';
+          const bgPaint = layer.querySelector('.bg-paint');
+          if (bgPaint) bgPaint.style.display = state.backgroundShowPicture === false ? 'none' : '';
+        }
+        renderMenus(state.menus || []);
+        applyViewport(state.viewportWidth, state.viewportHeight);
+      }
+
+      // The scripted menu strip (`create menu` / `put … into menu`), same
+      // placement as the app's: above the card. An item click dispatches
+      // doMenu through the engine.
+      function renderMenus(menus) {
+        const strip = document.getElementById('menus');
+        document.body.classList.toggle('has-menus', menus.length > 0);
+        const signature = JSON.stringify(menus);
+        if (strip.dataset.signature === signature) return;
+        strip.dataset.signature = signature;
+        strip.textContent = '';
+        menus.forEach(menu => {
+          const m = document.createElement('div');
+          m.className = 'menu' + (menu.enabled === false ? ' disabled' : '');
+          m.appendChild(document.createTextNode(menu.name));
+          const drop = document.createElement('div');
+          drop.className = 'drop';
+          (menu.items || []).forEach(item => {
+            const el = document.createElement('div');
+            el.className = 'item' + (item.enabled === false ? ' disabled' : '');
+            el.textContent = (item.checkMark ? '✓ ' : '') + item.name;
+            if (item.name === '-') { el.textContent = '—'; el.className += ' disabled'; }
+            el.onclick = ev => {
+              ev.stopPropagation();
+              m.classList.remove('open');
+              if (engine) handle(engine.message('doMenu "' + item.name.replace(/"/g, '') + '"'));
+            };
+            drop.appendChild(el);
+          });
+          m.appendChild(drop);
+          m.onclick = () => {
+            const wasOpen = m.classList.contains('open');
+            strip.querySelectorAll('.menu.open').forEach(x => x.classList.remove('open'));
+            if (!wasOpen) m.classList.add('open');
+          };
+          strip.appendChild(m);
+        });
+      }
+      document.addEventListener('click', ev => {
+        if (!ev.target.closest('#menus')) {
+          document.querySelectorAll('#menus .menu.open').forEach(x => x.classList.remove('open'));
+        }
+      });
+
+      // The card-window viewport crop (`set the rect of card window`): the
+      // card element shrinks to the viewport, clipping the oversized card at
+      // its top-left — the classic big-card-small-window idiom.
+      function applyViewport(width, height) {
+        const vw = width || W, vh = height || H;
+        root.style.width = vw + 'px';
+        root.style.height = vh + 'px';
       }
 
       function applyEffects(effects) {
