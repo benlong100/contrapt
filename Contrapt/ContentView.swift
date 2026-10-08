@@ -248,6 +248,16 @@ struct ContentView: View {
 
     /// Runs the clicked item as a `doMenu` statement in the current card's
     /// context — trapping handlers and menuMessages behave as in HyperCard.
+    /// Says WHAT the file dialog is hunting for — "Where is Sean's World II
+    /// Help?", as real HyperCard asks. One message modifier serves both
+    /// importers on this view; pendingGoStack tells us which dialog is up.
+    private var fileDialogMessageText: Text {
+        if let pending = pendingGoStack {
+            return Text("Where is \u{201C}\(pending.name)\u{201D}? Choose the folder that contains it.")
+        }
+        return Text("Choose an image.")
+    }
+
     private func performCustomMenuItem(_ itemName: String) {
         let host = makeHost()
         let path = scriptPath(cardAt: cardIndex, part: nil)
@@ -575,6 +585,7 @@ struct ContentView: View {
                 scriptErrorText = "Couldn't find a stack named \"\(pending.name)\" in that folder."
             }
         }
+        .fileDialogMessage(fileDialogMessageText)
         .toolbar { mainToolbar }
         // ⌘↑ also jumps to the first card (the Go menu advertises ⌘1); a hidden
         // shortcut keeps the arrow binding without a duplicate menu item.
