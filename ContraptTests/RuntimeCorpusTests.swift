@@ -585,6 +585,26 @@ import HyperTalk
 }
 
 @MainActor
+@Test func paintTextGlobalsRoundTrip() async throws {
+    // The text-paint tool settings as globals (`set textHeight to N` / `the
+    // textHeight`) round-trip in the app host (Hyper-Wordle reads `the
+    // textHeight` for chart layout after setting it).
+    var stack = Stack.makeNew(); var idx = 0
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { idx }, set: { idx = $0 }),
+        onMessage: { _ in }, onAnswer: { _, b in b.first ?? "OK" },
+        onAsk: { _, i in i }, onNavigate: { i, _ in idx = i })
+    host.resetPaint()
+    defer { host.resetPaint() }
+    #expect(host.paintSetting("textheight") == "0")
+    #expect(host.setPaintSetting("textheight", to: "18"))
+    #expect(host.paintSetting("textheight") == "18")
+    #expect(host.setPaintSetting("textsize", to: "24"))
+    #expect(host.paintSetting("textsize") == "24")
+}
+
+@MainActor
 @Test func foundChunkIsAWritableContainer() async throws {
     // `find` then `put … after the foundChunk` / `delete the foundChunk` —
     // the search-and-replace idiom (Writing Tools' makeSubstitutions, card

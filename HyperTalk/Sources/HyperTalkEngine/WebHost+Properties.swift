@@ -152,6 +152,9 @@ extension WebHost {
         case "textsize":
             guard let f = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
             return numberText(f.size)
+        case "textheight":
+            guard case .field(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return numberText(p.textHeight ?? 0)
         case "textstyle":
             guard let f = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
             return Self.styleList(f)
@@ -250,6 +253,11 @@ extension WebHost {
         case "textsize":
             let size = try number(value, for: property)
             try withFormat(&part, kind: kind) { $0.size = min(max(size, 4), 256) }
+        case "textheight":
+            guard case .field(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            let h = try number(value, for: property)
+            p.textHeight = h > 0 ? h : nil
+            part.kind = .field(p)
         case "textstyle":
             try withFormat(&part, kind: kind) { Self.applyStyleList(value, to: &$0) }
         case "textalign":

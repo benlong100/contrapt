@@ -462,6 +462,13 @@ final class DocumentScriptHost: HyperTalkHost {
         var centered = false
         var brush = 8
         var multiple = false
+        // The text-paint tool settings — `the textHeight`/`textSize`/… as
+        // globals (stored as strings; scripts set then read them back).
+        var textSize = "12"
+        var textHeight = "0"
+        var textFont = "chicago"
+        var textStyle = "plain"
+        var textAlign = "left"
 
         func reset() {
             // `reset paint` resets settings; the tool is separate (HyperCard
@@ -480,6 +487,11 @@ final class DocumentScriptHost: HyperTalkHost {
         case "centered": return paint.centered ? "true" : "false"
         case "brush": return String(paint.brush)
         case "multiple": return paint.multiple ? "true" : "false"
+        case "textsize": return paint.textSize
+        case "textheight": return paint.textHeight
+        case "textfont": return paint.textFont
+        case "textstyle": return paint.textStyle
+        case "textalign": return paint.textAlign
         default: return nil
         }
     }
@@ -494,6 +506,11 @@ final class DocumentScriptHost: HyperTalkHost {
         case "centered": paint.centered = flag
         case "brush": paint.brush = max(1, min(32, Int(Double(value) ?? 8)))
         case "multiple": paint.multiple = flag
+        case "textsize": paint.textSize = value
+        case "textheight": paint.textHeight = value
+        case "textfont": paint.textFont = value
+        case "textstyle": paint.textStyle = value
+        case "textalign": paint.textAlign = value
         default: return false
         }
         return true
@@ -1948,6 +1965,11 @@ final class DocumentScriptHost: HyperTalkHost {
         case "textsize":
             guard let format = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
             return numberText(format.size)
+        case "textheight":
+            // A field's line height (`the textHeight of field`). 0 = the font's
+            // natural height, as HyperCard reports when unset.
+            guard case .field(let f) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return numberText(f.textHeight ?? 0)
         case "textstyle":
             guard let format = Self.format(of: part) else { throw Self.noSuchProperty(property, of: kind) }
             return Self.styleList(format)
@@ -2091,6 +2113,13 @@ final class DocumentScriptHost: HyperTalkHost {
         case "textsize":
             let size = try number(value, for: property)
             try withFieldFormat(&part, kind: kind) { $0.size = min(max(size, 4), 256) }
+        case "textheight":
+            // `set the textHeight of field … to N` — the field's line height
+            // (0 clears to the font's natural height).
+            guard case .field(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            let h = try number(value, for: property)
+            properties.textHeight = h > 0 ? h : nil
+            part.kind = .field(properties)
         case "textstyle":
             try withFieldFormat(&part, kind: kind) { Self.applyStyleList(value, to: &$0) }
         case "textalign":

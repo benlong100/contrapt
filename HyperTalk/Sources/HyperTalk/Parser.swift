@@ -1416,10 +1416,20 @@ struct Parser {
         let text = try parseExpression()
         var field: FieldRef?
         if consumeWord("in") {
-            guard let reference = try parseFieldRefIfPresent() else {
-                throw ScriptError(line: line, message: "Expected a field after 'in', like: find \"x\" in field \"Notes\".")
+            // `find X in the foundField` / `… the selectedField` — restrict to
+            // the last find's / the selection's field (Addresses). We don't
+            // resolve that field reference statically, so search unrestricted
+            // (best effort — identical for one-field-per-card stacks).
+            let fieldOffset = peekIdentifier() == "the" ? 1 : 0
+            if let w = peekIdentifier(fieldOffset), w == "foundfield" || w == "selectedfield" {
+                if fieldOffset == 1 { advance() } // the
+                advance() // foundField / selectedField
+            } else {
+                guard let reference = try parseFieldRefIfPresent() else {
+                    throw ScriptError(line: line, message: "Expected a field after 'in', like: find \"x\" in field \"Notes\".")
+                }
+                field = reference
             }
-            field = reference
         }
         try expectNewline()
         return Stmt(kind: .find(mode, text: text, inField: field), line: line)
@@ -2265,6 +2275,10 @@ struct Parser {
            let n = peekIdentifier(1), Self.cardWords.contains(n) {
             advance() // next/previous/prev/recent
             advance() // card word
+            // A trailing `of [this] bkgnd` scope (`number of prev cd of this
+            // bg` — The White Rose). Relative to the current card already, so
+            // consume and ignore the background qualifier (best effort).
+            _ = try parseOfBackground()
             return .cardRelative(w == "next" ? .next : .previous)
         }
         // Dispatch identity: `me` and `[the] target`.
@@ -2535,7 +2549,7 @@ struct Parser {
     /// open-stack list), `mouseclick` (a pending click), `mouse` (the button
     /// state, up/down), and `sound` (the playing sound's name, "done" when
     /// idle) are functions in HyperCard; they read the same way here.
-    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping"]
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping", "textheight", "textsize", "textfont", "textstyle", "textalign"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,

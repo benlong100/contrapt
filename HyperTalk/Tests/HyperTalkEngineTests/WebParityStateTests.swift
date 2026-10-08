@@ -128,3 +128,14 @@ private let parityJSON = """
     _ = try await engine.runMessage("set the textFont of card field \"List\" to Flibbertigibbet")
     #expect(try await engine.runMessage("the textFont of card field \"List\"") == "standard")
 }
+
+@Test func textHeightPropertyRoundTrips() async throws {
+    // `the textHeight of field` reads/writes a field's line height (0 = the
+    // font's natural height) — Hyper-Wordle, HyperCard 10th Anniversary.
+    let engine = try StackEngine(stackJSON: parityJSON)
+    #expect(try await engine.runMessage("the textHeight of card field \"List\"") == "0")
+    _ = try await engine.runMessage("set the textHeight of card field \"List\" to 18")
+    #expect(try await engine.runMessage("the textHeight of card field \"List\"") == "18")
+    _ = try await engine.runMessage("set the textHeight of card field \"List\" to 0")
+    #expect(try await engine.runMessage("the textHeight of card field \"List\"") == "0")
+}

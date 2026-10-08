@@ -146,12 +146,26 @@ Dropped corpus runtime errors 162 → 92 (incl. ordinal-card grammar). Remaining
   trailing comma in function calls (`foo(a,b,)` — empty final arg). Journal +
   Tubers fully cleared (96→92). (Bare card-object-as-value, `put the first
   card`, still unhandled — no corpus stack uses it.)
-- New Features (1 stack): a further script-compile break after the menuMsg
-  fix (cascades across its backgrounds → inflated the raw count).
-- Singletons (1 stack each): get `the textHeight of field`; custom card/field
-  user properties (`the verse of card`); `find X in <non-field>`; `the mouse`
-  as a function; undefined user functions (wrongstack/hide_all); a few
-  one-off syntax quirks. Low ROI; fix opportunistically.
+- Fixed 2026-10-08 (72→70): relative-card `of bg` scope, `find … in the
+  foundField/selectedField`, `the textHeight of field` get/set, mouse function
+  forms (`mouse()`/`mouseClick()`/`mouseH/V/Loc()`), paint-text globals
+  (`the textHeight`/`textSize`/`textFont`/`textStyle`/`textAlign`).
+- STILL OPEN (all 1 stack unless noted):
+  * Custom user properties (`the verse of card`, Haiku Master) — a real
+    general feature: arbitrary user-defined properties on objects, stored
+    per-object. Deserves its own pass (reroutes unknown-property access to a
+    custom store; broad + risky). The one remaining general item.
+  * `put`/`select` into a BUTTON (New Features) — invalid HyperTalk that HC
+    tolerates via lazy per-handler compile; a parse error kills our whole
+    script. Skipped (semantically invalid).
+  * Per-stack one-offs: Star Trek TNG (`found '.'`), Phone # Converter
+    (incomplete expr), HyperCard 10th Anniversary (kitchen-sink: hide_all,
+    unclosed paren, custom command, missing field), Car Care (missing bg —
+    data). Low ROI.
+  * External deps: Readymade Buttons/Fields call `wrongStack()` (a Home-stack
+    function); not our bug.
+  * Not bugs: openStack poll-loop timeouts (Sean, Clinton Issues, Cruel
+    Fairy).
 - Not bugs: [9] "timed out (poll loop?)" = openStack busy-waits (Sean,
   Clinton Issues, Cruel Fairy) — expected, the audit's wall-clock guard.
 Re-run anytime: `touch /tmp/contrapt-runtime-audit`, run corpusRuntimeAudit.

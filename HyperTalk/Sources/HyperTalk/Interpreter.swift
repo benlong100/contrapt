@@ -1917,7 +1917,12 @@ final class Runtime {
                 case "mousev": return String(location.y)
                 default: return "\(location.x),\(location.y)"
                 }
-            case "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple":
+            case "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple",
+                 "textheight", "textsize", "textfont", "textstyle", "textalign":
+                // Paint-tool globals, incl. the text-paint settings `the
+                // textHeight`/`textSize`/… (Hyper-Wordle reads `the textHeight`
+                // for chart layout). `the <these> of <field>` is an object
+                // property, parsed separately.
                 if let value = host.paintSetting(property) { return value }
                 throw ScriptError(line: line, message: "Can't read the '\(property)'.")
             case "userlevel", "textarrows", "powerkeys", "blindtyping":
@@ -2095,6 +2100,24 @@ final class Runtime {
     /// a built-in (so a user function is tried instead).
     private func evaluateBuiltin(_ name: String, _ arguments: [String], line: Int) async throws -> String? {
         switch name.lowercased() {
+        // The mouse-family function forms — `mouse()`, `mouseClick()`,
+        // `mouseH()`, `mouseV()`, `mouseLoc()` (Meat & Conversation) — mirror
+        // the `the mouse` / `the mouseLoc` property reads, tick-paced so their
+        // polling loops run at HyperCard's cadence.
+        case "mouse":
+            await host.wait(seconds: 1.0 / 60.0)
+            return host.mouseIsDown() ? "down" : "up"
+        case "mouseclick":
+            await host.wait(seconds: 1.0 / 60.0)
+            return host.consumeMouseClick() ? "true" : "false"
+        case "mouseh", "mousev", "mouseloc":
+            await host.wait(seconds: 1.0 / 60.0)
+            let location = host.mouseLocation() ?? (0, 0)
+            switch name.lowercased() {
+            case "mouseh": return String(location.x)
+            case "mousev": return String(location.y)
+            default: return "\(location.x),\(location.y)"
+            }
         case "length":
             guard arguments.count == 1 else {
                 throw ScriptError(line: line, message: "length expects one value, like length(field \"Name\").")

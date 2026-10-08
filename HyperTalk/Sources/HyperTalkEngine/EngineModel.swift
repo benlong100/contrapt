@@ -150,6 +150,8 @@ struct FieldPart: Codable, Hashable {
     var sharedText: Bool
     /// `the scroll of field` — scrolling fields' offset in points.
     var scroll: Double
+    /// `the textHeight of field` — line height in points (nil = natural).
+    var textHeight: Double?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -170,6 +172,7 @@ struct FieldPart: Codable, Hashable {
         styleRuns = try c.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
         sharedText = try c.decodeIfPresent(Bool.self, forKey: .sharedText) ?? false
         scroll = try c.decodeIfPresent(Double.self, forKey: .scroll) ?? 0
+        textHeight = try c.decodeIfPresent(Double.self, forKey: .textHeight)
     }
 }
 

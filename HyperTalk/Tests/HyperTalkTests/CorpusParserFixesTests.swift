@@ -85,3 +85,35 @@ import Testing
     """, host: host)
     #expect(host.messages.last == "ab")
 }
+
+@Test func relativeCardOfBackgroundAndFindInFoundField() throws {
+    // `number of prev cd of this bg` — a relative card with a trailing bg
+    // scope (The White Rose). And `find X in the foundField` / selectedField
+    // (Addresses) — accepted as an unrestricted find.
+    _ = try Parser.parseSoleExpression("number of prev cd of this bg")
+    _ = try Parser.parseSoleExpression("the id of next card of this background")
+    _ = try Parser.parse("on p\nfind string x in the foundField\nend p")
+    _ = try Parser.parse("on p\nfind whole \"y\" in the selectedField\nend p")
+    _ = try Parser.parse("on p\nfind \"z\" in bg field \"Notes\"\nend p")
+}
+
+@Test func mouseFunctionFormsEvaluate() async throws {
+    // `mouse()`, `mouseClick()`, `mouseH()`, `mouseV()`, `mouseLoc()` — the
+    // function-call forms (Meat & Conversation) mirror the `the mouse` reads.
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put mouse() & "|" & mouseH() & "," & mouseV() into msg
+    end p
+    """, host: host)
+    // MockHost reports an up button and pointer at 0,0; the key point is the
+    // function forms resolve instead of "Can't find a function named 'mouse'".
+    #expect(host.messages.last == "up|0,0")
+    // mouseClick() also resolves (value depends on host state).
+    _ = try await HyperTalk.run(handler: "q", in: "on q\nput mouseClick() into msg\nend q", host: host)
+    #expect(host.messages.last == "true" || host.messages.last == "false")
+    // `the textHeight` as a bare global reads a default instead of erroring.
+    let host2 = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: "on p\nput the textHeight into msg\nend p", host: host2)
+    #expect(host2.messages.last == "0")
+}

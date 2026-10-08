@@ -571,6 +571,11 @@ public extension HyperTalkHost {
         case "pattern", "penpattern": "12"
         case "filled", "centered", "multiple": "false"
         case "brush": "8"
+        case "textsize": "12"
+        case "textheight": "0"
+        case "textfont": "chicago"
+        case "textstyle": "plain"
+        case "textalign": "left"
         default: nil
         }
     }
