@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 import HyperTalk
 
 /// Session-wide HyperTalk globals — shared across cards and stacks while
@@ -189,6 +190,8 @@ final class DocumentScriptHost: HyperTalkHost {
     /// Presents a print dialog for finished PDF data (title second). The app
     /// wires the real dialog; tests capture the bytes.
     private let onPresentPrint: (Data, String) -> Void
+    /// Flashes the screen (inverts N times) — the Flash XCMD's effect.
+    private let onFlash: (Int) -> Void
 
     init(
         stack: Binding<Stack>,
@@ -208,6 +211,7 @@ final class DocumentScriptHost: HyperTalkHost {
         onAssetWrite: @escaping (String, Data) -> Void = { _, _ in },
         assetsSnapshot: @escaping () -> [String: Data] = { [:] },
         onPresentPrint: @escaping (Data, String) -> Void = { _, _ in },
+        onFlash: @escaping (Int) -> Void = { _ in },
         cardWindowViewport: Binding<CGSize?> = .constant(nil),
         menuBar: Binding<[HyperTalkMenu]> = .constant([])
     ) {
@@ -228,6 +232,7 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onAssetWrite = onAssetWrite
         self.assetsSnapshot = assetsSnapshot
         self.onPresentPrint = onPresentPrint
+        self.onFlash = onFlash
         self.cardWindowViewport = cardWindowViewport
         self.menuBar = menuBar
     }
@@ -1257,8 +1262,18 @@ final class DocumentScriptHost: HyperTalkHost {
 
     /// The XCMD/XFCN names recorded at import — calls to them no-op rather
     /// than raising "Can't understand" (the compiled code can't run here).
+    /// Names we shim natively are always treated as externals — even when the
+    /// stack doesn't carry the XCMD resource (stacks often rely on these being
+    /// installed in Home / the app). So `Flash`/`SpeakText`/`PopMenu`/… route
+    /// to callExternal rather than erroring "Can't understand".
+    static let builtinExternals: Set<String> = [
+        "popmenu", "popupmenu", "hpopupmenu", "filename", "newfilename",
+        "fontexists", "flash", "flasher", "flashrect", "speaktext", "speak",
+    ]
+
     func isExternalName(_ name: String) -> Bool {
-        stack.externalCommands.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+        Self.builtinExternals.contains(name.lowercased())
+            || stack.externalCommands.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
 
     func modifierKey(_ name: String) -> String {
@@ -1288,7 +1303,7 @@ final class DocumentScriptHost: HyperTalkHost {
     /// 1–2-stack tail). Unknown names return nil → accepted-and-ignored.
     func callExternal(_ name: String, arguments: [String]) async throws -> String? {
         switch name.lowercased() {
-        case "popmenu", "popupmenu":
+        case "popmenu", "popupmenu", "hpopupmenu":
             // Eric Celeste's popMenu.XFCN (1988, the Culture stacks):
             // PopMenu(top, left, defaultLine, itemList) — items are comma-
             // separated, "text|metas" carries Mac menu metacharacters
@@ -1316,6 +1331,19 @@ final class DocumentScriptHost: HyperTalkHost {
             // NewFileName([prompt [, defaultName]]) — a save dialog.
             return await presentSavePanel(prompt: arguments.first ?? "",
                                           defaultName: arguments.count > 1 ? arguments[1] : "")
+        case "flash", "flasher", "flashrect":
+            // Flash.XCMD inverts the screen a few times (default 3; Flash(n)
+            // takes a count; FlashRect ignores its rect args). A command, so
+            // it returns "".
+            let count = arguments.compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }.first ?? 3
+            onFlash(max(1, min(count, 20)))
+            return ""
+        case "speaktext", "speak":
+            // SpeakText.XCMD / Speak — read the text aloud via the system
+            // speech synthesizer. A command; returns "".
+            let text = arguments.first ?? ""
+            if !text.isEmpty { Self.speak(text) }
+            return ""
         case "fontexists":
             guard let fontName = arguments.first, !fontName.isEmpty else { return "false" }
             #if canImport(AppKit)
@@ -1327,6 +1355,15 @@ final class DocumentScriptHost: HyperTalkHost {
         default:
             return nil
         }
+    }
+
+    /// The system speech synthesizer for SpeakText — retained so an utterance
+    /// isn't cut off when the host is released at the end of a dispatch.
+    private static let speechSynthesizer = AVSpeechSynthesizer()
+
+    private static func speak(_ text: String) {
+        let utterance = AVSpeechUtterance(string: text)
+        speechSynthesizer.speak(utterance)
     }
 
     /// Shows a pop-up menu at the mouse; returns Celeste's popMenu record

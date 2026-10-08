@@ -777,6 +777,36 @@ import HyperTalk
 }
 
 @MainActor
+@Test func flashAndSpeakShimsRouteAsBuiltins() async throws {
+    // Flash and SpeakText are shimmed natively and treated as externals even
+    // when the stack carries no XCMD resource. Flash fires the screen-flash
+    // closure with its count; both are commands returning empty.
+    var stack = Stack.makeNew()
+    var index = 0
+    var flashes: [Int] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i },
+        onFlash: { flashes.append($0) }
+    )
+    #expect(host.isExternalName("Flash"))
+    #expect(host.isExternalName("SpeakText"))
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("p", along: [ScriptLayer(name: "t", source: """
+    on p
+      Flash 4
+      Flash
+      SpeakText "hello"
+    end p
+    """, object: .thisCard)] + layers, host: host)
+    #expect(flashes == [4, 3])
+}
+
+@MainActor
 @Test func fileIORoundTripsOnDisk() async throws {
     // open/write/close then open/read/close against the REAL sandboxed disk
     // (Application Support/HyperTalk Files), classic colon path mapped to its

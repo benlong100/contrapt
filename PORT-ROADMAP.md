@@ -123,10 +123,17 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
 
 ## Priority 3 — long tail / environment
 14. Palettes & external windows (`palette`, tool/pattern windows, `the
-    windows`), `answer file` on iOS, AppleEvents beyond no-op, XCMD shims for
-    common ones (flash, speak?), debugger/`trace`, `dial`, serial. Deliberate
-    divergences stay (documented in ORACLE.md): permissive comparisons,
-    container-sort superset, HC 2.3 quirks.
+    windows`), `answer file` on iOS, AppleEvents beyond no-op, debugger/
+    `trace`, `dial`, serial. Deliberate divergences stay (documented in
+    ORACLE.md): permissive comparisons, container-sort superset, HC 2.3 quirks.
+    XCMD shims — IN PROGRESS: shipped PopMenu/HPopUpMenu, FileName,
+    NewFileName, FontExists (earlier), and 2026-10-08 Flash/Flasher/FlashRect
+    (screen-invert overlay, host onFlash closure) + SpeakText/Speak (AVSpeech).
+    Shimmed names are always treated as externals (builtinExternals) so they
+    work even when the stack omits the XCMD resource. Corpus XCMD ranking:
+    FileName 13, NewFileName 10, HyPict 9, PopMenu 9, FontExists 7, Picture 7,
+    Palette 6, Flash 6. Remaining common ones need bigger features: HyPict/
+    Picture (PICT display), AddColor (color), Palette (P3 windows item).
 
 ## Method
 Work top-down; for each feature: implement → unit tests → add oracle corpus

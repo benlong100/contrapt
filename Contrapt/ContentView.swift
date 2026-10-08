@@ -116,6 +116,8 @@ struct ContentView: View {
     /// own `openStack`/`openCard` pair in order (see `openResolvedStack`).
     @State private var suppressNextOpenCard = false
     @State private var isGuidePresented = false
+    /// Screen-flash (the Flash XCMD): an invert overlay pulsed N times.
+    @State private var flashOpacity: Double = 0
     /// A pending `answer` / `ask` dialog and its text field's contents.
     @State private var scriptDialog: ScriptDialog?
     @State private var askFieldText = ""
@@ -201,6 +203,19 @@ struct ContentView: View {
             onOpenScript: openPartScript,
             onFollowLink: followLink
         )
+    }
+
+    /// The Flash XCMD: invert the card `times` times via the overlay. Each
+    /// pulse is a brief on/off, serialized in one task.
+    private func flashScreen(times: Int) {
+        Task { @MainActor in
+            for _ in 0..<times {
+                flashOpacity = 1
+                try? await Task.sleep(nanoseconds: 70_000_000)
+                flashOpacity = 0
+                try? await Task.sleep(nanoseconds: 70_000_000)
+            }
+        }
     }
 
     /// HyperCard's ⌘⌥/⌘⌥⇧-click shortcut: select the clicked object, enter
@@ -325,6 +340,15 @@ struct ContentView: View {
                             .id(cardIndex)
                             .transition(cardTransition?.transition ?? .identity)
                     }
+                }
+                // The Flash XCMD: a white overlay pulsed with the difference
+                // blend inverts the card's colors, like HyperCard's screen
+                // flash. Non-hittable; opacity is driven by flashScreen().
+                .overlay {
+                    Color.white
+                        .opacity(flashOpacity)
+                        .blendMode(.difference)
+                        .allowsHitTesting(false)
                 }
                 // `set the rect of card window`: show the card 1:1 through a
                 // smaller viewport, cropping its right/bottom — HyperCard's
@@ -1084,6 +1108,7 @@ struct ContentView: View {
             onAssetWrite: { name, data in document.assets[name] = data },
             assetsSnapshot: { document.assets },
             onPresentPrint: { pdf, title in PrintService.present(pdf: pdf, jobTitle: title) },
+            onFlash: { count in flashScreen(times: count) },
             // `set the rect of card window` — the big-card-small-window crop.
             cardWindowViewport: $cardWindowViewport,
             // `create menu` … — the scripted menu bar strip.
