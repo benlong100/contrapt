@@ -267,6 +267,9 @@ public protocol HyperTalkHost: AnyObject {
     /// (`visible` false, everything else empty); the setter defaults to no-op.
     func windowProperty(_ property: String, window: String) -> String?
     func setWindowProperty(_ property: String, window: String, to value: String) throws
+    /// `the windows` — the open windows' names, one per line. Hosts with only a
+    /// card window report just that.
+    func windowList() -> [String]
     /// `the optionKey` / `shiftKey` / `commandKey` / `controlKey` — "down"
     /// or "up". The nocheat/easter-egg idiom (`if the optionKey is down`).
     func modifierKey(_ name: String) -> String
@@ -520,6 +523,7 @@ public extension HyperTalkHost {
     /// Hosts without window objects fall back to the absent-object defaults.
     func windowProperty(_ property: String, window: String) -> String? { nil }
     func setWindowProperty(_ property: String, window: String, to value: String) throws {}
+    func windowList() -> [String] { ["card window"] }
 
     /// Hosts without a keyboard read every modifier as up.
     func modifierKey(_ name: String) -> String { "up" }

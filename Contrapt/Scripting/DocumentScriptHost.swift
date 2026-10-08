@@ -249,7 +249,51 @@ final class DocumentScriptHost: HyperTalkHost {
     /// crops the card to this size — the classic big-card-small-window idiom.
     private let cardWindowViewport: Binding<CGSize?>
 
+    /// Scripted palette/external windows opened by the `palette` XCMD (and
+    /// `show/hide/close window`). Session-wide (like the chosen tool), reset
+    /// when a stack opens. Rendering is a later increment; this layer makes
+    /// `the windows`, `there is a window "X"`, and the visible/loc/rect
+    /// properties behave for the palette-management idiom (Tubers).
+    @MainActor final class PaletteRegistry {
+        static let shared = PaletteRegistry()
+        struct Window { var name: String; var visible: Bool; var loc: (x: Int, y: Int)? }
+        private(set) var windows: [Window] = []
+
+        func index(of name: String) -> Int? {
+            windows.firstIndex { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        }
+        func open(_ name: String, loc: (Int, Int)?) {
+            if let i = index(of: name) { windows[i].visible = true; if let loc { windows[i].loc = loc } }
+            else { windows.append(Window(name: name, visible: true, loc: loc)) }
+        }
+        func setVisible(_ name: String, _ visible: Bool) { if let i = index(of: name) { windows[i].visible = visible } }
+        func setLoc(_ name: String, _ loc: (Int, Int)) { if let i = index(of: name) { windows[i].loc = loc } }
+        func close(_ name: String) { windows.removeAll { $0.name.caseInsensitiveCompare(name) == .orderedSame } }
+        func reset() { windows.removeAll() }
+    }
+
+    /// The open windows for `the windows`: the card window first, then any
+    /// scripted palettes, as HyperCard lists them.
+    func windowList() -> [String] {
+        ["card window"] + PaletteRegistry.shared.windows.map(\.name)
+    }
+
     func windowProperty(_ property: String, window: String) -> String? {
+        // A scripted palette window, by name.
+        if let i = PaletteRegistry.shared.index(of: window) {
+            let win = PaletteRegistry.shared.windows[i]
+            switch property {
+            case "visible": return win.visible ? "true" : "false"
+            case "name": return win.name
+            case "loc", "location":
+                let loc = win.loc ?? (0, 0)
+                return "\(loc.x),\(loc.y)"
+            case "rect", "rectangle":
+                let loc = win.loc ?? (0, 0)
+                return "\(loc.x),\(loc.y),\(loc.x),\(loc.y)" // size unknown until rendered
+            default: return nil
+            }
+        }
         guard window == "card" || window == "cd" else { return nil }
         let size = cardWindowViewport.wrappedValue
             ?? CGSize(width: stack.cardSize.width, height: stack.cardSize.height)
@@ -265,6 +309,19 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     func setWindowProperty(_ property: String, window: String, to value: String) throws {
+        // A scripted palette window: show/hide/close/move.
+        if PaletteRegistry.shared.index(of: window) != nil {
+            let registry = PaletteRegistry.shared
+            switch property {
+            case "visible": registry.setVisible(window, value.lowercased() == "true")
+            case "close": registry.close(window)
+            case "loc", "location", "rect", "rectangle":
+                let n = value.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                if n.count >= 2 { registry.setLoc(window, (n[0], n[1])) }
+            default: break
+            }
+            return
+        }
         guard window == "card" || window == "cd" else { return }
         let current = cardWindowViewport.wrappedValue
             ?? CGSize(width: stack.cardSize.width, height: stack.cardSize.height)
@@ -1269,6 +1326,7 @@ final class DocumentScriptHost: HyperTalkHost {
     static let builtinExternals: Set<String> = [
         "popmenu", "popupmenu", "hpopupmenu", "filename", "newfilename",
         "fontexists", "flash", "flasher", "flashrect", "speaktext", "speak",
+        "palette", "newpalette", "generalpalette", "audiopalette", "fieldpalette",
     ]
 
     func isExternalName(_ name: String) -> Bool {
@@ -1331,6 +1389,20 @@ final class DocumentScriptHost: HyperTalkHost {
             // NewFileName([prompt [, defaultName]]) — a save dialog.
             return await presentSavePanel(prompt: arguments.first ?? "",
                                           defaultName: arguments.count > 1 ? arguments[1] : "")
+        case "palette", "newpalette", "generalpalette", "audiopalette", "fieldpalette":
+            // The Palette XCMD opens a floating palette window from a PLTE
+            // resource: `palette "Tuber","2,40"` (name, "h,v" loc). We register
+            // the window so `the windows` / `there is a window "X"` / the
+            // visible/loc properties behave; the visible panel is a later
+            // increment. A command → returns "".
+            guard let name = arguments.first, !name.isEmpty else { return "" }
+            var loc: (Int, Int)? = nil
+            if arguments.count > 1 {
+                let n = arguments[1].split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                if n.count >= 2 { loc = (n[0], n[1]) }
+            }
+            PaletteRegistry.shared.open(name, loc: loc)
+            return ""
         case "flash", "flasher", "flashrect":
             // Flash.XCMD inverts the screen a few times (default 3; Flash(n)
             // takes a count; FlashRect ignores its rect args). A command, so

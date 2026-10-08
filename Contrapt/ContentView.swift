@@ -1251,6 +1251,8 @@ struct ContentView: View {
     /// stack's scripts chose.
     private func resetChosenTool() {
         DocumentScriptHost.PaintSession.shared.tool = "browse"
+        // A fresh stack starts with no scripted palette windows open.
+        DocumentScriptHost.PaletteRegistry.shared.reset()
     }
 
     private func sendOpenSequence(toCardAt index: Int) {

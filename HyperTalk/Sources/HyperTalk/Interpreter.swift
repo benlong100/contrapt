@@ -1893,6 +1893,10 @@ final class Runtime {
                 return host.modifierKey(property)
             case "menus":
                 return host.menuBarSnapshot().map(\.name).joined(separator: "\n")
+            case "windows":
+                // The open windows, one per line (card window + scripted
+                // palettes). `the number of windows` counts them.
+                return host.windowList().joined(separator: "\n")
             case "numberformat":
                 // The default format (oracle-verified, HC 2.3). Setting it is
                 // an ignorable global; the read must still answer the default.
@@ -1987,10 +1991,12 @@ final class Runtime {
                    let _ = try await menuItemIndex(selector, in: menus[menuIdx], line: line) { exists = true }
                 return (negated ? !exists : exists) ? "true" : "false"
             }
-            if case .window = objectExpression {
-                // Contrapt has no window objects, so `there is a window …` is
-                // always false.
-                return negated ? "true" : "false"
+            if case .window(let nameExpression) = objectExpression {
+                // `there is a window "Tuber"` — true when a scripted palette
+                // (or the card window) of that name is open.
+                let name = try await evaluate(nameExpression, line: line)
+                let exists = host.windowList().contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+                return (negated ? !exists : exists) ? "true" : "false"
             }
             if case .stackNamed = objectExpression {
                 // Contrapt doesn't resolve arbitrary stacks by existence (helper

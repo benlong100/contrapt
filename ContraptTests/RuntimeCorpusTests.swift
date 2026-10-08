@@ -777,6 +777,46 @@ import HyperTalk
 }
 
 @MainActor
+@Test func paletteWindowLifecycle() async throws {
+    // `palette "Tuber","2,40"` opens a registered window; `the windows`,
+    // `there is a window`, the visible/loc props, and show/hide/close all
+    // behave (Tubers' palette-management idiom). Rendering is a later step.
+    DocumentScriptHost.PaletteRegistry.shared.reset()
+    defer { DocumentScriptHost.PaletteRegistry.shared.reset() }
+    var stack = Stack.makeNew()
+    stack.externalCommands = ["palette"]
+    var index = 0
+    var shown: [String] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { shown.append($0) },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("p", along: [ScriptLayer(name: "t", source: """
+    on p
+      palette "Tuber","2,40"
+      put there is a window "Tuber"
+      put the number of windows
+      put the visible of window "Tuber"
+      put the loc of window "Tuber"
+      hide window "Tuber"
+      put the visible of window "Tuber"
+      close window "Tuber"
+      put there is a window "Tuber"
+      put the number of windows
+    end p
+    """, object: .thisCard)] + layers, host: host)
+    // Opened: exists, 2 windows (card + Tuber), visible, at its loc.
+    #expect(Array(shown.prefix(4)) == ["true", "2", "true", "2,40"])
+    // Hidden → invisible; closed → gone, back to 1 window.
+    #expect(Array(shown.suffix(3)) == ["false", "false", "1"])
+}
+
+@MainActor
 @Test func flashAndSpeakShimsRouteAsBuiltins() async throws {
     // Flash and SpeakText are shimmed natively and treated as externals even
     // when the stack carries no XCMD resource. Flash fires the screen-flash

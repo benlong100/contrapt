@@ -649,6 +649,14 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .closePrinting, line: line)
             }
+            if consumeWord("window") {
+                // `close window "Tuber"` removes a scripted palette window.
+                let name = (current.kind == .newline || current.kind == .endOfScript)
+                    ? Expr.stringLiteral("") : try parsePrimary()
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .set(property: "close", object: .window(name), value: .stringLiteral("")), line: line)
+            }
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
@@ -1632,6 +1640,15 @@ struct Parser {
             return Stmt(kind: .set(property: isBackground ? "showbgpict" : "showpict", object: object,
                                    value: .stringLiteral(visible ? "true" : "false")), line: line)
         }
+        // `show/hide window "X"` toggles a scripted palette's visibility.
+        if peekIdentifier() == "window" {
+            advance()
+            let name = (current.kind == .newline || current.kind == .endOfScript)
+                ? Expr.stringLiteral("") : try parsePrimary()
+            try expectNewline()
+            return Stmt(kind: .set(property: "visible", object: .window(name),
+                                   value: .stringLiteral(visible ? "true" : "false")), line: line)
+        }
         // Ignorable targets.
         let ignorable = ["menubar", "menu", "titlebar", "message", "msg", "tool",
                          "pattern", "patterns", "picture", "pict", "background",
@@ -2565,7 +2582,7 @@ struct Parser {
     /// open-stack list), `mouseclick` (a pending click), `mouse` (the button
     /// state, up/down), and `sound` (the playing sound's name, "done" when
     /// idle) are functions in HyperCard; they read the same way here.
-    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping", "textheight", "textsize", "textfont", "textstyle", "textalign"]
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "windows", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping", "textheight", "textsize", "textfont", "textstyle", "textalign"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,
@@ -2708,6 +2725,9 @@ struct Parser {
         let saved = index
         let noun = peekIdentifier()
         if noun == "menus" { advance(); return .menuCount }
+        // `the number of windows` — the open-window count (card window +
+        // scripted palettes), via the lines of `the windows`.
+        if noun == "windows" { advance(); return .chunkCount(.line, .globalProperty("windows")) }
         guard noun == "menuitems" || noun == "menuitem" else { return nil }
         advance()
         // The owning menu: `of menu "File"`.
