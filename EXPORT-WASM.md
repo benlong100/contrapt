@@ -95,3 +95,10 @@ set `globalThis.__STACK__` to a stack.json object, `defaultNodeSetup()` +
 - `WebEngine.zip` is gitignored. Beta checklist: run
   `./Scripts/build-web-engine.sh` before archiving if exports should be
   interactive in the shipped build.
+
+## Troubleshooting
+
+- `fatal error: could not build module '_DarwinFoundation1'` (or similar clang
+  module errors while compiling swift-syntax) during `build-web-engine.sh`:
+  stale build state after an Xcode update. Fix: `rm -rf WasmPlayer/.build`
+  and re-run the script.
