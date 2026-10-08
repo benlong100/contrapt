@@ -54,3 +54,34 @@ import Testing
     #expect(menus.first?.items.map(\.name) == ["Cut", "Copy", "Paste"])
     #expect(menus.first?.items.map(\.menuMessage) == ["doCut", "doCopy", "doPaste"])
 }
+
+@Test func ordinalCardInExpressionsParse() throws {
+    // Ordinal card refs in object/qualifier position (Tubers, Journal): `in
+    // background` is an of-synonym, and `of first cd` / `of this cd` don't
+    // swallow a following comparison.
+    _ = try Parser.parseSoleExpression(
+        "the number of the first card in background \"X\" is the number of this card")
+    _ = try Parser.parseSoleExpression(
+        "the visible of cd fld \"Info\" of first cd is true")
+    _ = try Parser.parseSoleExpression(
+        "the visible of cd fld \"Info\" of this cd is true")
+    // Named/numbered card scopes still parse (no regression).
+    _ = try Parser.parseSoleExpression("field \"X\" of cd 2 is \"y\"")
+    _ = try Parser.parseSoleExpression("field \"X\" of cd id 20 is \"y\"")
+}
+
+@Test func trailingCommaInFunctionCall() async throws {
+    // `foo(a,b,)` — a trailing comma is an empty final argument (Tubers'
+    // selectType("Extras",62,63,157,142,)).
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put joinThree("a","b",) into msg
+    end p
+
+    function joinThree x,y,z
+      return x & y & z
+    end joinThree
+    """, host: host)
+    #expect(host.messages.last == "ab")
+}

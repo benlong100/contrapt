@@ -138,11 +138,14 @@ keeps coverage honest.
 Ran RuntimeAudit over 164 stacks (openStack + first-card-of-each-background
 openCard). Fixed in bulk: chunk keywords as plain variables (item/word/line/
 char — ~70 hits), `select text in` (26), `with menuMsg a,b,c` comma list.
-Dropped corpus runtime errors 162 → 96. Remaining, ranked by DISTINCT stacks:
-- Ordinal-card object/property expressions (2 stacks — Journal, Tubers):
-  `the number of the first card in bg "X"`, `… of first cd is true` — an
-  ordinal card ref in `of`-qualifier/value position over-consumes a trailing
-  `is`/`in`. Parser-architecture; needs its own careful pass + tests.
+Dropped corpus runtime errors 162 → 92 (incl. ordinal-card grammar). Remaining, ranked by DISTINCT stacks:
+- ~~Ordinal-card object/property expressions~~ DONE 2026-10-08: `in bkgnd`
+  is now an of-synonym in parseOfBackground (`the first card in bg "X"`), and
+  an ordinal/`this` card scope (`of first cd`, `of this cd`) no longer eats a
+  following token as a card name — so `… of first cd is true` parses. Plus
+  trailing comma in function calls (`foo(a,b,)` — empty final arg). Journal +
+  Tubers fully cleared (96→92). (Bare card-object-as-value, `put the first
+  card`, still unhandled — no corpus stack uses it.)
 - New Features (1 stack): a further script-compile break after the menuMsg
   fix (cascades across its backgrounds → inflated the raw count).
 - Singletons (1 stack each): get `the textHeight of field`; custom card/field

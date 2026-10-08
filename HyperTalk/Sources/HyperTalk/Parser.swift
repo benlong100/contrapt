@@ -2201,9 +2201,11 @@ struct Parser {
     }
 
     private mutating func parseOfBackground() throws -> BackgroundQualifier? {
-        guard peekIdentifier() == "of" else { return nil }
+        // `of bkgnd …` or, as HyperCard also allows, `in bkgnd …`
+        // (`the first card in background "User Pictures"`).
+        guard peekIdentifier() == "of" || peekIdentifier() == "in" else { return nil }
         if let word = peekIdentifier(1), Self.backgroundWords.contains(word) {
-            advance() // of
+            advance() // of / in
             advance() // background word
             _ = consumeWord("id") // `of bg id 9036` — id matched as a name, best effort
             guard current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "into" else {
@@ -2823,8 +2825,13 @@ struct Parser {
                 let isID = consumeWord("id")
                 // An optional identifier/number/string naming the card (`of cd
                 // curCard`, `of card 5`) — but not a following statement keyword.
+                // An ordinal (`first cd`, `last cd`) or `this cd` already fully
+                // specifies the card, so DON'T consume the next token as a name
+                // (it belongs to the rest of the expression, e.g. `of first cd
+                // is true` — the `is` is a comparison, not a card name).
                 var name: Expr?
-                if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
+                if ordinal == nil, !isThis,
+                   current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
                     name = try? parsePrimary()
                 }
                 if cardScope == nil {
@@ -3195,6 +3202,12 @@ struct Parser {
                 var arguments: [Expr] = []
                 if case .symbol(")") = current.kind {} else {
                     repeat {
+                        // A trailing comma is an empty final argument, which
+                        // HyperCard tolerates (`selectType("x",1,2,)` — Tubers).
+                        if case .symbol(")") = current.kind {
+                            arguments.append(.stringLiteral(""))
+                            break
+                        }
                         arguments.append(try parseExpression())
                     } while consumeSymbol(",")
                 }
