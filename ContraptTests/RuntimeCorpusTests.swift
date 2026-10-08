@@ -585,6 +585,31 @@ import HyperTalk
 }
 
 @MainActor
+@Test func chainedOpenCardAutoAdvanceFires() async throws {
+    // Writing Tools: cards 1–3 each `on openCard / visual … / go next card`,
+    // an auto-advancing intro. Every arrival must send openCard so the chain
+    // continues — the engine side proves the interpreter navigates.
+    let path = "/Applications/Basilisk II/BasiliskShared/Greg Jewett Stacks/Writing:Revision Tools™/Working v5.3/Writing Tools™"
+    guard FileManager.default.fileExists(atPath: path) else { return }
+    var stack = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path)).stack
+    var navigatedTo: Int?
+    var index = 1
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { to, _ in navigatedTo = to }
+    )
+    // Card 2's openCard (visual wipe right / go next card) must navigate on.
+    let path2 = [ScriptLayer(name: "card", source: stack.cards[1].script),
+                 ScriptLayer(name: "stack", source: stack.script)]
+    try await HyperTalk.send("openCard", along: path2, host: host)
+    #expect(navigatedTo == 2)
+}
+
+@MainActor
 @Test func dumpSeanSoundsAndLine251() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
     guard let path = classicStackFiles(under: root).first else { return }

@@ -1174,7 +1174,17 @@ struct ContentView: View {
     /// resolve correctly (e.g. The Hacker Crackdown's closeCard re-enables the
     /// "Prior" button when you leave the title card).
     private func sendCloseThenOpenCard(from oldIndex: Int, to newIndex: Int) {
-        guard !isEditing, !isSendingSystemMessage else { return }
+        guard !isEditing else { return }
+        // A navigation that lands while a system message is still running —
+        // an auto-advance card whose openCard `go`es to the next (its visual
+        // effect defers the index change a runloop turn) — must still get its
+        // openCard. Queue it and fire when the in-flight send finishes, rather
+        // than dropping it (which stalled chained `on openCard / go next card`
+        // intro sequences after one hop).
+        guard !isSendingSystemMessage else {
+            pendingCardOpen = (from: oldIndex, to: newIndex)
+            return
+        }
         guard oldIndex >= 0, oldIndex < document.stack.cards.count else {
             sendSystemMessage("openCard", toCardAt: newIndex); return
         }
@@ -1184,7 +1194,7 @@ struct ContentView: View {
         let openHost = makeHost()
         let openPath = scriptPath(cardAt: newIndex, part: nil)
         Task { @MainActor in
-            defer { isSendingSystemMessage = false }
+            defer { isSendingSystemMessage = false; flushPendingCardOpen() }
             do {
                 // A closeCard error shouldn't block arriving at the new card.
                 do { try await HyperTalk.send("closeCard", along: closePath, host: closeHost) }
@@ -1194,6 +1204,18 @@ struct ContentView: View {
                 scriptErrorText = error.localizedDescription
             }
         }
+    }
+
+    /// A card arrival whose openCard was deferred because a system message was
+    /// in flight (chained auto-advance). Carries the transition it represents.
+    @State private var pendingCardOpen: (from: Int, to: Int)?
+
+    /// Sends a queued openCard once the current system message finishes, so an
+    /// `on openCard / go next card` chain continues card by card.
+    private func flushPendingCardOpen() {
+        guard let pending = pendingCardOpen else { return }
+        pendingCardOpen = nil
+        sendCloseThenOpenCard(from: pending.from, to: pending.to)
     }
 
     /// Sends `openStack` then `openCard` to a card as one ordered task — used
@@ -1217,7 +1239,7 @@ struct ContentView: View {
         let host = makeHost()
         let path = scriptPath(cardAt: index, part: nil)
         Task { @MainActor in
-            defer { isSendingSystemMessage = false }
+            defer { isSendingSystemMessage = false; flushPendingCardOpen() }
             do {
                 try await HyperTalk.send("openStack", along: path, host: host)
                 try await HyperTalk.send("openCard", along: path, host: host)
@@ -1389,7 +1411,7 @@ struct ContentView: View {
         let host = makeHost()
         let path = scriptPath(cardAt: index, part: nil)
         Task { @MainActor in
-            defer { isSendingSystemMessage = false }
+            defer { isSendingSystemMessage = false; flushPendingCardOpen() }
             do {
                 try await HyperTalk.send(message, along: path, host: host)
             } catch {
