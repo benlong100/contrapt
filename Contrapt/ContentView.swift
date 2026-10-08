@@ -219,6 +219,21 @@ struct ContentView: View {
         isInspectorPresented = true
     }
 
+    /// ⌘⌥C / ⌘⌥S / ⌘⌥B: open the card / stack / background script. Clears any
+    /// part selection so the inspector shows the object-scripts view at the
+    /// chosen scope, entering edit mode so Done is available. Guarded on a
+    /// foreign (cross-stack-swapped) stack, like the Edit button.
+    private func openObjectScript(_ scope: ObjectScriptsInspector.Scope) {
+        guard !displayingForeignStack else { return }
+        selectedPartIDs = []
+        objectScope = scope
+        findHighlight = nil
+        scriptSelection = nil
+        SelectionSession.shared.clear()
+        isEditing = true
+        isInspectorPresented = true
+    }
+
     private var cardStage: some View {
         VStack(spacing: 0) {
             // The scripted custom-menu strip (`create menu` / `put … into
@@ -606,11 +621,21 @@ struct ContentView: View {
         .toolbar { mainToolbar }
         // ⌘↑ also jumps to the first card (the Go menu advertises ⌘1); a hidden
         // shortcut keeps the arrow binding without a duplicate menu item.
+        // ⌘⌥C/S/B open the card/stack/background scripts (HyperCard's author
+        // shortcuts), like peek-clicking a part opens its script.
         .background {
-            Button("", action: goFirst)
-                .keyboardShortcut(.upArrow, modifiers: .command)
-                .opacity(0)
-                .accessibilityHidden(true)
+            Group {
+                Button("", action: goFirst)
+                    .keyboardShortcut(.upArrow, modifiers: .command)
+                Button("") { openObjectScript(.card) }
+                    .keyboardShortcut("c", modifiers: [.command, .option])
+                Button("") { openObjectScript(.stack) }
+                    .keyboardShortcut("s", modifiers: [.command, .option])
+                Button("") { openObjectScript(.background) }
+                    .keyboardShortcut("b", modifiers: [.command, .option])
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
         }
         .focusedValue(\.cardNavigation, cardNavigation)
         .focusedSceneValue(\.cardActions, cardActions)
