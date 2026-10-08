@@ -39,6 +39,17 @@ final class SoundPlayer {
     /// asynchronous — the caller (a running script) continues.
     func play(name: String, wav: Data?, baseNote: Int = 60, tempo: Double, notes: [PlayNote]) {
         guard let format else { return }
+        // A voice the stack doesn't have plays NOTHING, as in HyperCard —
+        // Sean's idle terminates its buzzer with `play "silence" "a"`, a snd
+        // that doesn't exist; synthesizing a tone for it was the "generic
+        // tone" bug. (It still ends the current sound so `the sound` reads
+        // done.) The synthesized fallback remains only for the classic
+        // built-in voices, which old scripts expect to be audible anywhere.
+        let builtins = ["harpsichord", "flute", "boing"]
+        if wav == nil, !builtins.contains(name.lowercased()) {
+            stop()
+            return
+        }
         let source = wav.flatMap(SndSound.samplesFromWAV)
         // A voice that can't render (undecodable sample, empty melody) still
         // ends the current sound, so `the sound` reads "done" and a

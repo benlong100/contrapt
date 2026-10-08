@@ -179,6 +179,25 @@ import HyperTalk
 }
 
 @MainActor
+@Test func dumpSeanSoundsAndLine251() async throws {
+    let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
+    guard let path = classicStackFiles(under: root).first else { return }
+    let imported = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: path))
+    print("SOUNDS: \(imported.stack.sounds.keys.sorted().joined(separator: ", "))")
+    if let buzzer = imported.stack.sounds["buzzer"],
+       let wav = imported.assets[buzzer.asset] {
+        let decoded = SndSound.samplesFromWAV(wav)
+        print("BUZZER: wavBytes=\(wav.count) samples=\(decoded?.samples.count ?? -1) rate=\(decoded?.sampleRate ?? 0) baseNote=\(buzzer.baseNote)")
+    } else {
+        print("BUZZER: missing from sounds/assets")
+    }
+    let lines = imported.stack.script.components(separatedBy: "\n")
+    for i in 244...min(258, lines.count - 1) {
+        print("L\(i + 1): \(lines[i])")
+    }
+}
+
+@MainActor
 @Test func dumpSeanPaint() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
     guard let path = classicStackFiles(under: root).first else { return }

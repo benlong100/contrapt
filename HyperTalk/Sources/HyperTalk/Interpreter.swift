@@ -1804,6 +1804,10 @@ final class Runtime {
                 await host.wait(seconds: 1.0 / 60.0)
                 return host.playingSoundName()
             case "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey":
+                // Tick-paced like `the mouse`, so a key-polling loop (Sean's
+                // nocheat `repeat … if the optionKey is up`) runs at HyperCard
+                // speed instead of burning the step budget in a second.
+                await host.wait(seconds: 1.0 / 60.0)
                 return host.modifierKey(property)
             case "menus":
                 return host.menuBarSnapshot().map(\.name).joined(separator: "\n")
