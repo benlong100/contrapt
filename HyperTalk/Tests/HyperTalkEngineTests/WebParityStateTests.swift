@@ -101,3 +101,14 @@ private let parityJSON = """
     _ = try await engine.runMessage("set the blindTyping to false")
     #expect(try await engine.runMessage("the powerKeys & the blindTyping") == "truefalse")
 }
+
+@Test func hilightIsAHiliteSynonym() async throws {
+    // HyperCard accepts hilite / hilight / highlight interchangeably; a stack
+    // using `set the hilight of button …` (reported as card 5 line 9) must
+    // not error.
+    let engine = try StackEngine(stackJSON: parityJSON)
+    #expect(try await engine.runMessage("the hilight of card button \"Go\"") == "false")
+    _ = try await engine.runMessage("set the hilight of card button \"Go\" to true")
+    #expect(try await engine.runMessage("the hilite of card button \"Go\"") == "true")
+    #expect(try await engine.runMessage("the autoHilight of card button \"Go\"") != nil)
+}
