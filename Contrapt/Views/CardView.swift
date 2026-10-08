@@ -41,6 +41,9 @@ struct CardView: View {
     /// plus the part it targets — nil means the card itself.
     var onMouseMessage: (String, Part?) -> Void = { _, _ in }
     var onOpenInspector: () -> Void = {}
+    /// HyperCard's ⌘⌥-click (button) / ⌘⌥⇧-click (field) shortcut: while the
+    /// peek is active, clicking an object of the peeked kind opens its script.
+    var onOpenScript: (Part) -> Void = { _ in }
     /// A link tapped in a rich field: a card link to follow, or a web link.
     var onFollowLink: (FieldLink) -> Void = { _ in }
 
@@ -395,10 +398,32 @@ struct CardView: View {
             // instead of centering the oversized block so it floats above.
             .frame(width: part.frame.width, height: part.frame.height, alignment: .top)
             .clipped()
+            // ⌘⌥/⌘⌥⇧-click to open a script: while peeking the part's kind, a
+            // transparent catcher above the part swallows the click and opens
+            // its script instead of running the button/field (HyperCard's
+            // author shortcut). Only in browse mode — edit mode double-clicks
+            // the part for the inspector already.
+            .overlay {
+                if !isEditing, peekMatches(part) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { onOpenScript(part) }
+                }
+            }
             .position(
                 x: part.frame.x + part.frame.width / 2,
                 y: part.frame.y + part.frame.height / 2
             )
+        }
+    }
+
+    /// Whether the active peek (⌘⌥ buttons / ⌘⌥⇧ fields) targets this part's
+    /// kind — so a click opens its script.
+    private func peekMatches(_ part: Part) -> Bool {
+        switch part.kind {
+        case .button: return peekButtons
+        case .field: return peekFields
+        default: return false
         }
     }
 

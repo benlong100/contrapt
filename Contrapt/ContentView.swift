@@ -198,8 +198,17 @@ struct ContentView: View {
             includeCard: includeCard,
             onMouseMessage: sendMouseMessage,
             onOpenInspector: { isInspectorPresented = true },
+            onOpenScript: openPartScript,
             onFollowLink: followLink
         )
+    }
+
+    /// HyperCard's ⌘⌥/⌘⌥⇧-click shortcut: select the clicked object and open
+    /// the inspector on it, where its script is shown and editable.
+    private func openPartScript(_ part: Part) {
+        objectScope = stack.cards[cardIndex].parts.contains { $0.id == part.id } ? .card : .background
+        selectedPartIDs = [part.id]
+        isInspectorPresented = true
     }
 
     private var cardStage: some View {
