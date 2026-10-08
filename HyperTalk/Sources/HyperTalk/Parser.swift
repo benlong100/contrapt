@@ -1689,8 +1689,10 @@ struct Parser {
             case .named(let background): target = .inBackground(target, background: background)
             }
         }
-        if peekIdentifier() == "of", peekIdentifier(1) == "stack" {
-            advance(); advance() // of stack
+        if peekIdentifier() == "of" || peekIdentifier() == "in", peekIdentifier(1) == "stack" {
+            // `of stack "X"` / `in stack "X"` (Sean's Help: `go to card 1 in
+            // stack "Sean's World II Help" in a new window`).
+            advance(); advance()
             target = .inStack(name: try parseExpression(), card: target)
         }
         if peekIdentifier() == "of" {
