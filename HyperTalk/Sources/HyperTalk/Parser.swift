@@ -109,6 +109,23 @@ struct Parser {
         return word
     }
 
+    /// Whether a chunk keyword (`item`/`word`/`line`/`char`) at the current
+    /// token is actually starting a chunk expression, versus being used as a
+    /// plain variable. HyperCard lets these words name variables (the `doMenu
+    /// item` parameter, a `line` counter), so `item is "New Card"` / `put line`
+    /// treat the word as a variable. It's a chunk only when the next token can
+    /// begin an index — a number, string, `(`, or an index variable/`the` —
+    /// not an operator, keyword connector, or line end.
+    private func chunkKeywordStartsChunk() -> Bool {
+        guard index + 1 < tokens.count else { return false }
+        switch tokens[index + 1].kind {
+        case .number, .string: return true
+        case .symbol(let s): return s == "("
+        case .identifier(let w): return !Self.expressionConnectors.contains(w)
+        default: return false // newline, end of script, etc.
+        }
+    }
+
     private func peekWords(_ words: [String]) -> Bool {
         for (offset, word) in words.enumerated() {
             if peekIdentifier(offset) == word { continue }
@@ -882,7 +899,9 @@ struct Parser {
             }
             let edge = consumeWord("before") ? "before" : (consumeWord("after") ? "after" : nil)
             if consumeWord("text") {
-                guard consumeWord("of") else {
+                // `in` is a synonym for `of` here (`select text in background
+                // field "temp"`, Confusing Words).
+                guard consumeWord("of") || consumeWord("in") else {
                     throw ScriptError(line: line, message: "Expected 'of' after 'select text'.")
                 }
                 // `select text of the foundField` / `… the selectedField` — the
@@ -1064,7 +1083,15 @@ struct Parser {
             var messages: Expr? = nil
             if consumeWord("with") {
                 _ = consumeWord("menumessages"); _ = consumeWord("menumessage"); _ = consumeWord("menumsgs"); _ = consumeWord("menumsg")
-                messages = try parseExpression()
+                // The messages are a comma-separated list, one per item
+                // (`with menuMsg "AC_Undo","","AddColorDelete",…` — Color
+                // Tools), joined with commas to match the interpreter's split.
+                var msgs = try parseExpression()
+                while consumeSymbol(",") {
+                    let next = try parseExpression()
+                    msgs = .binary(.concat, .binary(.concat, msgs, .stringLiteral(",")), next)
+                }
+                messages = msgs
             }
             try expectNewline()
             return Stmt(kind: .menuCommand(.putIntoMenu(menu: menuName, items: value, mode: mode ?? .into, messages: messages)), line: line)
@@ -1137,7 +1164,7 @@ struct Parser {
             advance() // target
             return .target
         }
-        if let word = peekIdentifier(), let kind = Self.chunkKinds[word] {
+        if let word = peekIdentifier(), let kind = Self.chunkKinds[word], chunkKeywordStartsChunk() {
             advance()
             let savedSuppress = suppressBarePropertyOf
             suppressBarePropertyOf = true
@@ -3015,8 +3042,10 @@ struct Parser {
                 return .property(property.lowercased(), try parseObjectExpr())
             }
             return try parsePrimary()
-        case .identifier(let word) where Self.chunkKinds[word] != nil:
-            // `word 2 of X`, `char 1 to 5 of X`.
+        case .identifier(let word) where Self.chunkKinds[word] != nil && chunkKeywordStartsChunk():
+            // `word 2 of X`, `char 1 to 5 of X`. (A chunk keyword NOT followed
+            // by an index — `item is …`, `put line` — falls to the identifier
+            // case below and reads as a variable.)
             let kind = Self.chunkKinds[word]!
             advance()
             let savedSuppress = suppressBarePropertyOf

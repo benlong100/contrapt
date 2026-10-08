@@ -133,3 +133,22 @@ Work top-down; for each feature: implement → unit tests → add oracle corpus
 lines where the guest can exercise it (file I/O and menus partially can) →
 real-stack smoke test → commit. The oracle keeps semantics honest; this list
 keeps coverage honest.
+
+## Corpus runtime sweep (2026-10-08) — remaining backlog
+Ran RuntimeAudit over 164 stacks (openStack + first-card-of-each-background
+openCard). Fixed in bulk: chunk keywords as plain variables (item/word/line/
+char — ~70 hits), `select text in` (26), `with menuMsg a,b,c` comma list.
+Dropped corpus runtime errors 162 → 96. Remaining, ranked by DISTINCT stacks:
+- Ordinal-card object/property expressions (2 stacks — Journal, Tubers):
+  `the number of the first card in bg "X"`, `… of first cd is true` — an
+  ordinal card ref in `of`-qualifier/value position over-consumes a trailing
+  `is`/`in`. Parser-architecture; needs its own careful pass + tests.
+- New Features (1 stack): a further script-compile break after the menuMsg
+  fix (cascades across its backgrounds → inflated the raw count).
+- Singletons (1 stack each): get `the textHeight of field`; custom card/field
+  user properties (`the verse of card`); `find X in <non-field>`; `the mouse`
+  as a function; undefined user functions (wrongstack/hide_all); a few
+  one-off syntax quirks. Low ROI; fix opportunistically.
+- Not bugs: [9] "timed out (poll loop?)" = openStack busy-waits (Sean,
+  Clinton Issues, Cruel Fairy) — expected, the audit's wall-clock guard.
+Re-run anytime: `touch /tmp/contrapt-runtime-audit`, run corpusRuntimeAudit.
