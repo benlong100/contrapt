@@ -151,10 +151,14 @@ Dropped corpus runtime errors 162 → 92 (incl. ordinal-card grammar). Remaining
   forms (`mouse()`/`mouseClick()`/`mouseH/V/Loc()`), paint-text globals
   (`the textHeight`/`textSize`/`textFont`/`textStyle`/`textAlign`).
 - STILL OPEN (all 1 stack unless noted):
-  * Custom user properties (`the verse of card`, Haiku Master) — a real
-    general feature: arbitrary user-defined properties on objects, stored
-    per-object. Deserves its own pass (reroutes unknown-property access to a
-    custom store; broad + risky). The one remaining general item.
+  * Custom user properties — investigated 2026-10-08: the Haiku Master
+    `verse` case was a MISDIAGNOSIS — `cd fld verse of cd haiku` is a
+    bareword-named FIELD with a card scope, not a user property. Fixed the
+    real bug: the field-name parse suppressed bare `<word> of <object>`
+    property reads so `verse` stops at the name and `of cd haiku` is the card
+    scope (Haiku cleared, 70→69). NO corpus stack actually uses custom user
+    properties, so that feature is deferred as unneeded (revisit only if a
+    future stack genuinely sets/gets a user-defined property).
   * `put`/`select` into a BUTTON (New Features) — invalid HyperTalk that HC
     tolerates via lazy per-handler compile; a parse error kills our whole
     script. Skipped (semantically invalid).

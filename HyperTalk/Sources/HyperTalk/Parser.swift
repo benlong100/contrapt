@@ -2150,7 +2150,15 @@ struct Parser {
             return nil
         }
         let isID = consumeWord("id")
+        // Parse the name/number with bare `<word> of <object>` property reads
+        // suppressed, so a bareword-named field with a card scope — `cd fld
+        // verse of cd haiku` (Haiku Master) — stops the name at `verse` and
+        // leaves `of cd haiku` for the card-scope parse, instead of greedily
+        // reading `verse of cd haiku` as the property `verse` of a card.
+        let savedSuppress = suppressBarePropertyOf
+        suppressBarePropertyOf = true
         let expr = try parsePrimary()
+        suppressBarePropertyOf = savedSuppress
         return FieldRef(domain: domain, isID: isID, expr: expr, card: try parseFieldCardRef())
     }
 

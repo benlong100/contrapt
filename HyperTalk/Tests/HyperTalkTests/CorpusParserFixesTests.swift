@@ -117,3 +117,14 @@ import Testing
     _ = try await HyperTalk.run(handler: "p", in: "on p\nput the textHeight into msg\nend p", host: host2)
     #expect(host2.messages.last == "0")
 }
+
+@Test func barewordFieldNameWithCardScope() async throws {
+    // `cd fld verse of cd haiku` — a bareword-named field with a card scope
+    // (Haiku Master). The name must stop at `verse`, not greedily read `verse
+    // of cd haiku` as the property `verse` of a card (which errored "no
+    // property verse of a card"). Runtime resolution uses the field, so a
+    // MockHost keyed for that scope reads it back.
+    _ = try Parser.parse("on p\nput empty into cd fld verse of cd haiku\nend p")
+    _ = try Parser.parse("on p\nget cd field myName of card 2\nend p")
+    _ = try Parser.parse("on p\nput cd fld verse of cd haiku into x\nend p")
+}
