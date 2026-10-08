@@ -248,6 +248,74 @@ import HyperTalk
 }
 
 @MainActor
+@Test func scriptedPaintingDrawsOnTheCardLayer() async throws {
+    // `choose rect tool` + `drag from … to …` rasterizes onto the card's
+    // paint PNG: filled rect pixels are black, the eraser restores
+    // transparency, and the bucket floods a hollow shape's interior.
+    var stack = Stack(formatVersion: StackFormat.currentVersion, id: UUID(), name: "Paint",
+                      cardSize: CardSize(width: 100, height: 80),
+                      script: "", backgrounds: [], cards: [])
+    var background = Background(id: UUID(), name: "BG", script: "", parts: [])
+    background.scriptID = stack.claimScriptID()
+    stack.backgrounds.append(background)
+    var card = Card(id: UUID(), name: "C1", backgroundID: background.id, script: "", parts: [])
+    card.scriptID = stack.claimScriptID()
+    stack.cards.append(card)
+
+    var assets: [String: Data] = [:]
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: .constant(0),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { _, _ in },
+        assetData: { assets[$0] },
+        onAssetWrite: { name, data in assets[name] = data }
+    )
+    host.resetPaint()
+    defer { host.resetPaint() } // session state — leave defaults for other tests
+
+    func pixel(_ x: Int, _ y: Int) -> (r: UInt8, a: UInt8) {
+        guard let asset = stack.cards[0].paintImageAsset, let data = assets[asset] else { return (0, 0) }
+        let canvas = PaintRasterizer.canvas(from: data, width: 100, height: 80)
+        let px = canvas[x, y]
+        return (px.r, px.a)
+    }
+
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      choose rect tool
+      set the filled to true
+      drag from 10,10 to 30,30
+    end p
+    """, host: host, maxSteps: 1000)
+    #expect(pixel(20, 20) == (0, 255))   // black inside the filled rect
+    #expect(pixel(50, 50).a == 0)        // untouched canvas stays transparent
+
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      choose eraser tool
+      drag from 20,20 to 20,20
+    end p
+    """, host: host, maxSteps: 1000)
+    #expect(pixel(20, 20).a == 0)        // erased back to transparent
+
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      reset paint
+      choose rect tool
+      drag from 50,40 to 90,70
+      choose bucket tool
+      click at 70,55
+    end p
+    """, host: host, maxSteps: 1000)
+    #expect(pixel(50, 40) == (0, 255))   // hollow rect outline
+    #expect(pixel(70, 55) == (0, 255))   // bucket filled the interior
+    #expect(pixel(45, 55).a == 0)        // outside stays clear
+}
+
+@MainActor
 @Test func dumpSeanSoundsAndLine251() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
     guard let path = classicStackFiles(under: root).first else { return }

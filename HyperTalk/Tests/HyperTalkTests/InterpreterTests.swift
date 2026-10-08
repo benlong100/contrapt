@@ -8,6 +8,10 @@ import Testing
 @testable import HyperTalk
 
 /// A host that records everything scripts do to it.
+struct Drag: Equatable {
+    var fromX: Int, fromY: Int, toX: Int, toY: Int
+}
+
 final class MockHost: HyperTalkHost {
     var fields: [String: String]
     var destinations: [GoDestination] = []
@@ -23,6 +27,13 @@ final class MockHost: HyperTalkHost {
     /// Every setScreenLocked call, in order — a dispatch that locks must end
     /// with the interpreter's end-of-dispatch unlock (false last).
     var screenLockHistory: [Bool] = []
+
+    /// Scripted-paint drags, in order.
+    var drags: [Drag] = []
+
+    func drag(fromX: Int, fromY: Int, toX: Int, toY: Int) {
+        drags.append(Drag(fromX: fromX, fromY: fromY, toX: toX, toY: toY))
+    }
 
     func setScreenLocked(_ locked: Bool) {
         screenLockHistory.append(locked)

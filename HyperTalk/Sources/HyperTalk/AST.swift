@@ -150,6 +150,11 @@ indirect enum StmtKind {
     /// `click at <h>,<v>` — a synthetic click at a card location. The second
     /// expression is nil when the point arrives as one `"h,v"` value.
     case clickAt(Expr, Expr?)
+    /// `drag from h,v to h,v [with key…]` — scripted painting's stroke (and
+    /// HyperCard's input synthesis; modifier keys are accepted and ignored).
+    case drag(fromH: Expr, fromV: Expr?, toH: Expr, toV: Expr?)
+    /// `reset paint` — paint globals back to defaults.
+    case resetPaint
     /// `choose <name> tool` — switch the scripting tool. With the button or
     /// field tool chosen, `click at` *selects* the part under the point (for
     /// `doMenu "Clear Button"`) instead of clicking it; `choose browse tool`

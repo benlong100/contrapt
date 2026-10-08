@@ -66,3 +66,24 @@ import Testing
     """)
     #expect(host.beeps == 1)
 }
+
+@Test func dragDispatchesToHostAndPaintGlobalsRead() async throws {
+    // `drag from h,v to h,v` is a real statement now (scripted painting);
+    // point pairs or single "h,v" values both work, `with <keys>` is ignored.
+    // Paint globals read host-backed defaults and sets are accepted.
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      choose line tool
+      set the lineSize to 4
+      drag from 10,20 to 110,120 with shiftKey
+      drag from the clickLoc to 5,6
+      reset paint
+      put the lineSize & "," & the pattern & "," & the filled
+    end p
+    """, host: host, maxSteps: 1000)
+    #expect(host.drags.count == 2)
+    #expect(host.drags.first! == Drag(fromX: 10, fromY: 20, toX: 110, toY: 120))
+    // MockHost doesn't store paint settings — reads are the HC defaults.
+    #expect(host.messages.last == "1,12,false")
+}

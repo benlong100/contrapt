@@ -450,6 +450,16 @@ public protocol HyperTalkHost: AnyObject {
     /// under the point (armed for `doMenu "Clear Button"`) instead of
     /// clicking it. Optional; hosts without tools ignore it.
     func chooseTool(_ name: String)
+    /// `drag from h,v to h,v` — with a paint tool chosen, a scripted stroke on
+    /// the current card's paint layer; otherwise input synthesis (unmodeled).
+    func drag(fromX: Int, fromY: Int, toX: Int, toY: Int)
+    /// `the lineSize`, `the pattern`, `the filled`, `the centered`, `the
+    /// brush`, `the multiple` — nil means the host doesn't model it.
+    func paintSetting(_ name: String) -> String?
+    /// Returns true if the host stored the setting (false → accepted-ignored).
+    func setPaintSetting(_ name: String, to value: String) -> Bool
+    /// `reset paint` — paint globals back to HyperCard defaults.
+    func resetPaint()
     /// `the tool` — the chosen tool's name, e.g. "browse tool". Optional.
     func currentToolName() -> String
     /// `the sound` — the playing voice's name, or "done" when idle. Optional;
@@ -536,6 +546,20 @@ public extension HyperTalkHost {
 
     /// Hosts without tools ignore `choose` and always read the browse tool.
     func chooseTool(_ name: String) {}
+    func drag(fromX: Int, fromY: Int, toX: Int, toY: Int) {}
+    /// Default paint settings — HyperCard's: 1px line, pattern 12 (black),
+    /// hollow shapes, corner-anchored. Hosts with real paint state override.
+    func paintSetting(_ name: String) -> String? {
+        switch name {
+        case "linesize", "pensize": "1"
+        case "pattern", "penpattern": "12"
+        case "filled", "centered", "multiple": "false"
+        case "brush": "8"
+        default: nil
+        }
+    }
+    func setPaintSetting(_ name: String, to value: String) -> Bool { false }
+    func resetPaint() {}
     func currentToolName() -> String { "browse tool" }
 }
 

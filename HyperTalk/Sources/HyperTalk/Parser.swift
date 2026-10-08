@@ -662,10 +662,10 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
         case "drag", "type", "reset", "dial", "create":
-            // `create menu "X"` and `reset menubar` are REAL (custom menus);
-            // the rest is automation Contrapt doesn't model — `drag`, `type`,
-            // `reset paint`, `dial` (telephony), `create stack` — accepted
-            // and ignored so these scripts don't error.
+            // `create menu "X"`, `reset menubar`, `drag from…to…` and `reset
+            // paint` are REAL (custom menus; scripted painting); the rest is
+            // automation Contrapt doesn't model — `type`, `dial` (telephony),
+            // `create stack` — accepted and ignored so scripts don't error.
             let verb = word
             advance()
             if verb == "create", consumeWord("menu") {
@@ -676,6 +676,22 @@ struct Parser {
             if verb == "reset", consumeWord("menubar") {
                 try expectNewline()
                 return Stmt(kind: .menuCommand(.resetMenuBar), line: line)
+            }
+            if verb == "reset", consumeWord("paint") {
+                try expectNewline()
+                return Stmt(kind: .resetPaint, line: line)
+            }
+            if verb == "drag", consumeWord("from") {
+                let fromH = try parseExpression()
+                let fromV = consumeSymbol(",") ? try parseExpression() : nil
+                if consumeWord("to") {
+                    let toH = try parseExpression()
+                    let toV = consumeSymbol(",") ? try parseExpression() : nil
+                    // `with shiftKey…` modifiers: accepted, ignored.
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                    try expectNewline()
+                    return Stmt(kind: .drag(fromH: fromH, fromV: fromV, toH: toH, toV: toV), line: line)
+                }
             }
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
@@ -2409,7 +2425,7 @@ struct Parser {
     /// open-stack list), `mouseclick` (a pending click), `mouse` (the button
     /// state, up/down), and `sound` (the playing sound's name, "done" when
     /// idle) are functions in HyperCard; they read the same way here.
-    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus"]
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,

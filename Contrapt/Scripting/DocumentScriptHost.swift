@@ -180,6 +180,9 @@ final class DocumentScriptHost: HyperTalkHost {
     /// Asset bytes by name — `play` reads its WAV through this (assets live on
     /// the document, not the stack).
     private let assetData: (String) -> Data?
+    /// Stores asset bytes on the document — scripted painting writes the
+    /// card's updated paint PNG through this.
+    private let onAssetWrite: (String, Data) -> Void
 
     init(
         stack: Binding<Stack>,
@@ -196,6 +199,7 @@ final class DocumentScriptHost: HyperTalkHost {
         onGoStack: @escaping (String, GoDestination?) -> Void = { _, _ in },
         onCardMenu: @escaping (String) -> Void = { _ in },
         assetData: @escaping (String) -> Data? = { _ in nil },
+        onAssetWrite: @escaping (String, Data) -> Void = { _, _ in },
         cardWindowViewport: Binding<CGSize?> = .constant(nil),
         menuBar: Binding<[HyperTalkMenu]> = .constant([])
     ) {
@@ -213,6 +217,7 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onGoStack = onGoStack
         self.onCardMenu = onCardMenu
         self.assetData = assetData
+        self.onAssetWrite = onAssetWrite
         self.cardWindowViewport = cardWindowViewport
         self.menuBar = menuBar
     }
@@ -422,7 +427,132 @@ final class DocumentScriptHost: HyperTalkHost {
 
     private var chosenTool = "browse"
 
+    /// The paint tools `drag`/`click` draw with. ("select"/"lasso"/"text"/
+    /// "spray" are recognized as paint-family but don't draw yet.)
+    private static let drawingTools: Set<String> = [
+        "line", "pencil", "brush", "eraser", "rect", "rectangle",
+        "round rect", "roundrect", "oval", "bucket", "regular polygon",
+        "reg poly", "curve",
+    ]
+
+    private var isDrawingToolChosen: Bool { Self.drawingTools.contains(chosenTool) }
+
+    /// Scripted-paint globals (`the lineSize`, `the pattern`, …). Session-wide
+    /// (like HyperCard) so an openStack that sets them covers later handlers,
+    /// even though each dispatch builds a fresh host.
+    final class PaintSession {
+        static let shared = PaintSession()
+        var lineSize = 1      // 1…8
+        var pattern = 12      // 12 = black; 1 = white
+        var filled = false
+        var centered = false
+        var brush = 8
+        var multiple = false
+
+        func reset() {
+            lineSize = 1; pattern = 12; filled = false
+            centered = false; brush = 8; multiple = false
+        }
+    }
+
+    func paintSetting(_ name: String) -> String? {
+        let paint = PaintSession.shared
+        switch name {
+        case "linesize", "pensize": return String(paint.lineSize)
+        case "pattern", "penpattern": return String(paint.pattern)
+        case "filled": return paint.filled ? "true" : "false"
+        case "centered": return paint.centered ? "true" : "false"
+        case "brush": return String(paint.brush)
+        case "multiple": return paint.multiple ? "true" : "false"
+        default: return nil
+        }
+    }
+
+    func setPaintSetting(_ name: String, to value: String) -> Bool {
+        let paint = PaintSession.shared
+        let flag = value.lowercased() == "true"
+        switch name {
+        case "linesize", "pensize": paint.lineSize = max(1, min(8, Int(Double(value) ?? 1)))
+        case "pattern", "penpattern": paint.pattern = max(1, min(40, Int(Double(value) ?? 12)))
+        case "filled": paint.filled = flag
+        case "centered": paint.centered = flag
+        case "brush": paint.brush = max(1, min(32, Int(Double(value) ?? 8)))
+        case "multiple": paint.multiple = flag
+        default: return false
+        }
+        return true
+    }
+
+    func resetPaint() { PaintSession.shared.reset() }
+
+    /// `drag from … to …` with a paint tool: a scripted stroke on the current
+    /// card's paint layer. (With any other tool, drag synthesis is unmodeled.)
+    func drag(fromX: Int, fromY: Int, toX: Int, toY: Int) {
+        guard isDrawingToolChosen else { return }
+        paintOnCard { canvas in
+            let paint = PaintSession.shared
+            let ink = PaintRasterizer.Ink(pattern: paint.pattern)
+            let bounds = PaintRasterizer.dragBounds(from: (fromX, fromY), to: (toX, toY), centered: paint.centered)
+            switch chosenTool {
+            case "line", "curve":
+                PaintRasterizer.line(&canvas, from: (fromX, fromY), to: (toX, toY), size: paint.lineSize, ink: ink)
+            case "pencil":
+                PaintRasterizer.line(&canvas, from: (fromX, fromY), to: (toX, toY), size: 1, ink: ink)
+            case "brush":
+                // The brush paints a wider stroke; brush shapes aren't modeled.
+                PaintRasterizer.line(&canvas, from: (fromX, fromY), to: (toX, toY), size: max(2, paint.lineSize * 2), ink: ink)
+            case "eraser":
+                // HyperCard's eraser is a 16×16 block.
+                PaintRasterizer.line(&canvas, from: (fromX - 8, fromY - 8), to: (toX - 8, toY - 8), size: 16, ink: .erase)
+            case "rect", "rectangle", "regular polygon", "reg poly":
+                PaintRasterizer.rect(&canvas, bounds: bounds, size: paint.lineSize, ink: ink, filled: paint.filled)
+            case "round rect", "roundrect":
+                PaintRasterizer.roundRect(&canvas, bounds: bounds, size: paint.lineSize, ink: ink, filled: paint.filled)
+            case "oval":
+                PaintRasterizer.oval(&canvas, bounds: bounds, size: paint.lineSize, ink: ink, filled: paint.filled)
+            default:
+                break
+            }
+        }
+    }
+
+    /// Renders one drawing operation onto the current card's paint layer,
+    /// storing the updated PNG (and the asset name, first time) back on the
+    /// document.
+    private func paintOnCard(_ draw: (inout PaintRasterizer.Canvas) -> Void) {
+        let width = Int(stack.cardSize.width), height = Int(stack.cardSize.height)
+        guard width > 0, height > 0 else { return }
+        let existing = stack.cards[cardIndex].paintImageAsset
+        var canvas = PaintRasterizer.canvas(from: existing.flatMap(assetData), width: width, height: height)
+        draw(&canvas)
+        guard let png = PaintRasterizer.png(from: canvas) else { return }
+        let assetName = existing ?? "scripted-paint-\(stack.cards[cardIndex].id.uuidString).png"
+        onAssetWrite(assetName, png)
+        if existing == nil {
+            stackBinding.wrappedValue.cards[cardIndex].paintImageAsset = assetName
+        }
+    }
+
     func click(x: Int, y: Int) {
+        // A paint tool clicks paint, not parts: the bucket floods, the
+        // pencil/brush dot.
+        if isDrawingToolChosen {
+            let paint = PaintSession.shared
+            let ink = PaintRasterizer.Ink(pattern: paint.pattern)
+            switch chosenTool {
+            case "bucket":
+                paintOnCard { PaintRasterizer.floodFill(&$0, at: (x, y), ink: ink) }
+            case "pencil":
+                paintOnCard { PaintRasterizer.line(&$0, from: (x, y), to: (x, y), size: 1, ink: ink) }
+            case "brush":
+                paintOnCard { PaintRasterizer.line(&$0, from: (x, y), to: (x, y), size: max(2, paint.lineSize * 2), ink: ink) }
+            case "eraser":
+                paintOnCard { PaintRasterizer.line(&$0, from: (x - 8, y - 8), to: (x - 8, y - 8), size: 16, ink: .erase) }
+            default:
+                break
+            }
+            return
+        }
         let px = Double(x), py = Double(y)
         func hit(_ parts: [Part], matching: ((Part) -> Bool)? = nil) -> Part? {
             // Topmost first (last in z-order).

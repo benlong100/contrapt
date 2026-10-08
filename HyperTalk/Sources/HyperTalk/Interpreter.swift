@@ -287,8 +287,8 @@ final class Runtime {
         "cursor", "lockscreen", "lockmessages", "lockrecent", "lockerrordialogs",
         "userlevel", "dragspeed", "numberformat", "powerkeys", "blindtyping",
         "textarrows", "editbkgnd", "filter", "cantabort", "cantpeek", "usermodify",
-        // Paint-tool globals — scripted painting isn't modeled, so `set the
-        // <these> to …` is accepted and ignored.
+        // Paint-tool globals the host doesn't model fall through to here
+        // (setGlobalProperty tries host.setPaintSetting first).
         "filled", "centered", "linesize", "pensize", "penpattern", "pattern",
         "multiple", "multispace", "polysides", "grid", "brush",
         "textfont", "textsize", "textstyle", "textheight", "textalign",
@@ -1032,6 +1032,25 @@ final class Runtime {
             host.click(x: x, y: y)
             return .normal
 
+        case .drag(let fromH, let fromV, let toH, let toV):
+            func point(_ h: Expr, _ v: Expr?, line: Int) async throws -> (Int, Int) {
+                if let v {
+                    return (Int(try Value.number(from: try await evaluate(h, line: line), line: line)),
+                            Int(try Value.number(from: try await evaluate(v, line: line), line: line)))
+                }
+                let parts = try await evaluate(h, line: line)
+                    .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                return (Int(Double(parts.first ?? "") ?? 0), Int(Double(parts.count > 1 ? parts[1] : "") ?? 0))
+            }
+            let from = try await point(fromH, fromV, line: statement.line)
+            let to = try await point(toH, toV, line: statement.line)
+            host.drag(fromX: from.0, fromY: from.1, toX: to.0, toY: to.1)
+            return .normal
+
+        case .resetPaint:
+            host.resetPaint()
+            return .normal
+
         case .play(let voiceExpression, let tempoExpression, let notesExpression):
             let voice = try await evaluate(voiceExpression, line: statement.line)
             var tempo = 120.0 // HyperCard's default beat
@@ -1200,6 +1219,10 @@ final class Runtime {
             case "itemdelimiter":
                 // HyperCard uses only the first character of the delimiter.
                 itemDelimiter = value.isEmpty ? "" : String(value.first!)
+            case _ where host.setPaintSetting(property, to: value):
+                // A modeled paint global (lineSize, pattern, filled, …) —
+                // the host stored it for the next scripted stroke.
+                break
             case _ where Self.ignorableGlobalProperties.contains(property):
                 // Global environment properties Contrapt has no state for
                 // (cursor, lockScreen, userLevel…). Accept silently so old
@@ -1841,6 +1864,9 @@ final class Runtime {
                 case "mousev": return String(location.y)
                 default: return "\(location.x),\(location.y)"
                 }
+            case "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple":
+                if let value = host.paintSetting(property) { return value }
+                throw ScriptError(line: line, message: "Can't read the '\(property)'.")
             case "tool":
                 // "browse tool" etc. — the save/restore idiom (`put the tool
                 // into t … choose t`... uses `choose <t>` which re-parses; the

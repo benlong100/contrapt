@@ -73,8 +73,17 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
    with per-card copies still resolve via the lookup fallback; re-import for
    the new model. Verified against The Hacker Crackdown (page field: shared
    part, differing per-card text, width write visible from every card).
-8. Scripted painting (`choose <paint> tool` + `drag`/`click` drawing, paint
-   globals currently ignored). PaintEditor exists; wire the tool verbs to it.
+8. Scripted painting — DONE 2026-10-07: `drag from…to…` is a real statement;
+   paint tools draw on the current card's paint PNG via PaintRasterizer
+   (pixel-level RGBA, crisp 1-bit look): line/pencil/brush/eraser strokes,
+   rect/roundRect/oval (filled/hollow/centered), bucket flood fill via
+   `click at`. Paint globals host-backed & session-wide (lineSize, pattern —
+   1=white else black, filled, centered, brush, multiple), `reset paint`.
+   Limits (noted): draws to the CARD layer only (editBkgnd ignored), spray/
+   lasso/select/text tools don't draw, patterns beyond white/black
+   approximate to black, PencilKit drawing asset not updated (re-editing
+   paint by hand rebuilds the PNG from the drawing — scripted strokes on a
+   hand-drawn layer would drop). Pixel-verified end-to-end test.
 9. show/hide card+bg pictures — DONE 2026-10-07 (60c38e1): Card/Background
    .showPicture modeled+persisted, parser/host/CardView wired; Sean's title
    curtain lifts. Engine-host storage with the web batch (item 11).
