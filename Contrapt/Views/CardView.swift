@@ -1183,12 +1183,20 @@ struct PartView: View {
     private func buttonLabel(_ properties: ButtonPart) -> some View {
         switch properties.style {
         case .checkbox, .radio:
-            HStack(spacing: 8) {
+            // The glyph tracks the label's font size (HyperCard's mark is as
+            // tall as the text, not the system default), and the gap is tight,
+            // so the title gets the width the imported frame budgeted for it —
+            // otherwise an oversized symbol + wide gap truncated the name.
+            HStack(spacing: 4) {
                 Image(systemName: toggleGlyph(properties))
+                    .font(properties.format.font)
+                    .imageScale(.small)
                 if properties.showName {
                     Text(properties.title)
                         .font(properties.format.font)
                         .underline(properties.format.isUnderline)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 Spacer(minLength: 0)
             }
@@ -1385,17 +1393,24 @@ struct PartView: View {
     @Previewable @State var selection: Set<UUID> = []
     var stack: Stack = {
         var s = Stack.makeNew()
-        let styles: [(ButtonStyleKind, Bool)] = [
-            (.roundRect, false), (.rectangle, false), (.shadow, false),
-            (.opaque, false), (.transparent, false), (.checkbox, true), (.radio, true),
+        // Mixed widths: wide push buttons, plus narrow checkbox/radio sized
+        // like a real Home-prefs card (title must not truncate behind the
+        // glyph — "Text Arrows" fits a ~110px checkbox).
+        let styles: [(ButtonStyleKind, String, Bool, Double)] = [
+            (.roundRect, "Round Rect", false, 300),
+            (.rectangle, "Rectangle", false, 300),
+            (.checkbox, "Text Arrows", false, 110),
+            (.checkbox, "Blind Typing", true, 110),
+            (.radio, "Browsing", false, 110),
+            (.radio, "Scripting", true, 110),
         ]
         var parts: [Part] = []
         for (i, entry) in styles.enumerated() {
             parts.append(Part(
-                id: UUID(), name: entry.0.label,
-                frame: PartFrame(x: 64, y: Double(60 + i * 90), width: 300, height: 60),
+                id: UUID(), name: entry.1,
+                frame: PartFrame(x: 64, y: Double(60 + i * 70), width: entry.3, height: 28),
                 script: "",
-                kind: .button(ButtonPart(title: entry.0.label, style: entry.0, hilite: entry.1))
+                kind: .button(ButtonPart(title: entry.1, style: entry.0, hilite: entry.2))
             ))
         }
         s.cards[0].parts = parts
