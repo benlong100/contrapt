@@ -302,7 +302,10 @@ extension WebsiteExporter {
         im.className = 'paint'; im.src = 'assets/' + asset;
         return im;
       }
-      function renderPart(p) {
+      // `overlay` is the owning card's backgroundFieldContent — a background
+      // layer's non-sharedText field shows THIS card's text (the shared part
+      // itself stores none).
+      function renderPart(p, overlay) {
         const d = document.createElement('div');
         d.className = 'part';
         if (p.scriptID != null) { d.dataset.scriptId = p.scriptID; partEls[p.scriptID] = d; }
@@ -316,7 +319,8 @@ extension WebsiteExporter {
           // Imported HyperCard per-field line height — how tightly-set
           // stacks (the Tour) keep their vertical layout.
           if (f.textHeight) d.style.lineHeight = f.textHeight + 'px';
-          d.textContent = f.text || '';
+          const perCard = overlay && !f.sharedText ? overlay[p.id] : null;
+          d.textContent = (perCard ? perCard.text : f.text) || '';
           // HyperCard "group" text style: the character ranges that click as a
           // unit, so the click handler can return the whole run as clickText
           // (the clickable-phrase navigation idiom). Stashed per-field.
@@ -360,7 +364,7 @@ extension WebsiteExporter {
         layer.className = 'layer';
         if (bg) {
           const bp = paint(bg.paintImageAsset); if (bp) layer.appendChild(bp);
-          (bg.parts || []).forEach(p => layer.appendChild(renderPart(p)));
+          (bg.parts || []).forEach(p => layer.appendChild(renderPart(p, card.backgroundFieldContent || {})));
         }
         const cp = paint(card.paintImageAsset); if (cp) layer.appendChild(cp);
         (card.parts || []).forEach(p => layer.appendChild(renderPart(p)));
