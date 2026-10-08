@@ -585,6 +585,51 @@ import HyperTalk
 }
 
 @MainActor
+@Test func foundChunkIsAWritableContainer() async throws {
+    // `find` then `put … after the foundChunk` / `delete the foundChunk` —
+    // the search-and-replace idiom (Writing Tools' makeSubstitutions, card
+    // "Metaphors" line 46). the foundChunk must resolve as a writable
+    // container, not just a readable descriptor.
+    var stack = Stack(formatVersion: StackFormat.currentVersion, id: UUID(), name: "Find",
+                      cardSize: CardSize(width: 300, height: 200),
+                      script: "", backgrounds: [], cards: [])
+    var background = Background(id: UUID(), name: "BG", script: "", parts: [])
+    background.scriptID = stack.claimScriptID()
+    stack.backgrounds.append(background)
+    var card = Card(id: UUID(), name: "C1", backgroundID: background.id, script: "", parts: [])
+    card.scriptID = stack.claimScriptID()
+    var field = Part(id: UUID(), name: "Text",
+                     frame: PartFrame(x: 10, y: 10, width: 280, height: 150),
+                     script: "", kind: .field(FieldPart(text: "the *S* ran fast", placeholder: "")))
+    field.scriptID = stack.claimScriptID()
+    card.parts.append(field)
+    stack.cards.append(card)
+
+    var index = 0
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    func text() -> String {
+        if case .field(let f) = stack.cards[0].parts[0].kind { return f.text }
+        return ""
+    }
+    // put after the foundChunk: insert the substitution, then delete the match.
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      find whole "*S*" in card field "Text"
+      put "dog" after the foundChunk
+      delete the foundChunk
+    end p
+    """, host: host, maxSteps: 2000)
+    #expect(text() == "the dog ran fast")
+}
+
+@MainActor
 @Test func chainedOpenCardAutoAdvanceFires() async throws {
     // Writing Tools: cards 1–3 each `on openCard / visual … / go next card`,
     // an auto-advancing intro. Every arrival must send openCard so the chain

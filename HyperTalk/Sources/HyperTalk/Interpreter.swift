@@ -812,6 +812,14 @@ final class Runtime {
 
         case .deleteChunk(let container):
             // delete <chunk> of <container> — remove chunk AND delimiter.
+            // `delete the foundChunk`/`the selection` resolve to their
+            // underlying `char X to Y of field` chunk first (search-and-replace).
+            var container = container
+            switch container {
+            case .foundChunk: if let c = foundChunkContainer() { container = c } else { return .normal }
+            case .selection: if let c = selectionContainer() { container = c } else { return .normal }
+            default: break
+            }
             guard case .chunk(let kind, let selector, let base) = container else { return .normal }
             let source = try await containerValue(base, line: statement.line)
             let updated = try await ChunkResolver.deleting(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
@@ -1321,6 +1329,10 @@ final class Runtime {
             return messageBoxText
         case .selection:
             return host.selectionValue(.text)
+        case .foundChunk:
+            // The last find's text, read through its resolved field+range.
+            guard let resolved = foundChunkContainer() else { return "" }
+            return try await containerValue(resolved, line: line)
         case .me:
             guard let field = meAsField(line: line) else {
                 throw ScriptError(line: line, message: "'me' is not a field here.")
@@ -1344,6 +1356,15 @@ final class Runtime {
     /// nothing is selected or the host doesn't track one.
     private func selectionContainer() -> Container? {
         let descriptor = host.selectionValue(.chunk)
+        guard !descriptor.isEmpty else { return nil }
+        return Parser.parseSoleContainer(descriptor)
+    }
+
+    /// The last find match as a chunk-of-field container, parsed from the
+    /// host's foundChunk descriptor (`char X to Y of card field Z`). Nil when
+    /// nothing was found. Backs `the foundChunk` used as a container.
+    private func foundChunkContainer() -> Container? {
+        let descriptor = host.foundValue(.chunk)
         guard !descriptor.isEmpty else { return nil }
         return Parser.parseSoleContainer(descriptor)
     }
@@ -1385,6 +1406,11 @@ final class Runtime {
             // Replace the selected text by writing to its field+range. No
             // selection → nothing to write (as in HyperCard).
             if let resolved = selectionContainer() {
+                try await setContainer(resolved, to: value, line: line)
+            }
+        case .foundChunk:
+            // `put X into/after/before the foundChunk` writes the found range.
+            if let resolved = foundChunkContainer() {
                 try await setContainer(resolved, to: value, line: line)
             }
         case .me:
@@ -1505,6 +1531,9 @@ final class Runtime {
         case .selection:
             guard let resolved = selectionContainer() else { return nil }
             return try await fieldAndRange(of: resolved, line: line)
+        case .foundChunk:
+            guard let resolved = foundChunkContainer() else { return nil }
+            return try await fieldAndRange(of: resolved, line: line)
         case .messageBox:
             return nil
         }
@@ -1531,7 +1560,7 @@ final class Runtime {
         switch container {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk: return false
         }
     }
 

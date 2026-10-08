@@ -687,7 +687,7 @@ struct Parser {
                     advance()
                 }
                 if let container = try? parseContainer(line: line),
-                   case .chunk = container,
+                   isDeletableContainer(container),
                    current.kind == .newline || current.kind == .endOfScript {
                     try expectNewline()
                     return Stmt(kind: .deleteChunk(container), line: line)
@@ -1106,6 +1106,15 @@ struct Parser {
 
     /// A put destination: a chunk of a container (`word 2 of field "X"`),
     /// a field, or a variable.
+    /// Containers `delete` can remove a chunk/range of: an explicit chunk, or
+    /// the runtime-resolved foundChunk/selection (search-and-replace idioms).
+    private func isDeletableContainer(_ container: Container) -> Bool {
+        switch container {
+        case .chunk, .foundChunk, .selection: return true
+        default: return false
+        }
+    }
+
     private mutating func parseContainer(line: Int) throws -> Container {
         // A parenthesized container — the Home stack's list idiom puts the
         // base chunk in parens: `select char 1 to n of (line 2 of the target)`.
@@ -1173,6 +1182,14 @@ struct Parser {
             if selectionOffset == 1 { advance() } // the
             advance() // selection
             return .selection
+        }
+        // `[the] foundChunk` as a destination — the last find match, usable as
+        // a container (`put X after the foundChunk` / `delete the foundChunk`).
+        let foundOffset = peekIdentifier() == "the" ? 1 : 0
+        if peekIdentifier(foundOffset) == "foundchunk" {
+            if foundOffset == 1 { advance() } // the
+            advance() // foundChunk
+            return .foundChunk
         }
         if let fieldRef = try parseFieldRefIfPresent() {
             return .field(fieldRef)

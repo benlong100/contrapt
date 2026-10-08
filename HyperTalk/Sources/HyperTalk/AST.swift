@@ -266,6 +266,10 @@ indirect enum Container {
     /// selected text; writing replaces it (`put X into the selection`). Resolved
     /// at run time to the selected field and character range.
     case selection
+    /// `[the] foundChunk` as a container — the chunk the last `find` matched
+    /// (`put X after the foundChunk` / `delete the foundChunk`, the search-and-
+    /// replace idiom). Resolved at run time to the found field + char range.
+    case foundChunk
     /// A chunk of another container: `word 2 of field "X"`.
     case chunk(ChunkKind, ChunkSelector, Container)
 }
