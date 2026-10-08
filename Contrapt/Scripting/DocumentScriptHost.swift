@@ -2086,10 +2086,7 @@ final class DocumentScriptHost: HyperTalkHost {
             part.kind = .field(properties)
         case "textfont":
             try withFieldFormat(&part, kind: kind) { format in
-                guard let design = Self.parseFontDesign(value) else {
-                    throw HostError("Unknown font \"\(value)\". Try system, serif, monospaced, or rounded.")
-                }
-                format.fontDesign = design
+                format.fontDesign = Self.fontDesign(for: value)
             }
         case "textsize":
             let size = try number(value, for: property)
@@ -2307,9 +2304,36 @@ final class DocumentScriptHost: HyperTalkHost {
         return property == "textstyle" ? "mixed" : ""
     }
 
+    /// Classic Mac font names → the nearest modern design. HyperCard stacks
+    /// name real fonts (Chicago, Geneva, Times, Monaco…); we don't carry those
+    /// faces, so map each to its closest family. Unknown names fall back to the
+    /// system font rather than erroring (HyperCard substitutes, never rejects).
+    static let classicFontDesigns: [String: FontDesign] = [
+        // Sans / UI faces
+        "chicago": .standard, "geneva": .standard, "charcoal": .standard,
+        "helvetica": .standard, "arial": .standard, "espy sans": .standard,
+        "verdana": .standard, "tahoma": .standard,
+        // Serif faces
+        "times": .serif, "times new roman": .serif, "new york": .serif,
+        "palatino": .serif, "georgia": .serif, "garamond": .serif,
+        "book antiqua": .serif, "bookman": .serif,
+        // Monospaced faces
+        "monaco": .monospaced, "courier": .monospaced, "courier new": .monospaced,
+        "pc monospace": .monospaced, "menlo": .monospaced,
+    ]
+
     static func parseFontDesign(_ value: String) -> FontDesign? {
         let normalized = value.lowercased().trimmingCharacters(in: .whitespaces)
-        return FontDesign.allCases.first { $0.rawValue == normalized || $0.label.lowercased() == normalized }
+        if let design = FontDesign.allCases.first(where: { $0.rawValue == normalized || $0.label.lowercased() == normalized }) {
+            return design
+        }
+        return classicFontDesigns[normalized]
+    }
+
+    /// Like `parseFontDesign` but never fails — an unrecognized font becomes
+    /// the system font, so `set textFont to <anything>` can't error.
+    static func fontDesign(for value: String) -> FontDesign {
+        parseFontDesign(value) ?? .standard
     }
 
     private func cardProperty(_ property: String, cardAt index: Int) throws -> String {

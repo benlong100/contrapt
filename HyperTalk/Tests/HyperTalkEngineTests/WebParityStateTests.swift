@@ -112,3 +112,19 @@ private let parityJSON = """
     #expect(try await engine.runMessage("the hilite of card button \"Go\"") == "true")
     #expect(try await engine.runMessage("the autoHilight of card button \"Go\"") != nil)
 }
+
+@Test func classicFontNamesMapInsteadOfErroring() async throws {
+    // `set the textFont of field … to Chicago` (and other classic Mac fonts)
+    // must not error — HyperCard names real faces; we map each to the nearest
+    // design and read it back, and an unknown font falls back to system.
+    let engine = try StackEngine(stackJSON: parityJSON)
+    _ = try await engine.runMessage("set the textFont of card field \"List\" to Chicago")
+    #expect(try await engine.runMessage("the textFont of card field \"List\"") == "standard")
+    _ = try await engine.runMessage("set the textFont of card field \"List\" to Palatino")
+    #expect(try await engine.runMessage("the textFont of card field \"List\"") == "serif")
+    _ = try await engine.runMessage("set the textFont of card field \"List\" to Monaco")
+    #expect(try await engine.runMessage("the textFont of card field \"List\"") == "monospaced")
+    // An unknown face doesn't throw — becomes the system font.
+    _ = try await engine.runMessage("set the textFont of card field \"List\" to Flibbertigibbet")
+    #expect(try await engine.runMessage("the textFont of card field \"List\"") == "standard")
+}
