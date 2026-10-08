@@ -203,11 +203,19 @@ struct ContentView: View {
         )
     }
 
-    /// HyperCard's ⌘⌥/⌘⌥⇧-click shortcut: select the clicked object and open
-    /// the inspector on it, where its script is shown and editable.
+    /// HyperCard's ⌘⌥/⌘⌥⇧-click shortcut: select the clicked object, enter
+    /// edit mode, and open the inspector on it — so its script shows with the
+    /// Edit toolbar's Done button to return to browsing. Blocked on a foreign
+    /// stack (a swapped-in sibling) for the same autosave reason the Edit
+    /// button is.
     private func openPartScript(_ part: Part) {
+        guard !displayingForeignStack else { return }
         objectScope = stack.cards[cardIndex].parts.contains { $0.id == part.id } ? .card : .background
         selectedPartIDs = [part.id]
+        findHighlight = nil
+        scriptSelection = nil
+        SelectionSession.shared.clear()
+        isEditing = true
         isInspectorPresented = true
     }
 
