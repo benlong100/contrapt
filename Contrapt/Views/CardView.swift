@@ -57,6 +57,19 @@ struct CardView: View {
 
     var body: some View {
         GeometryReader { proxy in
+            // A cross-stack swap replaces `stack` before the parent corrects
+            // `cardIndex`, so for one frame the index can point past the new
+            // (smaller) stack. Render nothing rather than hard-crash on the
+            // out-of-range subscript (every helper below indexes cards[cardIndex]).
+            if cardIndex >= 0, cardIndex < stack.cards.count {
+                cardBody(proxy: proxy)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cardBody(proxy: GeometryProxy) -> some View {
+        Group {
             let cardWidth = stack.cardSize.width
             let cardHeight = stack.cardSize.height
             let fit = min(proxy.size.width / cardWidth, proxy.size.height / cardHeight)
@@ -70,6 +83,10 @@ struct CardView: View {
                 .frame(width: cardWidth * scale, height: cardHeight * scale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var currentCard: Card? {
+        stack.cards.indices.contains(cardIndex) ? stack.cards[cardIndex] : nil
     }
 
     /// HyperCard's authentic layering: background paint, background parts,
@@ -227,7 +244,8 @@ struct CardView: View {
     }
 
     private var backgroundIndex: Int? {
-        stack.backgrounds.firstIndex { $0.id == stack.cards[cardIndex].backgroundID }
+        guard let card = currentCard else { return nil }
+        return stack.backgrounds.firstIndex { $0.id == card.backgroundID }
     }
 
     // MARK: - Selection & group move

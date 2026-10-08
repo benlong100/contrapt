@@ -1096,6 +1096,12 @@ struct ContentView: View {
             let actualSize = StackLibrary.shared.actualSize(forName: StackLibrary.name(for: url))
             guard let imported = try? LegacyStackImporter.importedStack(
                 from: url, iconApp: HyperCardAppReference.url(), presentAtActualSize: actualSize) else { return }
+            // Correct the card index to the incoming stack's bounds BEFORE
+            // publishing the swap, so the view never re-renders with the new
+            // (possibly smaller) stack and the old index (an out-of-range crash).
+            if currentCardIndex >= imported.stack.cards.count {
+                currentCardIndex = max(0, imported.stack.cards.count - 1)
+            }
             document.present(stack: imported.stack, assets: imported.assets)
         } else {
             document.load(data)
