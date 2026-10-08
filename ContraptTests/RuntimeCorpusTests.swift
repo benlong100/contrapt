@@ -558,6 +558,33 @@ import HyperTalk
 
 
 @MainActor
+@Test func radioAndCheckboxButtonStylesImport() throws {
+    // HyperCard button-style nibbles: radioButton=6, checkBox=5 (verified
+    // against Canton College Kiosk's Home). The importer once mapped 8/9, so
+    // every radio/checkbox fell to roundRect — the "all pushbuttons" bug.
+    let home = "/Applications/Basilisk II/BasiliskShared/Greg Jewett Stacks/Canton College Kiosk/Home"
+    guard FileManager.default.fileExists(atPath: home) else { return }
+    let imported = try LegacyStackImporter.importedStack(from: URL(fileURLWithPath: home))
+    func style(ofButtonNamed name: String) -> ButtonStyleKind? {
+        for card in imported.stack.cards {
+            for part in card.parts where part.name == name {
+                if case .button(let b) = part.kind { return b.style }
+            }
+        }
+        for bg in imported.stack.backgrounds {
+            for part in bg.parts where part.name == name {
+                if case .button(let b) = part.kind { return b.style }
+            }
+        }
+        return nil
+    }
+    #expect(style(ofButtonNamed: "Browsing") == .radio)
+    #expect(style(ofButtonNamed: "Scripting") == .radio)
+    #expect(style(ofButtonNamed: "Text Arrows") == .checkbox)
+    #expect(style(ofButtonNamed: "Blind Typing") == .checkbox)
+}
+
+@MainActor
 @Test func dumpSeanSoundsAndLine251() async throws {
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad/New Stacks - Oct 5 3rd batch/AdventuresOfSeanMacintosh"
     guard let path = classicStackFiles(under: root).first else { return }

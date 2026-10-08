@@ -585,14 +585,18 @@ private extension LegacyStackImporter {
         var textHeight: Int
         /// HyperCard button style (low nibble of the style byte) → Contrapt.
         var buttonStyle: ButtonStyleKind {
+            // HyperCard button-style nibble (verified against Canton College
+            // Kiosk's Home: checkBox=5, radioButton=6). 7/8 are standard/
+            // default push buttons, 9/10 oval/popup — all drawn as roundRect
+            // until Contrapt models them.
             switch styleByte {
             case 0: return .transparent
             case 1: return .opaque
             case 2: return .rectangle
             case 3: return .roundRect
             case 4: return .shadow
-            case 8: return .checkbox
-            case 9: return .radio
+            case 5: return .checkbox
+            case 6: return .radio
             default: return .roundRect
             }
         }
