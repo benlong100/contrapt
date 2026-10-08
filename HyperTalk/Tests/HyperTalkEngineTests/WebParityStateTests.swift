@@ -78,3 +78,26 @@ private let parityJSON = """
     _ = try await engine.runMessage("type \"v\" with commandKey")
     #expect(engine.fieldText(named: "List") == "ZXY")
 }
+
+@Test func homePreferencesEnvironmentGlobalsRoundTrip() async throws {
+    // The Home stack's Preferences card: set userLevel then read it and the
+    // typing flags back to drive hilites. Reading `the textArrows` used to
+    // echo "textarrows" and blow up `set hilite … to <that>` (reported as
+    // line 18 of the card script).
+    let engine = try StackEngine(stackJSON: parityJSON)
+    #expect(try await engine.runMessage("the userLevel") == "5")
+    _ = try await engine.runMessage("set userLevel to 3")
+    #expect(try await engine.runMessage("the userLevel") == "3")
+    #expect(try await engine.runMessage("the userLevel = 3") == "true")
+    _ = try await engine.runMessage("set userLevel to 99") // clamps 1…5
+    #expect(try await engine.runMessage("the userLevel") == "5")
+    #expect(try await engine.runMessage("the textArrows") == "false")
+    _ = try await engine.runMessage("set the textArrows to true")
+    #expect(try await engine.runMessage("the textArrows") == "true")
+    // The crash line's exact shape now evaluates to a boolean.
+    _ = try await engine.runMessage("set hilite of card button \"Go\" to the textArrows")
+    #expect(try await engine.runMessage("the hilite of card button \"Go\"") == "true")
+    _ = try await engine.runMessage("set the powerKeys to true")
+    _ = try await engine.runMessage("set the blindTyping to false")
+    #expect(try await engine.runMessage("the powerKeys & the blindTyping") == "truefalse")
+}

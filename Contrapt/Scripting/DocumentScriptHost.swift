@@ -501,6 +501,42 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func resetPaint() { PaintSession.shared.reset() }
 
+    /// The environment globals (`the userLevel`, `textArrows`, `powerKeys`,
+    /// `blindTyping`) — session-wide, like HyperCard's Preferences. Contrapt
+    /// doesn't gate features on them; stacks read back what they set (the
+    /// Home Preferences card drives its whole UI off these).
+    final class EnvironmentSession {
+        static let shared = EnvironmentSession()
+        var userLevel = 5
+        var textArrows = false
+        var powerKeys = false
+        var blindTyping = false
+    }
+
+    func environmentSetting(_ name: String) -> String? {
+        let env = EnvironmentSession.shared
+        switch name {
+        case "userlevel": return String(env.userLevel)
+        case "textarrows": return env.textArrows ? "true" : "false"
+        case "powerkeys": return env.powerKeys ? "true" : "false"
+        case "blindtyping": return env.blindTyping ? "true" : "false"
+        default: return nil
+        }
+    }
+
+    func setEnvironmentSetting(_ name: String, to value: String) -> Bool {
+        let env = EnvironmentSession.shared
+        let flag = value.lowercased() == "true"
+        switch name {
+        case "userlevel": env.userLevel = max(1, min(5, Int(Double(value) ?? 5)))
+        case "textarrows": env.textArrows = flag
+        case "powerkeys": env.powerKeys = flag
+        case "blindtyping": env.blindTyping = flag
+        default: return false
+        }
+        return true
+    }
+
     /// `type <expr>`: keystrokes at the insertion point — the script
     /// selection (`select after text of field X` then `type "…"`, the classic
     /// data-entry idiom). The typed text replaces the selected range and the

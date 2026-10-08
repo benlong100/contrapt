@@ -1249,6 +1249,9 @@ final class Runtime {
                 // A modeled paint global (lineSize, pattern, filled, …) —
                 // the host stored it for the next scripted stroke.
                 break
+            case _ where host.setEnvironmentSetting(property, to: value):
+                // A modeled environment global (userLevel, textArrows, …).
+                break
             case _ where Self.ignorableGlobalProperties.contains(property):
                 // Global environment properties Contrapt has no state for
                 // (cursor, lockScreen, userLevel…). Accept silently so old
@@ -1827,11 +1830,6 @@ final class Runtime {
             switch property {
             case "itemdelimiter":
                 return itemDelimiter
-            case "userlevel":
-                // Contrapt imposes no access levels — everything is always
-                // available — so the userLevel reads as 5 (Scripting), the
-                // top. Guards like `if the userLevel < 3` then pass correctly.
-                return "5"
             case "stacks":
                 // HyperCard: the open stacks' paths, one per line, frontmost
                 // first. Contrapt shows one stack per window: its name. Pairs
@@ -1892,6 +1890,9 @@ final class Runtime {
                 }
             case "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple":
                 if let value = host.paintSetting(property) { return value }
+                throw ScriptError(line: line, message: "Can't read the '\(property)'.")
+            case "userlevel", "textarrows", "powerkeys", "blindtyping":
+                if let value = host.environmentSetting(property) { return value }
                 throw ScriptError(line: line, message: "Can't read the '\(property)'.")
             case "tool":
                 // "browse tool" etc. — the save/restore idiom (`put the tool

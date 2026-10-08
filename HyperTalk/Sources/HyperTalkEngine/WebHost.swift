@@ -45,6 +45,30 @@ final class WebHost: HyperTalkHost {
     private var findState = FindState()
     private var sortContextIndex: Int?
 
+    /// Environment globals (userLevel/textArrows/powerKeys/blindTyping) —
+    /// per-engine, read back by the Home Preferences idiom.
+    private var environment: [String: String] = [:]
+
+    func environmentSetting(_ name: String) -> String? {
+        if let stored = environment[name] { return stored }
+        switch name {
+        case "userlevel": return "5"
+        case "textarrows", "powerkeys", "blindtyping": return "false"
+        default: return nil
+        }
+    }
+
+    func setEnvironmentSetting(_ name: String, to value: String) -> Bool {
+        switch name {
+        case "userlevel":
+            environment[name] = String(max(1, min(5, Int(Double(value) ?? 5))))
+        case "textarrows", "powerkeys", "blindtyping":
+            environment[name] = value.lowercased() == "true" ? "true" : "false"
+        default: return false
+        }
+        return true
+    }
+
     /// `type <expr>` at the script selection — same semantics as the app
     /// host: replace the selected range, caret after. No selection → no-op.
     func typeText(_ text: String, withCommandKey: Bool) {

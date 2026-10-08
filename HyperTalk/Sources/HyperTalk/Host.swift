@@ -471,6 +471,11 @@ public protocol HyperTalkHost: AnyObject {
     /// `type <expr>` — keystrokes at the insertion point (the script
     /// selection). With commandKey it's a menu shortcut, not text.
     func typeText(_ text: String, withCommandKey: Bool)
+    /// `the userLevel` / `textArrows` / `powerKeys` / `blindTyping` — the
+    /// environment globals the Home stack's Preferences card reads and sets.
+    func environmentSetting(_ name: String) -> String?
+    /// Returns true if stored (false → accepted-ignored).
+    func setEnvironmentSetting(_ name: String, to value: String) -> Bool
     /// `the tool` — the chosen tool's name, e.g. "browse tool". Optional.
     func currentToolName() -> String
     /// `the sound` — the playing voice's name, or "done" when idle. Optional;
@@ -579,6 +584,17 @@ public extension HyperTalkHost {
     func printText(_ text: String, title: String) {}
     /// Hosts without a keyboard focus model ignore `type`.
     func typeText(_ text: String, withCommandKey: Bool) {}
+
+    /// Environment-global defaults: everything's allowed (scripting level),
+    /// typing conveniences off — HyperCard's fresh-install reads.
+    func environmentSetting(_ name: String) -> String? {
+        switch name {
+        case "userlevel": "5"
+        case "textarrows", "powerkeys", "blindtyping": "false"
+        default: nil
+        }
+    }
+    func setEnvironmentSetting(_ name: String, to value: String) -> Bool { false }
     func currentToolName() -> String { "browse tool" }
 }
 
