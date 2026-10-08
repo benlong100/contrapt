@@ -128,3 +128,22 @@ import Testing
     _ = try Parser.parse("on p\nget cd field myName of card 2\nend p")
     _ = try Parser.parse("on p\nput cd fld verse of cd haiku into x\nend p")
 }
+
+@Test func bareConvertDispatchesAsMessage() async throws {
+    // A bare `convert` (no target) calls a user `on convert` handler, which
+    // HyperCard lets shadow the built-in (Phone # Converter). The built-in
+    // `convert X to <format>` is unaffected.
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      convert
+    end p
+
+    on convert
+      put "ran" into msg
+    end convert
+    """, host: host)
+    #expect(host.messages.last == "ran")
+    // The real convert verb still parses.
+    _ = try Parser.parse("on p\nconvert the date to seconds\nend p")
+}

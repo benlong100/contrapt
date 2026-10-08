@@ -173,3 +173,22 @@ Dropped corpus runtime errors 162 → 92 (incl. ordinal-card grammar). Remaining
 - Not bugs: [9] "timed out (poll loop?)" = openStack busy-waits (Sean,
   Clinton Issues, Cruel Fairy) — expected, the audit's wall-clock guard.
 Re-run anytime: `touch /tmp/contrapt-runtime-audit`, run corpusRuntimeAudit.
+
+## Corpus sweep CONCLUDED (2026-10-08) — 162 → 68
+Final pass fixed bare `convert` (dispatches to a user `on convert` handler,
+shadowing the built-in; Phone # Converter). The remaining ~68 errors are NOT
+Contrapt gaps — verified each category:
+- Author bugs in the original stacks: Star Trek TNG (`& episodeNum &.` stray
+  ampersand; an unterminated string literal) — real HyperCard would reject
+  these too.
+- Invalid HyperTalk: New Features `put`/`select` into a BUTTON (HC tolerates
+  only via lazy per-handler compile; semantically invalid).
+- Power-Tools template stacks (Readymade Buttons/Fields): XCMD-heavy, not
+  standalone-runnable, depend on Home functions (`wrongStack`, popObject…).
+- Kitchen-sink demo (HyperCard 10th Anniversary): undefined handlers
+  (hide_all), non-English command (primaparte), author typos, data refs.
+- Data/runtime, not parse: Car Care `go` to a nonexistent background.
+- NOT BUGS: openStack poll-loops (Sean, Clinton Issues, Cruel Fairy) — the
+  audit's wall-clock guard firing on intentional wait loops.
+Broad compatibility gaps are closed. Re-run after new imports:
+`touch /tmp/contrapt-runtime-audit`, run corpusRuntimeAudit.

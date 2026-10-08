@@ -489,6 +489,14 @@ struct Parser {
             return try parseFind(line: line)
         case "convert":
             advance()
+            // A bare `convert` (nothing after) is a message send to a user
+            // `on convert` handler, which HyperCard lets shadow the built-in
+            // (Phone # Converter's button calls `convert`). The built-in form
+            // always has a target + `to <format>`.
+            if current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .send("convert", []), line: line)
+            }
             let target = try parseConvertTarget(line: line)
             var from: [ConvertFormat] = []
             if consumeWord("from") { from = try parseConvertFormat(line: line) }
