@@ -71,13 +71,32 @@ enum FontResource {
         let fonds = ResourceFork.namedResources(ofType: "FOND", from: fork)
         var result: [EmbeddedFont] = []
         for fond in fonds where !fond.name.isEmpty {
-            guard let sfnt = sfnts.first(where: { $0.name.caseInsensitiveCompare(fond.name) == .orderedSame }),
+            // Skip a family the system already provides (Helvetica, Times,
+            // Courier…): the stack bundles only its regular strike, but the
+            // system font has the real bold/italic faces, so rendering with
+            // that is more faithful than the embedded regular + synthetic
+            // styling. Only genuinely custom faces (Klinzhai, Koshgarian) use
+            // the embedded glyphs.
+            guard !systemHasFontFamily(fond.name),
+                  let sfnt = sfnts.first(where: { $0.name.caseInsensitiveCompare(fond.name) == .orderedSame }),
                   let provider = CGDataProvider(data: sfnt.data as CFData),
                   let cgFont = CGFont(provider),
                   let postScriptName = cgFont.postScriptName as String? else { continue }
             result.append(EmbeddedFont(familyID: fond.id, postScriptName: postScriptName, ttf: sfnt.data))
         }
         return result
+    }
+
+    /// Whether the OS already provides a font family by this name — then the
+    /// system face (with its full bold/italic variants) beats embedding the
+    /// stack's regular-only strike.
+    private static func systemHasFontFamily(_ name: String) -> Bool {
+        #if canImport(UIKit)
+        let families = UIFont.familyNames
+        #else
+        let families = NSFontManager.shared.availableFontFamilies
+        #endif
+        return families.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
 
     /// Every font family in the fork, via its FONDs. A family's metrics come

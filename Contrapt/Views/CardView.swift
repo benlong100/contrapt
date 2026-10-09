@@ -1335,9 +1335,11 @@ struct PartView: View {
                         .underline(properties.format.isUnderline)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        // Imported bitmap-icon buttons label in black, as in
-                        // 1-bit HyperCard; SF-symbol buttons keep the tint.
-                        .foregroundStyle(properties.iconAsset != nil ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
+                        // HyperCard button titles are black (1-bit) — imported
+                        // buttons (bitmap icon or plain title) label in the
+                        // label color. Only the authoring library's SF-symbol
+                        // buttons keep the tint as a clickable affordance.
+                        .foregroundStyle(hasSymbol ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
