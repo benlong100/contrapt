@@ -145,6 +145,15 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
     picture/color features actually present (still niche): AddColor/Color Tools
     color overlays (HCcd/HCbg/ADDc — 2 Oct 8 stacks) and QuickTime movie XCMDs
     (qtMovie/playMovie — KlingonDictionary, USGS). See [[backlog]].
+    QuickTime movies — RESEARCHED + DEFERRED (2026-10-09): no `.mov` files in
+    the corpus; the one embedded `moov` (QuickTime Logo Movie) is a 1704-byte
+    HEADER atom only (no mdat → unplayable); Service Source plays user-picked
+    external movies (none shipped). Real XCMD contract: `QTMovie openMovie,
+    <window>, <path>, <loc>, …` → a movie in a named window, controlled via
+    window props/messages (dithering, mouseDownMsg, movieIdle). Only viable
+    build: shim `QTMovie openMovie`/`playMovie` to play a user-picked .mov/.mp4
+    in an AVKit window modeled like the palette windows. Full research note in
+    memory: quicktime-movies.md.
     AddColor/Color Tools — PARTIAL (2026-10-09, commits 3ab02de + eb93621):
     HCcd/HCbg decode + ColorElement model + import, and a CardView color layer
     that draws `rect` fills beneath the 1-bit paint via .blendMode(.multiply).
