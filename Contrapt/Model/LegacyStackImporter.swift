@@ -247,6 +247,22 @@ enum LegacyStackImporter {
         for (id, assetName) in iconAssetByID {
             stack.icons[String(id)] = assetName
         }
+        // Palette windows (PLTE resources): floating button panels a stack
+        // opens with `palette "name"`. Keyed by lowercased name; each button
+        // carries its rect, the HyperTalk command it dispatches, and (when the
+        // button has one) its icon — resolved from the stack's ICON/cicn/ICN#
+        // resources via the same search path as regular button icons.
+        if let stackFork {
+            for p in ResourceFork.palettes(from: stackFork) where !p.name.isEmpty {
+                stack.palettes[p.name.lowercased()] = PaletteDefinition(
+                    buttons: p.buttons.map {
+                        PaletteButtonDefinition(top: Double($0.top), left: Double($0.left),
+                                                bottom: Double($0.bottom), right: Double($0.right),
+                                                command: $0.command,
+                                                iconAsset: iconAsset(iconID: $0.iconID))
+                    })
+            }
+        }
         return Imported(stack: stack.sanitized(), assets: assets)
     }
 
@@ -301,20 +317,6 @@ enum LegacyStackImporter {
         }
         if let stackFork { embedSounds(from: stackFork, keeping: nil) }
         if let iconFork { embedSounds(from: iconFork, keeping: ["boing", "flute", "harpsichord"]) }
-        // Palette windows (PLTE resources): floating button panels a stack
-        // opens with `palette "name"`. Keyed by lowercased name; buttons carry
-        // their rect and the HyperTalk command they dispatch. Icons live in a
-        // separate PICT and aren't decoded yet — buttons render text labels.
-        if let stackFork {
-            for p in ResourceFork.palettes(from: stackFork) where !p.name.isEmpty {
-                importedStack.palettes[p.name.lowercased()] = PaletteDefinition(
-                    buttons: p.buttons.map {
-                        PaletteButtonDefinition(top: Double($0.top), left: Double($0.left),
-                                                bottom: Double($0.bottom), right: Double($0.right),
-                                                command: $0.command)
-                    })
-            }
-        }
         // HyperCard derived indentation in its script editor and stored the
         // text flat — recompute it so imported scripts read properly here.
         reindentScripts(of: &importedStack)

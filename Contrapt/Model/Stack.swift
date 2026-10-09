@@ -146,9 +146,12 @@ nonisolated struct PaletteDefinition: Codable, Hashable {
 nonisolated struct PaletteButtonDefinition: Codable, Hashable {
     var top: Double, left: Double, bottom: Double, right: Double
     var command: String
-    /// A short label derived from the command (icons live in a separate PICT,
-    /// not yet decoded) — `doMenu "Prev"` → "Prev", `paletteHandlerHome` →
-    /// "Home".
+    /// The stored PNG asset for the button's ICON/cicn/ICN# resource, resolved
+    /// at import (nil when the button carries no icon — it falls back to the
+    /// text label). Decoded on the `.contrapt` round trip, so it defaults nil.
+    var iconAsset: String? = nil
+    /// A short label derived from the command, shown when there's no icon —
+    /// `doMenu "Prev"` → "Prev", `paletteHandlerHome` → "Home".
     var label: String {
         let c = command
         if let r = c.range(of: "doMenu", options: .caseInsensitive) {

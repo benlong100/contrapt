@@ -354,10 +354,7 @@ struct ContentView: View {
                     Button {
                         performPaletteCommand(button.command)
                     } label: {
-                        Text(button.label)
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
+                        paletteButtonLabel(button)
                             .frame(width: button.right - button.left, height: button.bottom - button.top)
                     }
                     .buttonStyle(.bordered)
@@ -372,6 +369,22 @@ struct ContentView: View {
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.4)))
         .fixedSize()
         .offset(x: base.width + drag.width, y: base.height + drag.height)
+    }
+
+    /// A palette button's face: its decoded ICON/cicn/ICN# icon when it has
+    /// one (crisp nearest-neighbor, like card button icons), otherwise the
+    /// command-derived text label.
+    @ViewBuilder
+    private func paletteButtonLabel(_ button: PaletteButtonDefinition) -> some View {
+        if let asset = button.iconAsset, let data = document.assets[asset],
+           let image = Image(assetData: data) {
+            image.resizable().interpolation(.none).aspectRatio(contentMode: .fit)
+        } else {
+            Text(button.label)
+                .font(.caption2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
     }
 
     /// Runs a palette button's command as a HyperTalk statement in the current

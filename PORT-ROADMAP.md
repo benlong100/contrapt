@@ -142,9 +142,10 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
     `palette "name"` attaches those buttons to the registered window; ContentView
     renders each visible palette as a draggable floating panel whose buttons sit
     at their authored rects and dispatch their command (doMenu/bare message).
-    LIMITATION: button icons live in a separate PICT (not decoded) — buttons
-    render command-derived TEXT labels (`doMenu "Prev"` → "Prev",
-    `paletteHandlerHome` → "Home"). PICT icon decode is deferred.
+    Button icons resolve from the stack's ICON/cicn/ICN# resources (the PLTE
+    per-button iconID) via the same search path as card buttons; a button with
+    no icon falls back to a command-derived text label (`doMenu "Prev"` →
+    "Prev", `paletteHandlerHome` → "Home").
 
 ## Method
 Work top-down; for each feature: implement → unit tests → add oracle corpus

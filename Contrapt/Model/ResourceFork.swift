@@ -296,10 +296,13 @@ enum ResourceFork {
         return data as Data
     }
 
-    /// One palette button from a PLTE resource: its rect (card coordinates)
-    /// and the HyperTalk command/message sent when clicked.
+    /// One palette button from a PLTE resource: its rect (card coordinates),
+    /// the id of the ICON/cicn/ICN# resource that draws it, and the HyperTalk
+    /// command/message sent when clicked. `iconID` is 0 when the button has no
+    /// icon (a text-only button).
     struct PaletteButton {
         let top: Int, left: Int, bottom: Int, right: Int
+        let iconID: Int
         let command: String
     }
 
@@ -324,13 +327,13 @@ enum ResourceFork {
         for _ in 0..<count {
             guard p + 11 <= d.count else { break }
             let top = i16(p), left = i16(p + 2), bottom = i16(p + 4), right = i16(p + 6)
-            // p+8..p+9 = icon id (unused — icons live in a separate PICT/ICON).
+            let iconID = i16(p + 8) // the ICON/cicn/ICN# resource that draws the button
             let len = Int(d[p + 10])
             let start = p + 11
             guard start + len <= d.count else { break }
             let command = (String(bytes: d[start..<start+len], encoding: .macOSRoman) ?? "")
                 .trimmingCharacters(in: .whitespaces)
-            buttons.append(PaletteButton(top: top, left: left, bottom: bottom, right: right, command: command))
+            buttons.append(PaletteButton(top: top, left: left, bottom: bottom, right: right, iconID: iconID, command: command))
             p = start + len
         }
         return buttons
