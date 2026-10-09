@@ -219,6 +219,18 @@ import Testing
     _ = try Parser.parse("on p\nhide window \"NexusLogo\"\nend p") // unchanged
 }
 
+@Test func propertyOfOrdinalChunkIsIndirect() throws {
+    // `the scroll of last item of fieldList` — the chunk's VALUE names a
+    // field (Power Tools, Car Care, 10th Anniversary); the property applies
+    // to that indirect object. `first item`/`word`/etc. too.
+    _ = try Parser.parse("on p\nget the scroll of last item of fieldList\nend p")
+    _ = try Parser.parse("on p\nif it ≠ the scroll of first item of fieldList then beep\nend p")
+    _ = try Parser.parse("on p\nput the visible of last line of objList into x\nend p")
+    // A plain variable indirect and a real chunk-of-field property still parse.
+    _ = try Parser.parse("on p\nget the scroll of fieldList\nend p")
+    _ = try Parser.parse("on p\nget the textStyle of line 2 of field \"X\"\nend p")
+}
+
 @Test func thereIsABackgroundByNameParses() throws {
     // `there is a background <bareword>` — background existence by a variable
     // name (HyperHacker). The name is consumed, not left before `then`.

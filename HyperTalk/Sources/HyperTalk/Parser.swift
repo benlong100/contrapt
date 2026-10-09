@@ -2527,6 +2527,20 @@ struct Parser {
             }
             return .menu(name)
         }
+        // `last item of fieldList` / `first word of theList` — an ordinal-led
+        // chunk whose VALUE names the object (a field descriptor held in a
+        // list). The property applies to that indirect object: `the scroll of
+        // last item of fieldList` (Power Tools, Car Care, 10th Anniversary).
+        // Parse the chunk expression and defer resolution to run time.
+        if let w = peekIdentifier(), let selector = Self.ordinalSelector(w),
+           let k = peekIdentifier(1), let kind = Self.chunkKinds[k] {
+            advance() // ordinal
+            advance() // chunk kind
+            guard consumeWord("of") || consumeWord("in") else {
+                throw ScriptError(line: line, message: "Expected 'of' after '\(w) \(k)'.")
+            }
+            return .indirect(.chunk(kind, selector, try parsePrimary()))
+        }
         // A parenthesized expression builds the object's descriptor inline —
         // `visible of (object && i)`, Power Tools' Super Grouper idiom.
         // Re-parsed as an object at run time, like a variable indirect.
