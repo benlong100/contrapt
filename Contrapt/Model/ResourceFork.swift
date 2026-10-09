@@ -439,11 +439,48 @@ enum ResourceFork {
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
         rep.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
         NSGraphicsContext.restoreGraphicsState()
+        // Modern macOS no longer draws most classic color-PICT bitmap ops, so
+        // NSPICTImageRep often returns correct bounds but renders NOTHING — a
+        // fully transparent bitmap. Treat an essentially-empty render as a
+        // failure (nil) rather than embedding a blank asset; real PICT color
+        // then needs a hand-written QuickDraw decoder (see backlog).
+        guard bitmapHasContent(bitmap) else { return nil }
         return bitmap.representation(using: .png, properties: [:])
         #else
         return nil
         #endif
     }
+
+    #if canImport(AppKit)
+    /// Whether a rendered bitmap holds a real image — sampled on a grid. A
+    /// failed classic PICT render (modern macOS doesn't draw most color-PICT
+    /// ops) comes back either fully transparent or a single flat fill color;
+    /// both are rejected. A genuine image is mostly opaque AND has several
+    /// distinct colors, which this requires.
+    private static func bitmapHasContent(_ bitmap: NSBitmapImageRep) -> Bool {
+        let w = bitmap.pixelsWide, h = bitmap.pixelsHigh
+        guard w > 0, h > 0 else { return false }
+        let stepX = max(1, w / 64), stepY = max(1, h / 64)
+        var sampled = 0, opaque = 0
+        var colors = Set<UInt32>()
+        var y = 0
+        while y < h {
+            var x = 0
+            while x < w {
+                sampled += 1
+                if let c = bitmap.colorAt(x: x, y: y), c.alphaComponent > 0.01 {
+                    opaque += 1
+                    let r = UInt32(c.redComponent * 255), g = UInt32(c.greenComponent * 255), b = UInt32(c.blueComponent * 255)
+                    colors.insert((r << 16) | (g << 8) | b)
+                }
+                x += stepX
+            }
+            y += stepY
+        }
+        guard sampled > 0 else { return false }
+        return Double(opaque) / Double(sampled) > 0.02 && colors.count >= 8
+    }
+    #endif
 
     /// A quick sanity check that data begins with a plausible resource-fork
     /// header (data offset and map offset within bounds).

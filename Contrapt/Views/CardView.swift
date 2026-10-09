@@ -97,21 +97,30 @@ struct CardView: View {
     /// `visual effect` transitions only the card layer, leaving a shared
     /// background static (as in HyperCard) — see `includeBackground`/`includeCard`.
     private var cardCanvas: some View {
-        ZStack(alignment: .topLeading) {
-            if includeBackground {
-                cardSurface
-                if let backgroundIndex {
-                    // `hide background picture` blanks the paint layer only.
-                    if stack.backgrounds[backgroundIndex].showPicture {
-                        paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset)
-                    }
-                    partViews(for: backgroundParts(backgroundIndex))
+        // Does this card (or its background) carry an AddColor color layer?
+        // When so, the color draws beneath and the 1-bit paint multiplies over
+        // it so white reveals the color; plain stacks are untouched.
+        let bgColor = backgroundIndex.map { stack.backgrounds[$0].colorElements } ?? []
+        let cardColor = stack.cards.indices.contains(cardIndex) ? stack.cards[cardIndex].colorElements : []
+        let hasColor = !bgColor.isEmpty || !cardColor.isEmpty
+        return ZStack(alignment: .topLeading) {
+            if includeBackground { cardSurface }
+            // The whole AddColor layer (background then card) sits behind ALL
+            // the 1-bit art AND the live parts, as HyperCard composites it — so
+            // field text and buttons stay legible on top of the color.
+            if includeBackground { colorLayer(bgColor) }
+            if includeCard { colorLayer(cardColor) }
+            if includeBackground, let backgroundIndex {
+                // `hide background picture` blanks the paint layer only.
+                if stack.backgrounds[backgroundIndex].showPicture {
+                    paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset, multiplyOverColor: hasColor)
                 }
+                partViews(for: backgroundParts(backgroundIndex))
             }
             if includeCard {
                 // `hide [card] picture` — the dark-room/curtain idiom.
                 if stack.cards[cardIndex].showPicture {
-                    paintLayer(assetName: stack.cards[cardIndex].paintImageAsset)
+                    paintLayer(assetName: stack.cards[cardIndex].paintImageAsset, multiplyOverColor: hasColor)
                 }
                 partViews(for: $stack.cards[cardIndex].parts)
                 guideLines
@@ -193,7 +202,7 @@ struct CardView: View {
 
     /// A rendered paint layer, if the object has one.
     @ViewBuilder
-    private func paintLayer(assetName: String?) -> some View {
+    private func paintLayer(assetName: String?, multiplyOverColor: Bool = false) -> some View {
         if let assetName,
            let data = stackAssets[assetName],
            let image = Image(assetData: data) {
@@ -201,7 +210,49 @@ struct CardView: View {
                 .resizable()
                 .interpolation(.none) // keep 1-bit paint crisp when scaled up
                 .frame(width: stack.cardSize.width, height: stack.cardSize.height)
+                // AddColor compositing: the 1-bit art multiplies over the color
+                // layer behind it — white (×color = color) reveals the color,
+                // black stays black. Only when the card/bg carries color, so
+                // plain stacks are untouched.
+                .blendMode(multiplyOverColor ? .multiply : .normal)
                 .allowsHitTesting(false)
+        }
+    }
+
+    /// The AddColor/Color Tools color layer: filled rectangles and decoded
+    /// PICTs at their card-coordinate bounds, drawn beneath the 1-bit paint.
+    /// Button/field tint elements are not yet drawn. Hidden elements are
+    /// skipped. Non-color cards pass an empty array and draw nothing.
+    @ViewBuilder
+    private func colorLayer(_ elements: [ColorElement]) -> some View {
+        if !elements.isEmpty {
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(elements.enumerated()), id: \.offset) { _, element in
+                    if !element.hidden, element.kind == .rect || element.kind == .picture {
+                        colorElementView(element)
+                            .frame(width: max(0, element.right - element.left),
+                                   height: max(0, element.bottom - element.top))
+                            .offset(x: element.left, y: element.top)
+                    }
+                }
+            }
+            .frame(width: stack.cardSize.width, height: stack.cardSize.height, alignment: .topLeading)
+            .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private func colorElementView(_ element: ColorElement) -> some View {
+        switch element.kind {
+        case .rect:
+            Rectangle().fill(Color(stackColor: element.color))
+        case .picture:
+            if let asset = element.pictureAsset, let data = stackAssets[asset],
+               let image = Image(assetData: data) {
+                image.resizable().interpolation(.none)
+            }
+        default:
+            EmptyView()
         }
     }
 
