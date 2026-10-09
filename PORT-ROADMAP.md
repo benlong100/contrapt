@@ -123,9 +123,15 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
 
 ## Priority 3 — long tail / environment
 14. Palettes & external windows (`palette`, tool/pattern windows, `the
-    windows`), `answer file` on iOS, AppleEvents beyond no-op, debugger/
-    `trace`, serial. (`dial` is already handled — parsed and no-op'd, since
-    Contrapt has no telephony.) Deliberate divergences stay (documented in
+    windows`). Small environment verbs are DONE (2026-10-08): `dial`
+    (no-op, no telephony), AppleEvents (put/send to program, request, reply,
+    answer program — all no-op, no app reachable), and debugger/`trace`
+    (`trace`/`debug`/`checkpoint` fall through to no-op message sends,
+    `set traceDelay` accepted) — none of these are gaps; a sandboxed
+    single-app port can't do more and no-op is the correct behavior.
+    REMAINING here: `answer file` on iOS (app-only, needs fileImporter
+    mid-continuation), serial (no device — already no-ops), and the bigger
+    app-side media features below. Deliberate divergences stay (documented in
     ORACLE.md): permissive comparisons, container-sort superset, HC 2.3 quirks.
     XCMD shims — IN PROGRESS: shipped PopMenu/HPopUpMenu, FileName,
     NewFileName, FontExists (earlier), and 2026-10-08 Flash/Flasher/FlashRect
