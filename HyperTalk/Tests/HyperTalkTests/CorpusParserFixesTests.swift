@@ -200,3 +200,28 @@ import Testing
     _ = try Parser.parse("on p\nsort cards of bg \"X\" by field \"k\"\nend p")
     _ = try Parser.parse("on p\nsort bg field \"Apps For Docs\"\nend p")
 }
+
+@Test func doMenuWithoutDialogParses() throws {
+    // `doMenu "X" without dialog` suppresses the confirmation (HyperHacker,
+    // Stack Templates). The optional which-menu and with-dialog variants parse
+    // too; the modifiers are consumed, the action performed either way.
+    _ = try Parser.parse("on p\ndoMenu \"Delete Stack...\" without dialog\nend p")
+    _ = try Parser.parse("on p\ndoMenu \"Cut\" with dialog\nend p")
+    _ = try Parser.parse("on p\ndoMenu \"Copy\", \"Edit\" without dialog\nend p")
+    _ = try Parser.parse("on p\ndoMenu \"New Card\"\nend p") // unchanged
+}
+
+@Test func showWindowAtLocationParses() throws {
+    // `show window X at "h,v"` positions the window as it shows (QuickTime
+    // Tools, Star Trek TNG). The location is consumed.
+    _ = try Parser.parse("on p\nshow window WindowName at \"380,40\"\nend p")
+    _ = try Parser.parse("on p\nshow window \"NexusLogo\" at \"41,74\"\nend p")
+    _ = try Parser.parse("on p\nhide window \"NexusLogo\"\nend p") // unchanged
+}
+
+@Test func thereIsABackgroundByNameParses() throws {
+    // `there is a background <bareword>` — background existence by a variable
+    // name (HyperHacker). The name is consumed, not left before `then`.
+    _ = try Parser.parse("on p\nif there is a Background theBgName then beep\nend p")
+    _ = try Parser.parse("on p\nif there is a bg \"Graphs\" then beep\nend p")
+}

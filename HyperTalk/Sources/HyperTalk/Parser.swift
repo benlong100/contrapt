@@ -1455,18 +1455,32 @@ struct Parser {
     /// (`doMenu "New Card"`, `doMenu menuItem`); bare multi-word text is the
     /// literal menu name (`doMenu Select All`, `doMenu clear picture`).
     private mutating func parseMenuItem() throws -> Expr {
+        // `doMenu <item> [, <menuName>] [with|without dialog]` — the optional
+        // which-menu and the dialog modifier (`doMenu "Delete Stack…" without
+        // dialog`) are consumed; Contrapt performs the action either way.
+        func consumeMenuTrailers() {
+            if consumeSymbol(",") { _ = try? parseExpression() }
+            if peekIdentifier() == "with" || peekIdentifier() == "without" {
+                advance(); _ = consumeWord("dialog")
+            }
+        }
         if case .string = current.kind {
             let item = try parseExpression()
+            consumeMenuTrailers()
             try expectNewline()
             return item
         }
         var words: [String] = []
         while current.kind != .newline, current.kind != .endOfScript {
+            // Stop before a trailing `with/without dialog` so it isn't read as
+            // part of a bare multi-word menu name.
+            if (peekIdentifier() == "with" || peekIdentifier() == "without"), peekIdentifier(1) == "dialog" { break }
             if let word = peekIdentifier() { words.append(word) }
             else if case .string(let text) = current.kind { words.append(text) }
             else if case .number(let value) = current.kind { words.append(Value.string(from: value)) }
             advance()
         }
+        consumeMenuTrailers()
         try expectNewline()
         // A lone bare word is a variable holding the item; multiple words are
         // the literal menu name.
@@ -1648,6 +1662,9 @@ struct Parser {
             advance()
             let name = (current.kind == .newline || current.kind == .endOfScript)
                 ? Expr.stringLiteral("") : try parsePrimary()
+            // `show window "X" at "h,v"` positions the window as it shows; the
+            // location is consumed (Contrapt shows it at its registered loc).
+            if consumeWord("at") { _ = try? parsePrimary() }
             try expectNewline()
             return Stmt(kind: .set(property: "visible", object: .window(name),
                                    value: .stringLiteral(visible ? "true" : "false")), line: line)
@@ -2460,6 +2477,13 @@ struct Parser {
             if consumeWord("id") { _ = try parsePrimary() }
             else if case .string = current.kind { advance() }
             else if case .number = current.kind { advance() }
+            // `bg theBgName` — a bareword variable naming the background
+            // (`there is a background theBgName`, HyperHacker). Consumed and
+            // ignored (one bg context); stop at a condition/statement keyword.
+            else if let n = peekIdentifier(),
+                    !["then", "is", "of", "in", "to", "and", "or", "into", "from", "end", "the", "without"].contains(n) {
+                advance()
+            }
             return .thisBackground
         }
         if let w = peekIdentifier(), Self.cardWords.contains(w) {
