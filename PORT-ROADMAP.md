@@ -261,3 +261,45 @@ REMAINING real gaps (harder; not yet done):
 The rest of the 48 are author bugs (unterminated quotes/parens, stray `.`).
 Fast re-run: `CONTRAPT_AUDIT=1 CONTRAPT_CORPUS="<root>" swift test
 --package-path HyperTalk --filter corpusParseAudit` (~5s for 280 stacks).
+## Priority 4 — HyperCard, forward (new-stack authoring; 2026-10-09)
+Goal: not just play old stacks but make HyperCard a living tool for building
+little apps — local and for the web. North-star constraint: **write once, run
+everywhere** (the shared interpreter drives both the native app and the
+self-contained web export). Two guardrails hold throughout:
+- **Keep HyperTalk readable** — arrays/JSON/HTTP must still read like English;
+  that's the line between "HyperCard reborn" and "another scripting language."
+- **Security/permissions** — once a stack can reach the network, untrusted
+  stacks need a sandbox/consent story, especially in web export. Design early.
+
+Sequencing is by dependency + leverage. Phase A is LANGUAGE work: it lives in
+the shared interpreter, so it's `swift test`-verifiable (fast lane, no app
+build) AND lands in app + web at once. Phase B is app-side / build-gated.
+
+Phase A — the substrate (do first):
+1. **Structured data: associative arrays + JSON.** The foundation everything
+   leans on (network responses are JSON; modern data needs real structures).
+   Pure interpreter. Open design call to settle first: readable access syntax
+   (`response["main"]["temp"]` bracket vs. property-style `the temp of
+   response`), and how arrays coexist with HyperCard's string/chunk containers
+   without breaking item/line/word semantics. (NEXT — awaiting a design pick.)
+2. **HTTP/JSON verbs** (`put url "…" into x`, async requests, JSONDecode/
+   traversal). The transformative unlock — retires most XCMD use cases. Host
+   hook: URLSession (app) / fetch (web). Depends on #1 being pleasant.
+3. **Persistent + shared stack data** — a stack that remembers between runs
+   (file / localStorage), then optional multi-user. Small after #1–#2.
+
+Phase B — the experience (app-side, build-gated):
+4. **Reskin / theming + responsive layout + accessibility** — leans on the
+   import strength; modernizes old stacks and makes new ones web-respectable
+   (VoiceOver, Dynamic Type, resize a fixed 512×342 card).
+5. **AI co-author** — the modern "gentle slope": describe a card, explain a
+   handler, natural-language → HyperTalk, "make this resizable." Fits because
+   HyperTalk is near-English.
+6. **Components / reusable custom parts; finish color; audio/video/camera;
+   iPad + Pencil (touch authoring).**
+
+Extensibility (the modern XCMD) is considered SOLVED by this plan: built-in
+HTTP/JSON (#2) covers most cases; a JS/WASM extension API that runs in BOTH app
+and web is the true plugin path; native Swift plugins are a later app-only tier
+for device features. (Embedding Python/Java was REJECTED — it forks the
+write-once/run-everywhere runtime story.)
