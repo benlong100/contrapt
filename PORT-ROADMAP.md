@@ -145,6 +145,13 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
     picture/color features actually present (still niche): AddColor/Color Tools
     color overlays (HCcd/HCbg/ADDc — 2 Oct 8 stacks) and QuickTime movie XCMDs
     (qtMovie/playMovie — KlingonDictionary, USGS). See [[backlog]].
+    AddColor/Color Tools — PARTIAL (2026-10-09, commits 3ab02de + eb93621):
+    HCcd/HCbg decode + ColorElement model + import, and a CardView color layer
+    that draws `rect` fills beneath the 1-bit paint via .blendMode(.multiply).
+    DEFERRED: PICT color backgrounds (NSPICTImageRep renders blank on modern
+    macOS — needs a hand-written QuickDraw decoder, swift-CLI verifiable) and
+    button/field tint elements and web parity. No confirmed-good color stack in
+    the corpus to validate the visible result. See [[backlog]].
     `go next/previous background` — DONE (2026-10-08): the first card of the
     adjacent background (stack order, wrapping), resolved to a concrete card by
     a host `adjacentBackgroundCardNumber(forward:)` query so no new
