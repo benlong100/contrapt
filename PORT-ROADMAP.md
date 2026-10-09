@@ -133,7 +133,18 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
     work even when the stack omits the XCMD resource. Corpus XCMD ranking:
     FileName 13, NewFileName 10, HyPict 9, PopMenu 9, FontExists 7, Picture 7,
     Palette 6, Flash 6. Remaining common ones need bigger features: HyPict/
-    Picture (PICT display), AddColor (color), Palette (P3 windows item).
+    Picture (PICT display), AddColor (color).
+    Palettes & external windows — DONE (2026-10-08): increment 1 shipped the
+    scripting layer (PaletteRegistry: `the windows`, `there is a window`,
+    visible/loc/rect, show/hide/close). Increment 2 adds the visible panels:
+    PLTE resources decode at import into `stack.palettes` (ResourceFork.palettes
+    → parsePalette: 22-byte header, u16 count, per-button rect+iconID+command);
+    `palette "name"` attaches those buttons to the registered window; ContentView
+    renders each visible palette as a draggable floating panel whose buttons sit
+    at their authored rects and dispatch their command (doMenu/bare message).
+    LIMITATION: button icons live in a separate PICT (not decoded) — buttons
+    render command-derived TEXT labels (`doMenu "Prev"` → "Prev",
+    `paletteHandlerHome` → "Home"). PICT icon decode is deferred.
 
 ## Method
 Work top-down; for each feature: implement → unit tests → add oracle corpus

@@ -296,6 +296,46 @@ enum ResourceFork {
         return data as Data
     }
 
+    /// One palette button from a PLTE resource: its rect (card coordinates)
+    /// and the HyperTalk command/message sent when clicked.
+    struct PaletteButton {
+        let top: Int, left: Int, bottom: Int, right: Int
+        let command: String
+    }
+
+    /// Every `PLTE` resource (Apple's Palette XCMD definition) in the fork,
+    /// id+name → its buttons. Format: a 22-byte header, a u16 button count,
+    /// then per button `[i16 top,left,bottom,right][i16 iconID][u8 cmdLen]
+    /// [cmd]`. The `palette "name"` call looks these up to render the window.
+    static func palettes(from fork: Data) -> [(id: Int, name: String, buttons: [PaletteButton])] {
+        namedResources(ofType: "PLTE", from: fork).map { resource in
+            (resource.id, resource.name, parsePalette(resource.data))
+        }
+    }
+
+    private static func parsePalette(_ data: Data) -> [PaletteButton] {
+        let d = [UInt8](data)
+        guard d.count >= 24 else { return [] }
+        func i16(_ o: Int) -> Int { Int(Int16(bitPattern: (UInt16(d[o]) << 8) | UInt16(d[o+1]))) }
+        func u16(_ o: Int) -> Int { Int((UInt16(d[o]) << 8) | UInt16(d[o+1])) }
+        let count = u16(22)
+        var buttons: [PaletteButton] = []
+        var p = 24
+        for _ in 0..<count {
+            guard p + 11 <= d.count else { break }
+            let top = i16(p), left = i16(p + 2), bottom = i16(p + 4), right = i16(p + 6)
+            // p+8..p+9 = icon id (unused — icons live in a separate PICT/ICON).
+            let len = Int(d[p + 10])
+            let start = p + 11
+            guard start + len <= d.count else { break }
+            let command = (String(bytes: d[start..<start+len], encoding: .macOSRoman) ?? "")
+                .trimmingCharacters(in: .whitespaces)
+            buttons.append(PaletteButton(top: top, left: left, bottom: bottom, right: right, command: command))
+            p = start + len
+        }
+        return buttons
+    }
+
     /// A quick sanity check that data begins with a plausible resource-fork
     /// header (data offset and map offset within bounds).
     private static func looksLikeResourceMap(_ data: Data) -> Bool {

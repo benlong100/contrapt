@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVFoundation
+import Combine
 import HyperTalk
 
 /// Session-wide HyperTalk globals — shared across cards and stacks while
@@ -251,20 +252,34 @@ final class DocumentScriptHost: HyperTalkHost {
 
     /// Scripted palette/external windows opened by the `palette` XCMD (and
     /// `show/hide/close window`). Session-wide (like the chosen tool), reset
-    /// when a stack opens. Rendering is a later increment; this layer makes
-    /// `the windows`, `there is a window "X"`, and the visible/loc/rect
-    /// properties behave for the palette-management idiom (Tubers).
-    @MainActor final class PaletteRegistry {
+    /// when a stack opens. ContentView observes this to render open palettes as
+    /// floating panels; this layer also makes `the windows`, `there is a window
+    /// "X"`, and the visible/loc/rect properties behave (Tubers).
+    @MainActor final class PaletteRegistry: ObservableObject {
         static let shared = PaletteRegistry()
-        struct Window { var name: String; var visible: Bool; var loc: (x: Int, y: Int)? }
-        private(set) var windows: [Window] = []
+        struct Window: Identifiable {
+            let id = UUID()
+            var name: String
+            var visible: Bool
+            var loc: (x: Int, y: Int)?
+            /// The palette's buttons (rect + command), from its PLTE resource.
+            /// Empty when the stack carries no matching PLTE — the window still
+            /// registers so the scripting idioms work, it just draws no buttons.
+            var buttons: [PaletteButtonDefinition] = []
+        }
+        @Published private(set) var windows: [Window] = []
 
         func index(of name: String) -> Int? {
             windows.firstIndex { $0.name.caseInsensitiveCompare(name) == .orderedSame }
         }
-        func open(_ name: String, loc: (Int, Int)?) {
-            if let i = index(of: name) { windows[i].visible = true; if let loc { windows[i].loc = loc } }
-            else { windows.append(Window(name: name, visible: true, loc: loc)) }
+        func open(_ name: String, loc: (Int, Int)?, buttons: [PaletteButtonDefinition] = []) {
+            if let i = index(of: name) {
+                windows[i].visible = true
+                if let loc { windows[i].loc = loc }
+                if !buttons.isEmpty { windows[i].buttons = buttons }
+            } else {
+                windows.append(Window(name: name, visible: true, loc: loc, buttons: buttons))
+            }
         }
         func setVisible(_ name: String, _ visible: Bool) { if let i = index(of: name) { windows[i].visible = visible } }
         func setLoc(_ name: String, _ loc: (Int, Int)) { if let i = index(of: name) { windows[i].loc = loc } }
@@ -1401,7 +1416,8 @@ final class DocumentScriptHost: HyperTalkHost {
                 let n = arguments[1].split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
                 if n.count >= 2 { loc = (n[0], n[1]) }
             }
-            PaletteRegistry.shared.open(name, loc: loc)
+            let buttons = stack.palettes[name.lowercased()]?.buttons ?? []
+            PaletteRegistry.shared.open(name, loc: loc, buttons: buttons)
             return ""
         case "flash", "flasher", "flashrect":
             // Flash.XCMD inverts the screen a few times (default 3; Flash(n)

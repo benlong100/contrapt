@@ -90,6 +90,11 @@ nonisolated struct Stack: Identifiable, Hashable {
     /// drawn glyph at run time (animation/toggle buttons). Filled at import
     /// from the stack's own fork plus any app icons buttons referenced.
     var icons: [String: String] = [:]
+    /// Palette/external-window definitions (Apple's Palette XCMD, from PLTE
+    /// resources), by lowercased name. `palette "Tuber"` renders this as a
+    /// floating button panel. Each button carries its rect and the command it
+    /// sends when clicked.
+    var palettes: [String: PaletteDefinition] = [:]
     /// How the stack's embedded fonts (FOND resources) resolved at import,
     /// keyed by classic font ID as a string. Informational: parts carry their
     /// resolved TextFormat; this records what mapped where (and would back a
@@ -107,7 +112,7 @@ nonisolated struct Stack: Identifiable, Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
-        case isFullScreen, paddingColor, presentAtActualSize, externalCommands, sounds, fonts, icons
+        case isFullScreen, paddingColor, presentAtActualSize, externalCommands, sounds, fonts, icons, palettes
     }
 
     init(from decoder: Decoder) throws {
@@ -127,6 +132,34 @@ extension Stack: Codable {
         sounds = try container.decodeIfPresent([String: StackSound].self, forKey: .sounds) ?? [:]
         fonts = try container.decodeIfPresent([String: StackFont].self, forKey: .fonts) ?? [:]
         icons = try container.decodeIfPresent([String: String].self, forKey: .icons) ?? [:]
+        palettes = try container.decodeIfPresent([String: PaletteDefinition].self, forKey: .palettes) ?? [:]
+    }
+}
+
+/// A palette/external window from a PLTE resource: a row/grid of buttons, each
+/// a rect and the HyperTalk command it sends when clicked. Rendered as a
+/// floating panel by `palette "name"`.
+nonisolated struct PaletteDefinition: Codable, Hashable {
+    var buttons: [PaletteButtonDefinition]
+}
+
+nonisolated struct PaletteButtonDefinition: Codable, Hashable {
+    var top: Double, left: Double, bottom: Double, right: Double
+    var command: String
+    /// A short label derived from the command (icons live in a separate PICT,
+    /// not yet decoded) — `doMenu "Prev"` → "Prev", `paletteHandlerHome` →
+    /// "Home".
+    var label: String {
+        let c = command
+        if let r = c.range(of: "doMenu", options: .caseInsensitive) {
+            let rest = c[r.upperBound...].trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+            if !rest.isEmpty { return rest }
+        }
+        var name = c
+        if let r = name.range(of: "paletteHandler", options: .caseInsensitive) {
+            name = String(name[r.upperBound...])
+        }
+        return name
     }
 }
 

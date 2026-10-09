@@ -47,6 +47,11 @@ struct ContentView: View {
     #endif
     @ObservedObject private var cardClipboard = CardClipboard.shared
     @ObservedObject private var partClipboard = PartClipboard.shared
+    /// Scripted palette windows (the `palette` XCMD) rendered as floating
+    /// panels over the stage. `paletteDrag` keeps each panel's dragged offset
+    /// (keyed by name) so the user can reposition it.
+    @ObservedObject private var paletteRegistry = DocumentScriptHost.PaletteRegistry.shared
+    @State private var paletteDrag: [String: CGSize] = [:]
 
     @State private var currentCardIndex = 0
     @State private var isEditing = false
@@ -318,6 +323,73 @@ struct ContentView: View {
         }
     }
 
+    /// A floating palette window: a titled panel whose buttons sit at their
+    /// authored rects (normalized to the palette's bounding box) and dispatch
+    /// their HyperTalk command when clicked. Draggable by its title bar.
+    @ViewBuilder
+    private func palettePanel(_ window: DocumentScriptHost.PaletteRegistry.Window) -> some View {
+        let buttons = window.buttons
+        let minX = buttons.map(\.left).min() ?? 0
+        let minY = buttons.map(\.top).min() ?? 0
+        let width = (buttons.map(\.right).max() ?? 0) - minX
+        let height = (buttons.map(\.bottom).max() ?? 0) - minY
+        let base = CGSize(width: Double(window.loc?.x ?? 24), height: Double(window.loc?.y ?? 48))
+        let drag = paletteDrag[window.name] ?? .zero
+        VStack(spacing: 0) {
+            Text(window.name)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.25))
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            paletteDrag[window.name] = CGSize(width: drag.width + value.translation.width,
+                                                              height: drag.height + value.translation.height)
+                        }
+                )
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(buttons.enumerated()), id: \.offset) { _, button in
+                    Button {
+                        performPaletteCommand(button.command)
+                    } label: {
+                        Text(button.label)
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .frame(width: button.right - button.left, height: button.bottom - button.top)
+                    }
+                    .buttonStyle(.bordered)
+                    .position(x: button.left - minX + (button.right - button.left) / 2,
+                              y: button.top - minY + (button.bottom - button.top) / 2)
+                }
+            }
+            .frame(width: max(width, 1), height: max(height, 1))
+            .padding(4)
+        }
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.4)))
+        .fixedSize()
+        .offset(x: base.width + drag.width, y: base.height + drag.height)
+    }
+
+    /// Runs a palette button's command as a HyperTalk statement in the current
+    /// card's context — `doMenu "Next"`, a bare `paletteHandlerHome` message, etc.
+    private func performPaletteCommand(_ command: String) {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let host = makeHost()
+        let path = scriptPath(cardAt: cardIndex, part: nil)
+        Task { @MainActor in
+            do {
+                _ = try await HyperTalk.execute(messageLine: trimmed, along: path, host: host)
+            } catch {
+                scriptErrorText = error.localizedDescription
+            }
+        }
+    }
+
     private var cardStageBody: some View {
         Group {
             if document.stack.cards.isEmpty {
@@ -482,6 +554,16 @@ struct ContentView: View {
                 }
             }
             .animation(.default, value: linkingPartID)
+        }
+        .overlay(alignment: .topLeading) {
+            // Scripted palette windows float over the stage, each a draggable
+            // button panel. Only shown in browse mode (edit mode owns the card
+            // for part manipulation) and only when the palette has buttons.
+            if !isEditing {
+                ForEach(paletteRegistry.windows.filter { $0.visible && !$0.buttons.isEmpty }) { window in
+                    palettePanel(window)
+                }
+            }
         }
         .alert(
             "Script Error",

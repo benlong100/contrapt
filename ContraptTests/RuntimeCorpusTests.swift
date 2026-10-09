@@ -776,7 +776,10 @@ import HyperTalk
     #expect(shown.last == "true|false|")
 }
 
-@MainActor
+// Palette tests share the PaletteRegistry.shared singleton and interleave at
+// `await` points, so they're serialized to keep one's reset() from wiping the
+// other's window mid-flight.
+@Suite(.serialized) @MainActor struct PaletteSessionTests {
 @Test func paletteWindowLifecycle() async throws {
     // `palette "Tuber","2,40"` opens a registered window; `the windows`,
     // `there is a window`, the visible/loc props, and show/hide/close all
@@ -814,6 +817,41 @@ import HyperTalk
     #expect(Array(shown.prefix(4)) == ["true", "2", "true", "2,40"])
     // Hidden → invisible; closed → gone, back to 1 window.
     #expect(Array(shown.suffix(3)) == ["false", "false", "1"])
+}
+
+@Test func paletteButtonsAttachAndLabel() async throws {
+    // A stack carrying a PLTE (stored in `stack.palettes`) opens with its
+    // buttons attached to the registered window, so ContentView can render
+    // them. Labels derive from each button's command.
+    DocumentScriptHost.PaletteRegistry.shared.reset()
+    defer { DocumentScriptHost.PaletteRegistry.shared.reset() }
+    var stack = Stack.makeNew()
+    stack.externalCommands = ["palette"]
+    stack.palettes["tuber"] = PaletteDefinition(buttons: [
+        PaletteButtonDefinition(top: 235, left: 298, bottom: 268, right: 330, command: "doMenu \"Prev\""),
+        PaletteButtonDefinition(top: 235, left: 334, bottom: 268, right: 366, command: "paletteHandlerHome"),
+    ])
+    var index = 0
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { _ in },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("p", along: [ScriptLayer(name: "t", source: """
+    on p
+      palette "Tuber","2,40"
+    end p
+    """, object: .thisCard)] + layers, host: host)
+    let window = try #require(DocumentScriptHost.PaletteRegistry.shared.windows
+        .first { $0.name.caseInsensitiveCompare("Tuber") == .orderedSame })
+    #expect(window.buttons.count == 2)
+    // doMenu "Prev" → "Prev"; paletteHandlerHome → "Home".
+    #expect(window.buttons.map(\.label) == ["Prev", "Home"])
+}
 }
 
 @MainActor
