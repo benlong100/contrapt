@@ -183,6 +183,13 @@ nonisolated struct StackFont: Codable, Hashable {
     var name: String
     var design: FontDesign
     var scale: Double
+    /// When the stack embeds this family as a real outline font (a classic
+    /// `sfnt`/TrueType resource — e.g. a Klingon or Star Trek face), the `.ttf`
+    /// asset in the archive and the PostScript name to register/render with.
+    /// Fields in this family then render their actual glyphs instead of the
+    /// design substitute. Nil for the common bitmap-only / substitute case.
+    var fontAsset: String? = nil
+    var postScriptName: String? = nil
 }
 
 nonisolated struct Background: Identifiable, Hashable {
@@ -545,11 +552,16 @@ nonisolated struct TextFormat: Hashable {
     /// collapsing into visually identical neighbors.
     var isGroup = false
     var align: TextAlign = .left
+    /// The PostScript name of an embedded outline font to render this text in
+    /// (a stack's own `sfnt`/TrueType, e.g. a Klingon face), registered with
+    /// CoreText when the stack opens. Nil = use `fontDesign` as today. When
+    /// set, the real glyphs render and the design/width substitute is bypassed.
+    var embeddedFontName: String? = nil
 }
 
 extension TextFormat: Codable {
     private enum CodingKeys: String, CodingKey {
-        case fontDesign, size, isBold, isItalic, isUnderline, isOutline, isGroup, align
+        case fontDesign, size, isBold, isItalic, isUnderline, isOutline, isGroup, align, embeddedFontName
     }
 
     init(from decoder: Decoder) throws {
@@ -562,6 +574,7 @@ extension TextFormat: Codable {
         isOutline = try container.decodeIfPresent(Bool.self, forKey: .isOutline) ?? false
         isGroup = try container.decodeIfPresent(Bool.self, forKey: .isGroup) ?? false
         align = try container.decodeIfPresent(TextAlign.self, forKey: .align) ?? .left
+        embeddedFontName = try container.decodeIfPresent(String.self, forKey: .embeddedFontName)
     }
 }
 
@@ -948,6 +961,7 @@ nonisolated extension Stack {
             collectColor(background.colorElements)
         }
         names.formUnion(sounds.values.map(\.asset))
+        names.formUnion(fonts.values.compactMap(\.fontAsset))
         return names
     }
 }

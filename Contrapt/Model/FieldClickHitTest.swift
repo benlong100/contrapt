@@ -203,6 +203,11 @@ enum FieldClickHitTest {
     /// The platform font matching how the field's SwiftUI Text renders.
     static func platformFont(for format: TextFormat) -> PlatformFont {
         let size = CGFloat(format.size)
+        // An embedded outline font (the stack's own TrueType) renders its real
+        // glyphs — lay the same text out with it, matching TextFormat.font.
+        if let name = format.embeddedFontName, let embedded = PlatformFont(name: name, size: size) {
+            return embedded
+        }
         // Serif is real Palatino (see TextFormat.font) — classic-stack line
         // breaks depend on its metrics; the system serif runs wider.
         if format.fontDesign == .serif, let palatino = palatinoFont(size: size, bold: format.isBold, italic: format.isItalic) {

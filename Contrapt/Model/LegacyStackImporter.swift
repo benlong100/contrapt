@@ -76,6 +76,22 @@ enum LegacyStackImporter {
             }
         }
         var assets: [String: Data] = [:]
+        // Embedded outline fonts (sfnt/TrueType): store each .ttf as an asset
+        // and tag the family's resolution with its PostScript name, so fields
+        // in that family render the real glyphs (a Klingon/Star Trek face)
+        // rather than a system substitute. Keyed by family id (part fontID).
+        var embeddedFontAssets: [Int: String] = [:]
+        if let stackFork {
+            for font in FontResource.embeddedTrueTypeFonts(from: stackFork) {
+                let assetName = UUID().uuidString.lowercased() + ".ttf"
+                assets[assetName] = font.ttf
+                embeddedFontAssets[font.familyID] = assetName
+                var resolution = embeddedFonts[font.familyID]
+                    ?? FontResource.Resolution(name: font.postScriptName, design: .standard, scale: 1.0)
+                resolution.postScriptName = font.postScriptName
+                embeddedFonts[font.familyID] = resolution
+            }
+        }
         let bmapByID = Dictionary(blocks.filter { $0.type == "BMAP" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         // Icon resolution follows HyperCard's resource search path: the
         // stack's own fork, then the Home stack beside it, then the HyperCard
@@ -194,7 +210,9 @@ enum LegacyStackImporter {
         // Record how each embedded font resolved — provenance, and the table a
         // future user-editable font mapping would re-apply.
         for (id, resolution) in embeddedFonts {
-            stack.fonts[String(id)] = StackFont(name: resolution.name, design: resolution.design, scale: resolution.scale)
+            stack.fonts[String(id)] = StackFont(name: resolution.name, design: resolution.design,
+                                                scale: resolution.scale, fontAsset: embeddedFontAssets[id],
+                                                postScriptName: resolution.postScriptName)
         }
         // The stack script (handlers like `on goAddress`) lives in the STAK
         // block. Without it, buttons that call stack-level commands fail.
@@ -558,7 +576,14 @@ enum LegacyStackImporter {
         let embedded = fonts[fontID].map { ($0.design, $0.scale) }
         let mapping = Self.classicFontMap[fontID] ?? embedded ?? (.standard, proportionalFontScale)
         format.fontDesign = mapping.design
-        format.size *= mapping.scale
+        // A family embedded as a real outline font renders its own glyphs at
+        // the point size — use it directly, and skip the width calibration
+        // (that's for system substitutes; the real font carries its metrics).
+        if let postScriptName = fonts[fontID]?.postScriptName {
+            format.embeddedFontName = postScriptName
+        } else {
+            format.size *= mapping.scale
+        }
         format.isBold = styleBits & 0x01 != 0
         format.isItalic = styleBits & 0x02 != 0
         format.isUnderline = styleBits & 0x04 != 0

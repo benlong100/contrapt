@@ -907,9 +907,16 @@ extension TextFormat {
     /// breaks — New York runs wider and overflows their fields. Must match
     /// FieldClickHitTest.platformFont, which lays the same text out.
     var font: Font {
-        var font = fontDesign == .serif
-            ? Font.custom("Palatino", size: size)
-            : Font.system(size: size, design: fontDesign.swiftUI)
+        var font: Font
+        if let embeddedFontName {
+            // An embedded outline font (the stack's own TrueType) — render its
+            // real glyphs at the point size. Registered when the stack opened.
+            font = Font.custom(embeddedFontName, fixedSize: size)
+        } else if fontDesign == .serif {
+            font = Font.custom("Palatino", size: size)
+        } else {
+            font = Font.system(size: size, design: fontDesign.swiftUI)
+        }
         if isBold { font = font.bold() }
         if isItalic { font = font.italic() }
         return font

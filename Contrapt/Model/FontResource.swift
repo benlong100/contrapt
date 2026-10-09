@@ -50,6 +50,36 @@ enum FontResource {
         var isFixedWidth: Bool
     }
 
+    /// A real outline font embedded in the stack (a classic `sfnt` resource,
+    /// which is a TrueType font verbatim). `familyID` is the matching FOND's id
+    /// — the id a part's text references — and `postScriptName` is the name to
+    /// register and render with. Decorative stack fonts (a Klingon or Star Trek
+    /// face) only mean anything as their real glyphs, so these are rendered
+    /// directly rather than mapped to a system design.
+    struct EmbeddedFont {
+        var familyID: Int
+        var postScriptName: String
+        var ttf: Data
+    }
+
+    /// Every embedded TrueType font in the fork: each `sfnt` matched to its
+    /// same-named FOND (for the family id parts reference) with its PostScript
+    /// name read from the font itself. `sfnt`-less stacks return nothing.
+    static func embeddedTrueTypeFonts(from fork: Data) -> [EmbeddedFont] {
+        let sfnts = ResourceFork.namedResources(ofType: "sfnt", from: fork)
+        guard !sfnts.isEmpty else { return [] }
+        let fonds = ResourceFork.namedResources(ofType: "FOND", from: fork)
+        var result: [EmbeddedFont] = []
+        for fond in fonds where !fond.name.isEmpty {
+            guard let sfnt = sfnts.first(where: { $0.name.caseInsensitiveCompare(fond.name) == .orderedSame }),
+                  let provider = CGDataProvider(data: sfnt.data as CFData),
+                  let cgFont = CGFont(provider),
+                  let postScriptName = cgFont.postScriptName as String? else { continue }
+            result.append(EmbeddedFont(familyID: fond.id, postScriptName: postScriptName, ttf: sfnt.data))
+        }
+        return result
+    }
+
     /// Every font family in the fork, via its FONDs. A family's metrics come
     /// from its largest plain-style strike (better width resolution than the
     /// small sizes).
@@ -128,6 +158,10 @@ enum FontResource {
         var name: String
         var design: FontDesign
         var scale: Double
+        /// Set when the family is embedded as a real outline font — the
+        /// PostScript name to render with (its glyphs), bypassing the design
+        /// substitute. Nil for the bitmap-metrics / substitute case.
+        var postScriptName: String? = nil
     }
 
     /// Families whose names identify them, mapped like their built-in classic
@@ -169,6 +203,38 @@ enum FontResource {
             scale = 1.0
         }
         return Resolution(name: family.name, design: design, scale: scale)
+    }
+
+    /// Registers a stack's embedded outline fonts with the process font
+    /// manager so `Font.custom(postScriptName)` and `NSFont/UIFont(name:)`
+    /// resolve them. Idempotent per PostScript name — safe to call on every
+    /// open. Writes each `.ttf` to a caches file and registers its URL (the
+    /// non-deprecated, synchronous API). Call on the main actor as the stack
+    /// opens, before its text first renders.
+    @MainActor
+    static func registerEmbeddedFonts(_ fonts: [String: StackFont], assets: [String: Data]) {
+        for font in fonts.values {
+            guard let name = font.postScriptName, let assetName = font.fontAsset,
+                  !registeredFontNames.contains(name), let data = assets[assetName] else { continue }
+            if registerFontData(data, named: name) { registeredFontNames.insert(name) }
+        }
+    }
+
+    @MainActor private static var registeredFontNames = Set<String>()
+
+    @MainActor
+    private static func registerFontData(_ data: Data, named name: String) -> Bool {
+        guard let dir = try? FileManager.default.url(for: .cachesDirectory, in: .userDomainMask,
+                                                     appropriateFor: nil, create: true)
+            .appendingPathComponent("EmbeddedFonts", isDirectory: true) else { return false }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let safe = name.components(separatedBy: CharacterSet(charactersIn: "/:")).joined(separator: "-")
+        let url = dir.appendingPathComponent(safe).appendingPathExtension("ttf")
+        guard (try? data.write(to: url)) != nil else { return false }
+        var error: Unmanaged<CFError>?
+        let ok = CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
+        error?.release()
+        return ok
     }
 
     /// The substitute font's mean advance over printable ASCII at `size` —

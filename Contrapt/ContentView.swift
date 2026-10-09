@@ -641,6 +641,12 @@ struct ContentView: View {
 
     var body: some View {
         decoratedStage
+        // Register the stack's embedded outline fonts (its own TrueType faces,
+        // e.g. a Klingon/Star Trek font) so fields in those families render
+        // their real glyphs. Idempotent; re-runs when a new stack swaps in.
+        .task(id: document.stack.id) {
+            FontResource.registerEmbeddedFonts(document.stack.fonts, assets: document.assets)
+        }
         .onChange(of: cardIndex) { oldIndex, newIndex in
             // The script selection doesn't survive leaving the card — this
             // catches UI navigation too, not just scripted `go`.
