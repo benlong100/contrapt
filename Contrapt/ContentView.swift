@@ -1126,6 +1126,17 @@ struct ContentView: View {
         }
     }
 
+    /// A file URL as a classic Mac colon path (`Users:me:Stacks:Game`), for
+    /// `the long name of this stack`. HyperCard long names are colon paths;
+    /// stacks parse the folder from them, so a value with colons matters more
+    /// than the exact disk name. Drops the leading slash and the `.contrapt`
+    /// extension, turning the remaining path separators into colons.
+    private static func classicColonPath(_ url: URL) -> String {
+        let trimmed = url.deletingPathExtension().path
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return trimmed.replacingOccurrences(of: "/", with: ":")
+    }
+
     private func makeHost(cardIndex: Binding<Int>? = nil) -> DocumentScriptHost {
         DocumentScriptHost(
             stack: stack,
@@ -1133,6 +1144,9 @@ struct ContentView: View {
             // it before the current card changes); callers pass a fixed index so
             // `this card` / `cd field …` resolve against the card being left.
             currentCardIndex: cardIndex ?? $currentCardIndex,
+            // The document's path as a classic colon path, for `the long name
+            // of this stack` (stacks parse the folder out of it).
+            stackPath: fileURL.map(Self.classicColonPath) ?? "",
             onMessage: { text in
                 // `put` with no destination opens the message box, as in
                 // HyperCard.

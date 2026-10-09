@@ -193,10 +193,14 @@ final class DocumentScriptHost: HyperTalkHost {
     private let onPresentPrint: (Data, String) -> Void
     /// Flashes the screen (inverts N times) — the Flash XCMD's effect.
     private let onFlash: (Int) -> Void
+    /// The document's classic-style colon path, for `the long name of this
+    /// stack`. Empty for an unsaved stack (falls back to the bare name).
+    private let stackPath: String
 
     init(
         stack: Binding<Stack>,
         currentCardIndex: Binding<Int>,
+        stackPath: String = "",
         onMessage: @escaping (String) -> Void,
         onAnswer: @escaping (String, [String]) async -> String,
         onAsk: @escaping (String, String) async -> String?,
@@ -218,6 +222,7 @@ final class DocumentScriptHost: HyperTalkHost {
     ) {
         self.stackBinding = stack
         self.currentCardIndex = currentCardIndex
+        self.stackPath = stackPath
         self.onMessage = onMessage
         self.onAnswer = onAnswer
         self.onAsk = onAsk
@@ -1993,7 +1998,13 @@ final class DocumentScriptHost: HyperTalkHost {
         case .thisStack:
             switch property {
             case "name": return stack.name
-            case "longname", "longid": return "stack \"\(stack.name)\""
+            case "longname", "longid":
+                // HyperCard's long name is the full colon path (`stack
+                // "HD:Folder:Name"`). Stacks parse the folder out of it — e.g.
+                // the Klingon Dictionary strips chars until the last ":" — so a
+                // colonless name spins that loop forever. Use the document's
+                // real path, colonized; fall back to the bare name when unsaved.
+                return "stack \"\(stackPath.isEmpty ? stack.name : stackPath)\""
             case "script": return stack.script
             case "cards": return String(stack.cards.count)
             case "width": return numberText(stack.cardSize.width)
