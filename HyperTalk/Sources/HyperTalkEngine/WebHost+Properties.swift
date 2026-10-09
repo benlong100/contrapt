@@ -125,7 +125,7 @@ extension WebHost {
         case "showname":
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.showName ? "true" : "false"
-        case "autohilite", "autohilight", "autohighlight":
+        case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.autoHilite ? "true" : "false"
         case "style":
@@ -134,7 +134,7 @@ extension WebHost {
             case .field(let p): return p.style.rawValue
             default: throw Self.noSuchProperty(property, of: kind)
             }
-        case "hilite", "hilight", "highlight":
+        case "hilite", "hilight", "highlight", "highlite":
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.hilite ? "true" : "false"
         case "text":
@@ -219,7 +219,7 @@ extension WebHost {
         case "showname":
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             p.showName = try boolean(value, for: property); part.kind = .button(p)
-        case "autohilite", "autohilight", "autohighlight":
+        case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             p.autoHilite = try boolean(value, for: property); part.kind = .button(p)
         case "style":
@@ -236,7 +236,7 @@ extension WebHost {
                 p.style = style; part.kind = .field(p)
             default: throw Self.noSuchProperty(property, of: kind)
             }
-        case "hilite", "hilight", "highlight":
+        case "hilite", "hilight", "highlight", "highlite":
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             p.hilite = try boolean(value, for: property); part.kind = .button(p)
         case "text":

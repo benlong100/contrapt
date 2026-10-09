@@ -2081,7 +2081,7 @@ final class DocumentScriptHost: HyperTalkHost {
         case "showname":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.showName ? "true" : "false"
-        case "autohilite", "autohilight", "autohighlight":
+        case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.autoHilite ? "true" : "false"
         case "style":
@@ -2090,7 +2090,7 @@ final class DocumentScriptHost: HyperTalkHost {
             case .field(let properties): return properties.style.rawValue
             default: throw Self.noSuchProperty(property, of: kind)
             }
-        case "hilite", "hilight", "highlight":
+        case "hilite", "hilight", "highlight", "highlite":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.hilite ? "true" : "false"
         case "icon":
@@ -2195,7 +2195,7 @@ final class DocumentScriptHost: HyperTalkHost {
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.showName = try boolean(value, for: property)
             part.kind = .button(properties)
-        case "autohilite", "autohilight", "autohighlight":
+        case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.autoHilite = try boolean(value, for: property)
             part.kind = .button(properties)
@@ -2216,7 +2216,7 @@ final class DocumentScriptHost: HyperTalkHost {
             default:
                 throw Self.noSuchProperty(property, of: kind)
             }
-        case "hilite", "hilight", "highlight":
+        case "hilite", "hilight", "highlight", "highlite":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.hilite = try boolean(value, for: property)
             part.kind = .button(properties)

@@ -111,6 +111,10 @@ private let parityJSON = """
     _ = try await engine.runMessage("set the hilight of card button \"Go\" to true")
     #expect(try await engine.runMessage("the hilite of card button \"Go\"") == "true")
     #expect(try await engine.runMessage("the autoHilight of card button \"Go\"") != nil)
+    // `highlite` (Klingon Dictionary) is also accepted — get and set.
+    _ = try await engine.runMessage("set the highlite of card button \"Go\" to false")
+    #expect(try await engine.runMessage("the highlite of card button \"Go\"") == "false")
+    #expect(try await engine.runMessage("the autoHighlite of card button \"Go\"") != nil)
 }
 
 @Test func classicFontNamesMapInsteadOfErroring() async throws {
