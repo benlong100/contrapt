@@ -244,10 +244,11 @@ Local errors 75 → 58, then → 50 with the indirect-object fix (commit 20c4ee5
 - Indirect object via chunk — DONE: `the scroll of last item of fieldList`,
   a property of the field NAMED by a chunk value (Power Tools, Car Care, 10th
   Anniv). Parses to `.indirect(.chunk(…))`, resolved at run time.
+- Dynamic property set — DONE (commit 103bc60): `set (TheProperty) of window
+  X to …` / `set "thePercent" of window X …` — a computed property name on an
+  unmodeled window; parsed and no-op'd (50 → 48).
 REMAINING real gaps (harder; not yet done):
-- Dynamic property set: `set (TheProperty) of window X to …` / `set "thePercent"
-  of window X …` — a parenthesized/quoted expression as the property name.
-- `there is no card picture` existence (Clip Art).
-The rest of the 50 are author bugs (unterminated quotes/parens, stray `.`).
+- `there is no card picture` existence (Clip Art — 1 stack).
+The rest of the 48 are author bugs (unterminated quotes/parens, stray `.`).
 Fast re-run: `CONTRAPT_AUDIT=1 CONTRAPT_CORPUS="<root>" swift test
 --package-path HyperTalk --filter corpusParseAudit` (~5s for 280 stacks).
