@@ -172,6 +172,17 @@ import Testing
     _ = try Parser.parse("on p\nif there is a cd fld 2 of next card then beep\nend p")
 }
 
+@Test func debuggerAndTraceVerbsParse() throws {
+    // Debugger/trace verbs are IDE features, not gameplay — Contrapt has no
+    // step debugger, so they must at least parse (and no-op) rather than error.
+    _ = try Parser.parse("on p\ntrace\nend p")
+    _ = try Parser.parse("on p\ntrace true\nend p")
+    _ = try Parser.parse("on p\ndebug\nend p")
+    _ = try Parser.parse("on p\ncheckpoint\nend p")
+    _ = try Parser.parse("on p\nset the traceDelay to 30\nend p")
+    _ = try Parser.parse("on p\nset traceDelay to 30\nend p")
+}
+
 @Test func goRelativeBackgroundParses() throws {
     // `go next/previous background` — background navigation (Help Extras'
     // print-all-backgrounds loop). Still distinct from `go next card`.
