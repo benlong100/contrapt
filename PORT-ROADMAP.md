@@ -240,12 +240,14 @@ shared; ~18k scripts, ~99.5% clean). FIXED (commit ccdbda8):
 - `doMenu "X" [, menu] [with|without dialog]` — modifiers consumed (13×, top gap).
 - `show/hide window "X" at "h,v"` — position consumed, shows at registered loc.
 - `there is a background <bareword>` — variable name consumed, not left before `then`.
-Local errors 75 → 58. REMAINING real gaps (harder; not yet done):
-- Indirect object via chunk: `the scroll of last item of fieldList` — a
-  property of the field NAMED by a chunk value (Power Tools, Car Care, 10th Anniv).
+Local errors 75 → 58, then → 50 with the indirect-object fix (commit 20c4ee5):
+- Indirect object via chunk — DONE: `the scroll of last item of fieldList`,
+  a property of the field NAMED by a chunk value (Power Tools, Car Care, 10th
+  Anniv). Parses to `.indirect(.chunk(…))`, resolved at run time.
+REMAINING real gaps (harder; not yet done):
 - Dynamic property set: `set (TheProperty) of window X to …` / `set "thePercent"
   of window X …` — a parenthesized/quoted expression as the property name.
 - `there is no card picture` existence (Clip Art).
-The rest of the 58 are author bugs (unterminated quotes/parens, stray `.`).
+The rest of the 50 are author bugs (unterminated quotes/parens, stray `.`).
 Fast re-run: `CONTRAPT_AUDIT=1 CONTRAPT_CORPUS="<root>" swift test
 --package-path HyperTalk --filter corpusParseAudit` (~5s for 280 stacks).
