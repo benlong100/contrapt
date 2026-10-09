@@ -465,6 +465,10 @@ indirect enum ObjectExpr {
     /// one. Contrapt doesn't resolve arbitrary stacks as objects, so it reads
     /// as absent (`there is a stack X` → false) with name-echoing properties.
     case stackNamed(Expr)
+    /// `file <expr>` — a disk file named by a classic path, used in
+    /// `there is a[ not] file theFile` (existence). Only meaningful in an
+    /// existence test; the host answers whether the file is present.
+    case file(Expr)
 }
 
 /// A positional keyword that resolves against a live count: `last`, `middle`,

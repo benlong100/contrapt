@@ -2003,6 +2003,12 @@ final class Runtime {
                 // stacks like "Audio Help" aren't present), so it's false.
                 return negated ? "true" : "false"
             }
+            if case .file(let pathExpression) = objectExpression {
+                // `there is a[ not] file <path>` — the host checks the disk.
+                let path = try await evaluate(pathExpression, line: line)
+                let exists = host.fileExists(path)
+                return (negated ? !exists : exists) ? "true" : "false"
+            }
             let object = try await resolveObject(objectExpression, line: line)
             let present = host.exists(object)
             return (negated ? !present : present) ? "true" : "false"
@@ -2378,6 +2384,10 @@ final class Runtime {
             // Reached only outside exists/property (both short-circuit) — e.g.
             // `send … to stack "X"`, which Contrapt can't dispatch to.
             throw ScriptError(line: line, message: "Contrapt can't address another stack as an object here.")
+        case .file:
+            // A file is only meaningful in an existence test (short-circuited
+            // above); it isn't a message-path object.
+            throw ScriptError(line: line, message: "A file can't be used as a message target.")
         }
     }
 

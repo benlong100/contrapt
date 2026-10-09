@@ -1574,8 +1574,11 @@ struct Parser {
         _ = consumeWord("this"); _ = consumeWord("stack")
         _ = consumeWord("marked")
         _ = consumeCardWord()
-        // An `of <object>` scope we don't model — skip up to `by`.
-        if peekIdentifier() == "of" {
+        // An `of <object>` scope, or a direct background reference
+        // (`sort bg "CURRENT" by …` — the cards of that background), which
+        // Contrapt doesn't model distinctly: skip up to `by` and sort the
+        // stack's cards (best effort, as for the `of` scope).
+        if peekIdentifier() == "of" || (peekIdentifier().map(Self.backgroundWords.contains) ?? false) {
             while current.kind != .newline, current.kind != .endOfScript,
                   peekIdentifier() != "by" { advance() }
         }
@@ -1713,6 +1716,9 @@ struct Parser {
             "ascending", "descending", "numeric", "text", "international",
             "datetime", "date", "lines", "items",
         ]
+        // A background reference (`sort bg "X" by`) is the cards form, not a
+        // bare variable named "bg".
+        if Self.backgroundWords.contains(w) { return false }
         return !cardsFormKeywords.contains(w)
     }
 
@@ -2347,6 +2353,15 @@ struct Parser {
             advance() // window
             return .window(.stringLiteral(w))
         }
+        // `file <path>` — `there is a file theFile`, `there is not a file
+        // (thisFile)`. The path is any expression (literal, variable, or
+        // parenthesized); the host answers existence.
+        if peekIdentifier() == "file" {
+            advance()
+            let path: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
+                ? .stringLiteral("") : try parsePrimary()
+            return .file(path)
+        }
         // Button families (HyperCard's radio-button grouping) aren't modeled, so
         // `family N` resolves to an absent object — `the selectedButton of
         // family 1` reads empty — letting stacks that use families import and
@@ -2871,6 +2886,13 @@ struct Parser {
                 _ = consumeCardWord()
                 let n = (try? parsePrimary()) ?? .numberLiteral(1)
                 if cardScope == nil { cardScope = .markedCard(n) }
+            } else if let w = peekIdentifier(), ["next", "previous", "prev"].contains(w),
+                      let n = peekIdentifier(1), Self.cardWords.contains(n) {
+                // `… of next/prev card` — the part on the adjacent card
+                // (`there is a field "1" of prev card`, Fossils).
+                advance() // next/previous/prev
+                advance() // card word
+                if cardScope == nil { cardScope = (w == "next") ? .next : .previous }
             } else if consumeCardWord() {
                 let isID = consumeWord("id")
                 // An optional identifier/number/string naming the card (`of cd

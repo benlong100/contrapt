@@ -294,6 +294,10 @@ public protocol HyperTalkHost: AnyObject {
     func fileClose(_ path: String) throws
     func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool)
     func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws
+    /// Whether a disk file exists, for `there is a file <path>`. Defaults to
+    /// false — a stack probing an external file that Contrapt doesn't have gets
+    /// the correct "not present" answer instead of an error.
+    func fileExists(_ path: String) -> Bool
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
     /// optionally restricted to the card or background layer. `onCard` names a
     /// different card the field lives on (`field "X" of prev card`); nil means
@@ -544,6 +548,7 @@ public extension HyperTalkHost {
     func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws {
         throw HostError("File not open.")
     }
+    func fileExists(_ path: String) -> Bool { false }
 
     /// Hosts without live mouse tracking read `the mouse` as up and the
     /// pointer as unknown.

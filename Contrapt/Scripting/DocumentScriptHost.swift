@@ -1556,6 +1556,15 @@ final class DocumentScriptHost: HyperTalkHost {
         try String(file.characters).write(to: file.url, atomically: true, encoding: .utf8)
     }
 
+    func fileExists(_ path: String) -> Bool {
+        // `there is a file X` — true when the app's file store already holds it
+        // (a file this stack created via `open/write file`). External files on
+        // the user's disk aren't reachable from the sandbox, so those read
+        // absent — the right answer for a stack probing a file Contrapt lacks.
+        guard let url = try? fileURL(for: path) else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool) {
         guard var file = openFiles[path] else { throw HostError("File not open.") }
         guard file.mark < file.characters.count else { return ("", true) }

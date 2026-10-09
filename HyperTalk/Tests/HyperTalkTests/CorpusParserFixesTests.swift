@@ -147,3 +147,36 @@ import Testing
     // The real convert verb still parses.
     _ = try Parser.parse("on p\nconvert the date to seconds\nend p")
 }
+
+@Test func thereIsAFileExistence() async throws {
+    // `if there is a file X then` / `there is not a file (X)` — file-existence
+    // checks (Q-stack TAC, KlingonDictionary). The host answers; a host with no
+    // such file reports absent, which is the right answer (no parse error, no
+    // stall before `then`).
+    _ = try Parser.parse("on p\nif there is a file theFile then beep\nend p")
+    _ = try Parser.parse("on p\nif there is not a file (thisFile) then beep\nend p")
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put (there is a file "HD:Missing") & "," & (there is not a file "HD:Missing") into msg
+    end p
+    """, host: host)
+    #expect(host.messages.last == "false,true")
+}
+
+@Test func fieldExistenceOnRelativeCardParses() throws {
+    // `there is a field "1" of prev card` / `of next card` — a part existence
+    // test scoped to the adjacent card (Fossils). `of prev card` is a card
+    // scope, not a leftover before `then`.
+    _ = try Parser.parse("on p\nif there is a field \"1\" of prev card then beep\nend p")
+    _ = try Parser.parse("on p\nif there is a cd fld 2 of next card then beep\nend p")
+}
+
+@Test func sortCardsOfNamedBackground() throws {
+    // `sort bg "CURRENT" by <key>` — sort the cards of a named background
+    // (Programs). Must route to the cards form, not a bare container named
+    // "bg". `sort bg fld "X"` (a field container) still sorts in place.
+    _ = try Parser.parse("on p\nsort bg \"CURRENT\" by line 1 of fld \"NOTICE TITLE\"\nend p")
+    _ = try Parser.parse("on p\nsort cards of bg \"X\" by field \"k\"\nend p")
+    _ = try Parser.parse("on p\nsort bg field \"Apps For Docs\"\nend p")
+}
