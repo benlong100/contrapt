@@ -16,6 +16,9 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
+#if canImport(AppKit)
+import AppKit
+#endif
 
 enum ResourceFork {
     /// The resource-fork bytes of a file: the `..namedfork/rsrc` fork if it has
@@ -337,6 +340,109 @@ enum ResourceFork {
             p = start + len
         }
         return buttons
+    }
+
+    // MARK: - AddColor / Color Tools color layer
+
+    /// One decoded element of an `HCcd`/`HCbg` color resource. `rect` is in card
+    /// coordinates (used by `.rect`/`.picture`); `partNumber` names the part a
+    /// `.button`/`.field` tint applies to; `rgb` is three 16-bit channels;
+    /// `pictName` is the `PICT` resource a `.picture` references by name.
+    struct ColorElement {
+        enum Kind { case button, field, rect, picture }
+        let kind: Kind
+        let hidden: Bool
+        let top: Int, left: Int, bottom: Int, right: Int
+        let partNumber: Int
+        let rgb: (r: Int, g: Int, b: Int)
+        let transparent: Bool
+        let pictName: String
+    }
+
+    /// Decode every `HCcd` (cards) or `HCbg` (backgrounds) resource into its
+    /// color elements, keyed by the resource id — which is the HyperCard card
+    /// or background object id (so the importer matches them to its preserved
+    /// scriptIDs). Format reverse-engineered + validated against the corpus: a
+    /// flat element stream, each `u8 type` (high bit = hidden) then payload —
+    /// 1 button / 2 field: `u16 part, u16 flags, RGB(3×u16)`; 3 rect: `Rect
+    /// (4×i16), u16 flags, RGB`; 4 picture: `Rect, u8 transparent, Pascal name`.
+    static func colorResources(ofType type: String, from fork: Data) -> [(id: Int, elements: [ColorElement])] {
+        namedResources(ofType: type, from: fork).map { ($0.id, parseColorElements($0.data)) }
+    }
+
+    private static func parseColorElements(_ data: Data) -> [ColorElement] {
+        let d = [UInt8](data)
+        func u16(_ o: Int) -> Int { Int((UInt16(d[o]) << 8) | UInt16(d[o+1])) }
+        func i16(_ o: Int) -> Int { Int(Int16(bitPattern: UInt16((UInt16(d[o]) << 8) | UInt16(d[o+1])))) }
+        var elements: [ColorElement] = []
+        var o = 0
+        while o < d.count {
+            let raw = d[o]; o += 1
+            let hidden = raw & 0x80 != 0
+            switch raw & 0x7F {
+            case 1, 2:
+                guard o + 10 <= d.count else { return elements }
+                let kind: ColorElement.Kind = (raw & 0x7F) == 1 ? .button : .field
+                elements.append(ColorElement(kind: kind, hidden: hidden, top: 0, left: 0, bottom: 0, right: 0,
+                                             partNumber: u16(o), rgb: (u16(o+4), u16(o+6), u16(o+8)),
+                                             transparent: false, pictName: ""))
+                o += 10
+            case 3:
+                guard o + 16 <= d.count else { return elements }
+                elements.append(ColorElement(kind: .rect, hidden: hidden,
+                                             top: i16(o), left: i16(o+2), bottom: i16(o+4), right: i16(o+6),
+                                             partNumber: 0, rgb: (u16(o+10), u16(o+12), u16(o+14)),
+                                             transparent: false, pictName: ""))
+                o += 16
+            case 4:
+                guard o + 10 <= d.count else { return elements }
+                let top = i16(o), left = i16(o+2), bottom = i16(o+4), right = i16(o+6)
+                let transparent = d[o+8] != 0
+                let len = Int(d[o+9])
+                let start = o + 10
+                guard start + len <= d.count else { return elements }
+                let name = String(bytes: d[start..<start+len], encoding: .macOSRoman) ?? ""
+                elements.append(ColorElement(kind: .picture, hidden: hidden, top: top, left: left, bottom: bottom, right: right,
+                                             partNumber: 0, rgb: (0, 0, 0), transparent: transparent, pictName: name))
+                o = start + len
+            default:
+                return elements // unknown type: stop (the stream is sequential)
+            }
+        }
+        return elements
+    }
+
+    /// A `PICT` resource rendered to PNG, found by name (Color Tools references
+    /// pictures by name — `"Dictionary.bg"`, `"•btn cover"`). nil if absent or
+    /// undecodable. PICT decoding uses AppKit's QuickDraw interpreter, so it's
+    /// macOS-only; iOS color cards show their rect/tint elements without picts.
+    static func pictPNG(named name: String, from fork: Data) -> Data? {
+        guard let resource = namedResources(ofType: "PICT", from: fork)
+            .first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else { return nil }
+        return pictPNG(resource.data)
+    }
+
+    static func pictPNG(_ pictData: Data) -> Data? {
+        #if canImport(AppKit)
+        // A PICT *resource* has no 512-byte file header; NSPICTImageRep expects
+        // one, so prepend zeros. Render the rep into a bitmap and emit PNG.
+        var framed = Data(count: 512)
+        framed.append(pictData)
+        guard let rep = NSPICTImageRep(data: framed) else { return nil }
+        let box = rep.boundingBox
+        let width = Int(box.width.rounded()), height = Int(box.height.rounded())
+        guard width > 0, height > 0,
+              let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+                                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+        rep.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap.representation(using: .png, properties: [:])
+        #else
+        return nil
+        #endif
     }
 
     /// A quick sanity check that data begins with a plausible resource-fork

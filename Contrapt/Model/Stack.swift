@@ -201,12 +201,15 @@ nonisolated struct Background: Identifiable, Hashable {
     var dontSearch: Bool = false
     /// `show/hide background picture` — whether the paint layer draws.
     var showPicture: Bool = true
+    /// The background's AddColor/Color Tools color layer (from its `HCbg`
+    /// resource), drawn beneath everything on every card sharing it.
+    var colorElements: [ColorElement] = []
 }
 
 extension Background: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, script, parts, paintDrawingAsset, paintImageAsset, scriptID
-        case cantDelete, dontSearch, showPicture
+        case cantDelete, dontSearch, showPicture, colorElements
     }
 
     init(from decoder: Decoder) throws {
@@ -221,6 +224,7 @@ extension Background: Codable {
         cantDelete = try container.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try container.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
         showPicture = try container.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
+        colorElements = try container.decodeIfPresent([ColorElement].self, forKey: .colorElements) ?? []
     }
 }
 
@@ -243,6 +247,53 @@ nonisolated struct BackgroundFieldContent: Codable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
         styleRuns = try container.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
+    }
+}
+
+/// One element of a card's or background's AddColor/Color Tools color layer
+/// (from an `HCcd`/`HCbg` resource). Drawn in array order beneath the 1-bit
+/// paint/parts. `button`/`field` tint a part by its HyperCard part number;
+/// `rect` fills a card-coordinate rectangle; `picture` draws a decoded PICT
+/// (its PNG in the archive assets). Hidden elements were toggled off in the
+/// Color Tools editor and don't draw.
+nonisolated struct ColorElement: Codable, Hashable {
+    enum Kind: String, Codable { case button, field, rect, picture }
+    var kind: Kind
+    var hidden: Bool = false
+    /// Card-coordinate rect (picture/rect); unused (zero) for part tints.
+    var top: Double = 0, left: Double = 0, bottom: Double = 0, right: Double = 0
+    /// HyperCard part number a button/field element tints.
+    var partNumber: Int = 0
+    /// Fill/tint color as #RRGGBB (button/field/rect); empty for a picture.
+    var color: String = ""
+    /// Picture: whether white is drawn transparent, and the PNG asset the
+    /// element's PICT decoded to (nil when the PICT was absent/undecodable).
+    var transparent: Bool = false
+    var pictureAsset: String? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, hidden, top, left, bottom, right, partNumber, color, transparent, pictureAsset
+    }
+    init(kind: Kind, hidden: Bool = false, top: Double = 0, left: Double = 0,
+         bottom: Double = 0, right: Double = 0, partNumber: Int = 0,
+         color: String = "", transparent: Bool = false, pictureAsset: String? = nil) {
+        self.kind = kind; self.hidden = hidden
+        self.top = top; self.left = left; self.bottom = bottom; self.right = right
+        self.partNumber = partNumber; self.color = color
+        self.transparent = transparent; self.pictureAsset = pictureAsset
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(Kind.self, forKey: .kind)
+        hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        top = try c.decodeIfPresent(Double.self, forKey: .top) ?? 0
+        left = try c.decodeIfPresent(Double.self, forKey: .left) ?? 0
+        bottom = try c.decodeIfPresent(Double.self, forKey: .bottom) ?? 0
+        right = try c.decodeIfPresent(Double.self, forKey: .right) ?? 0
+        partNumber = try c.decodeIfPresent(Int.self, forKey: .partNumber) ?? 0
+        color = try c.decodeIfPresent(String.self, forKey: .color) ?? ""
+        transparent = try c.decodeIfPresent(Bool.self, forKey: .transparent) ?? false
+        pictureAsset = try c.decodeIfPresent(String.self, forKey: .pictureAsset)
     }
 }
 
@@ -275,13 +326,16 @@ nonisolated struct Card: Identifiable, Hashable {
     /// part's UUID string — the HyperCard storage model (one shared part, text
     /// per card). A missing key reads as empty, as in HyperCard.
     var backgroundFieldContent: [String: BackgroundFieldContent] = [:]
+    /// The card's AddColor/Color Tools color layer (from its `HCcd` resource),
+    /// drawn beneath the paint/parts. Empty for non-color cards.
+    var colorElements: [ColorElement] = []
 }
 
 extension Card: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, backgroundID, script, parts, paintDrawingAsset, paintImageAsset, scriptID
         case isMarked, cantDelete, dontSearch, highlightColor, showPicture
-        case backgroundFieldContent
+        case backgroundFieldContent, colorElements
     }
 
     init(from decoder: Decoder) throws {
@@ -300,6 +354,7 @@ extension Card: Codable {
         highlightColor = try container.decodeIfPresent(String.self, forKey: .highlightColor)
         showPicture = try container.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
         backgroundFieldContent = try container.decodeIfPresent([String: BackgroundFieldContent].self, forKey: .backgroundFieldContent) ?? [:]
+        colorElements = try container.decodeIfPresent([ColorElement].self, forKey: .colorElements) ?? []
     }
 }
 
@@ -877,15 +932,20 @@ nonisolated extension Stack {
             default: break
             }
         }
+        func collectColor(_ elements: [ColorElement]) {
+            for e in elements { if let asset = e.pictureAsset { names.insert(asset) } }
+        }
         for card in cards {
             if let paint = card.paintDrawingAsset { names.insert(paint) }
             if let paint = card.paintImageAsset { names.insert(paint) }
             card.parts.forEach(collect)
+            collectColor(card.colorElements)
         }
         for background in backgrounds {
             if let paint = background.paintDrawingAsset { names.insert(paint) }
             if let paint = background.paintImageAsset { names.insert(paint) }
             background.parts.forEach(collect)
+            collectColor(background.colorElements)
         }
         names.formUnion(sounds.values.map(\.asset))
         return names

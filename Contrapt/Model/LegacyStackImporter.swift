@@ -125,6 +125,56 @@ enum LegacyStackImporter {
             return assetName
         }
 
+        // AddColor/Color Tools color layers: HCcd per card, HCbg per background,
+        // keyed by the HyperCard object id (== the preserved scriptID). A PICT
+        // element names a PICT resource; render it once to a PNG asset (macOS).
+        let colorForks = [stackFork, homeFork, iconFork].compactMap { $0 }
+        var pictAssetByName: [String: String] = [:]
+        func pictAsset(named name: String) -> String? {
+            guard !name.isEmpty else { return nil }
+            if let existing = pictAssetByName[name] { return existing }
+            for fork in colorForks {
+                if let png = ResourceFork.pictPNG(named: name, from: fork) {
+                    let assetName = UUID().uuidString.lowercased() + ".png"
+                    assets[assetName] = png
+                    pictAssetByName[name] = assetName
+                    return assetName
+                }
+            }
+            return nil
+        }
+        // Decode each color resource type once (most stacks have none), keyed
+        // by object id, converting to the model's ColorElement and resolving
+        // PICT names to assets lazily as elements are converted.
+        func decodeColorElements(_ raw: [ResourceFork.ColorElement]) -> [ColorElement] {
+            func hex(_ c: (r: Int, g: Int, b: Int)) -> String {
+                String(format: "#%02X%02X%02X", c.r >> 8, c.g >> 8, c.b >> 8)
+            }
+            return raw.map { e in
+                switch e.kind {
+                case .button:
+                    return ColorElement(kind: .button, hidden: e.hidden, partNumber: e.partNumber, color: hex(e.rgb))
+                case .field:
+                    return ColorElement(kind: .field, hidden: e.hidden, partNumber: e.partNumber, color: hex(e.rgb))
+                case .rect:
+                    return ColorElement(kind: .rect, hidden: e.hidden,
+                                        top: Double(e.top), left: Double(e.left),
+                                        bottom: Double(e.bottom), right: Double(e.right), color: hex(e.rgb))
+                case .picture:
+                    return ColorElement(kind: .picture, hidden: e.hidden,
+                                        top: Double(e.top), left: Double(e.left),
+                                        bottom: Double(e.bottom), right: Double(e.right),
+                                        transparent: e.transparent, pictureAsset: pictAsset(named: e.pictName))
+                }
+            }
+        }
+        var hccdByID: [Int: [ColorElement]] = [:]
+        var hcbgByID: [Int: [ColorElement]] = [:]
+        if let stackFork {
+            for r in ResourceFork.colorResources(ofType: "HCcd", from: stackFork) { hccdByID[r.id] = decodeColorElements(r.elements) }
+            for r in ResourceFork.colorResources(ofType: "HCbg", from: stackFork) { hcbgByID[r.id] = decodeColorElements(r.elements) }
+        }
+
         // Card order comes from the PAGE block(s); fall back to file order.
         let cardBlocks = blocks.filter { $0.type == "CARD" }
         let cardByID = Dictionary(uniqueKeysWithValues: cardBlocks.map { ($0.id, $0) })
@@ -189,6 +239,7 @@ enum LegacyStackImporter {
             }
             bgFieldInfoByID[block.id] = fieldInfo
             background.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
+            background.colorElements = hcbgByID[block.id] ?? []
             bgUUIDByID[block.id] = background.id
             stack.backgrounds.append(background)
         }
@@ -212,6 +263,7 @@ enum LegacyStackImporter {
                             backgroundID: backgroundUUID, script: parsed.script, parts: [])
             card.scriptID = preservedScriptID(block.id, in: &stack)
             card.paintImageAsset = paintAsset(bitmapID: parsed.bitmapID)
+            card.colorElements = hccdByID[block.id] ?? []
 
             for template in templateFields {
                 guard let info = bgFieldInfoByID[bgID]?[template.id],
