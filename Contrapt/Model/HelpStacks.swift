@@ -14,9 +14,15 @@
 import Foundation
 
 nonisolated enum HelpStacks {
-    /// The bundled help stacks' resource names.
+    /// The bundled help stacks' resource names (each a `<name>.contrapt` in
+    /// the app bundle / synchronized project folder).
     static let whatsNew = "Whats New in HyperTalk"
     static let importing = "How to Import HyperCard Stacks"
+    /// Authored later; the menu items open them once the `.contrapt` files are
+    /// added to the project (freshCopy returns nil until then, so the items
+    /// simply no-op meanwhile).
+    static let legacyUpdate = "Updating a Legacy Stack"
+    static let languageAdditions = "Language Additions"
 
     /// A fresh, disposable copy of a bundled help stack, ready to open like
     /// any document. Nil when the resource is missing from the bundle.

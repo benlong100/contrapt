@@ -814,6 +814,8 @@ struct ContraptApp: App {
             GuideCommand()
             HelpStackCommand(title: "What's New in HyperTalk?", resource: HelpStacks.whatsNew)
             HelpStackCommand(title: "How to Import HyperCard Stacks", resource: HelpStacks.importing)
+            HelpStackCommand(title: "Updating a Legacy Stack", resource: HelpStacks.legacyUpdate)
+            HelpStackCommand(title: "Language Additions", resource: HelpStacks.languageAdditions)
         }
         #endif
         CommandMenu("Go") {
