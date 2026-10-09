@@ -219,6 +219,18 @@ import Testing
     _ = try Parser.parse("on p\nhide window \"NexusLogo\"\nend p") // unchanged
 }
 
+@Test func dynamicPropertySetParsesAsNoOp() throws {
+    // `set (TheProperty) of window X to …` / `set "thePercent" of window X …`
+    // — a computed property name on an unmodeled window (QuickTime Tools,
+    // Movie Nudes). Parses (no-op) instead of failing the handler; normal
+    // literal-property sets are unaffected.
+    _ = try Parser.parse("on p\nset (TheProperty) of window TheName to (hilite of btn TheProperty)\nend p")
+    _ = try Parser.parse("on p\nset \"thePercent\" of window \"Progress\" to 50\nend p")
+    // Unchanged: a normal property set and a global property set still work.
+    _ = try Parser.parse("on p\nset the loc of card button \"OK\" to 10,20\nend p")
+    _ = try Parser.parse("on p\nset the itemDelimiter to \";\"\nend p")
+}
+
 @Test func propertyOfOrdinalChunkIsIndirect() throws {
     // `the scroll of last item of fieldList` — the chunk's VALUE names a
     // field (Power Tools, Car Care, 10th Anniversary); the property applies

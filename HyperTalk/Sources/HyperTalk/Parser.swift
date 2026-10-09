@@ -992,7 +992,15 @@ struct Parser {
             advance()
             _ = consumeWord("the")
             guard let property = peekIdentifier() else {
-                throw ScriptError(line: line, message: "Expected a property name after 'set'.")
+                // A dynamic property name — `set (TheProperty) of window X to …`
+                // / `set "thePercent" of window X to …` (QuickTime Tools, Movie
+                // Nudes): the property to set is computed. Contrapt doesn't model
+                // dynamic property sets (the corpus targets are unmodeled
+                // windows), so accept and no-op the line rather than failing the
+                // handler — matching the other unmodeled-set paths below.
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
             }
             advance()
             if consumeWord("of") {
