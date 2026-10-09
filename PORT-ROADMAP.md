@@ -124,16 +124,25 @@ ask/answer (+file), click/doMenu basics, enable/disable, card-window crop.
 ## Priority 3 — long tail / environment
 14. Palettes & external windows (`palette`, tool/pattern windows, `the
     windows`), `answer file` on iOS, AppleEvents beyond no-op, debugger/
-    `trace`, `dial`, serial. Deliberate divergences stay (documented in
+    `trace`, serial. (`dial` is already handled — parsed and no-op'd, since
+    Contrapt has no telephony.) Deliberate divergences stay (documented in
     ORACLE.md): permissive comparisons, container-sort superset, HC 2.3 quirks.
     XCMD shims — IN PROGRESS: shipped PopMenu/HPopUpMenu, FileName,
     NewFileName, FontExists (earlier), and 2026-10-08 Flash/Flasher/FlashRect
     (screen-invert overlay, host onFlash closure) + SpeakText/Speak (AVSpeech).
     Shimmed names are always treated as externals (builtinExternals) so they
-    work even when the stack omits the XCMD resource. Corpus XCMD ranking:
-    FileName 13, NewFileName 10, HyPict 9, PopMenu 9, FontExists 7, Picture 7,
-    Palette 6, Flash 6. Remaining common ones need bigger features: HyPict/
-    Picture (PICT display), AddColor (color).
+    work even when the stack omits the XCMD resource.
+    PICT display via Picture/HyPict XCMD — DO NOT BUILD (evidence, 2026-10-08):
+    NO stack in ANY on-disk batch (3rd batch + Basilisk shared + the 116-stack
+    Oct 8 batch) calls Picture or HyPict. The old "HyPict 9 / Picture 7" ranking
+    counted XCMD RESOURCE presence, not call sites — misleading. The real
+    picture/color features actually present (still niche): AddColor/Color Tools
+    color overlays (HCcd/HCbg/ADDc — 2 Oct 8 stacks) and QuickTime movie XCMDs
+    (qtMovie/playMovie — KlingonDictionary, USGS). See [[backlog]].
+    `go next/previous background` — DONE (2026-10-08): the first card of the
+    adjacent background (stack order, wrapping), resolved to a concrete card by
+    a host `adjacentBackgroundCardNumber(forward:)` query so no new
+    GoDestination case was needed. Surfaced by the Oct 8 parser sweep.
     Palettes & external windows — DONE (2026-10-08): increment 1 shipped the
     scripting layer (PaletteRegistry: `the windows`, `there is a window`,
     visible/loc/rect, show/hide/close). Increment 2 adds the visible panels:

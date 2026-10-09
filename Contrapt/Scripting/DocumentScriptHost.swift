@@ -1075,6 +1075,21 @@ final class DocumentScriptHost: HyperTalkHost {
     func endUsingStack(_ name: String) { UsingStackStore.shared.end(name) }
     func inUseStackScripts() -> [(name: String, source: String)] { UsingStackStore.shared.stacks }
 
+    func adjacentBackgroundCardNumber(forward: Bool) -> Int? {
+        let cards = stack.cards
+        guard !cards.isEmpty else { return nil }
+        // Distinct backgrounds in stack (card) order.
+        var order: [UUID] = []
+        for c in cards where !order.contains(c.backgroundID) { order.append(c.backgroundID) }
+        guard order.count > 1 else { return nil }
+        let current = cards[cardIndex].backgroundID
+        guard let pos = order.firstIndex(of: current) else { return nil }
+        let target = forward ? order[(pos + 1) % order.count]
+                             : order[(pos - 1 + order.count) % order.count]
+        guard let i = cards.firstIndex(where: { $0.backgroundID == target }) else { return nil }
+        return i + 1
+    }
+
     private func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }

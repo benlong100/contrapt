@@ -370,6 +370,21 @@ final class WebHost: HyperTalkHost {
         }
     }
 
+    func adjacentBackgroundCardNumber(forward: Bool) -> Int? {
+        let cards = stack.cards
+        guard !cards.isEmpty else { return nil }
+        // Distinct backgrounds in stack (card) order.
+        var order: [UUID] = []
+        for c in cards where !order.contains(c.backgroundID) { order.append(c.backgroundID) }
+        guard order.count > 1 else { return nil }
+        let current = cards[cardIndex].backgroundID
+        guard let pos = order.firstIndex(of: current) else { return nil }
+        let target = forward ? order[(pos + 1) % order.count]
+                             : order[(pos - 1 + order.count) % order.count]
+        guard let i = cards.firstIndex(where: { $0.backgroundID == target }) else { return nil }
+        return i + 1
+    }
+
     /// Resolves a count scope's background (`bg "Paths"` / `bg 2` / `bg id 7`).
     private func backgroundID(for reference: HyperTalkObject.Reference) -> UUID? {
         switch reference {

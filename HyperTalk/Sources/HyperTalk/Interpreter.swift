@@ -1637,6 +1637,14 @@ final class Runtime {
         case .markedCardOrdinal(let ordinal):
             let total = try hostCall(line: line) { try host.count(.markedCards) }
             return .markedCard(Self.resolveOrdinal(ordinal, count: total))
+        case .relativeBackground(let forward):
+            // The first card of the adjacent background, resolved to a concrete
+            // stack card number by the host. A stack with one background (or a
+            // host that can't resolve it) stays on the current card.
+            if let number = host.adjacentBackgroundCardNumber(forward: forward) {
+                return .number(number)
+            }
+            return try await destination(for: .current, line: line)
         }
     }
 

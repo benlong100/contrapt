@@ -322,6 +322,10 @@ indirect enum GoTarget {
     /// `go first/last/middle/any marked card` — a positional marked card,
     /// resolved against the live marked-card count.
     case markedCardOrdinal(Ordinal)
+    /// `go next/previous background` — the first card of the adjacent
+    /// background (in stack order, wrapping). Resolved to a concrete card by
+    /// the host so no new `GoDestination` case is needed.
+    case relativeBackground(forward: Bool)
 }
 
 indirect enum RepeatKind {

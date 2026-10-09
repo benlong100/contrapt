@@ -172,6 +172,15 @@ import Testing
     _ = try Parser.parse("on p\nif there is a cd fld 2 of next card then beep\nend p")
 }
 
+@Test func goRelativeBackgroundParses() throws {
+    // `go next/previous background` — background navigation (Help Extras'
+    // print-all-backgrounds loop). Still distinct from `go next card`.
+    _ = try Parser.parse("on p\ngo next background\nend p")
+    _ = try Parser.parse("on p\ngo previous bkgnd\nend p")
+    _ = try Parser.parse("on p\ngo prev bg\nend p")
+    _ = try Parser.parse("on p\ngo next card\nend p")
+}
+
 @Test func sortCardsOfNamedBackground() throws {
     // `sort bg "CURRENT" by <key>` — sort the cards of a named background
     // (Programs). Must route to the cards form, not a bare container named

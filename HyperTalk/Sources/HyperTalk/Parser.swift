@@ -1773,11 +1773,13 @@ struct Parser {
             default: target = .markedCard(.numberLiteral(Double(Self.ordinals[w] ?? 1)))
             }
         } else if consumeWord("next") {
-            _ = consumeCardWord()
-            target = .next
+            // `go next background` lands on the adjacent background's first card;
+            // `go next card` (or bare `go next`) is the card step.
+            if consumeBackgroundWord() { target = .relativeBackground(forward: true) }
+            else { _ = consumeCardWord(); target = .next }
         } else if consumeWord("previous") || consumeWord("prev") {
-            _ = consumeCardWord()
-            target = .previous
+            if consumeBackgroundWord() { target = .relativeBackground(forward: false) }
+            else { _ = consumeCardWord(); target = .previous }
         } else if consumeWord("first") {
             _ = consumeCardWord()
             target = .first

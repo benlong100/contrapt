@@ -298,6 +298,12 @@ public protocol HyperTalkHost: AnyObject {
     /// false — a stack probing an external file that Contrapt doesn't have gets
     /// the correct "not present" answer instead of an error.
     func fileExists(_ path: String) -> Bool
+    /// The 1-based stack card number of the first card of the background
+    /// adjacent to the current card's (next when `forward`, previous otherwise,
+    /// wrapping in stack order), for `go next/previous background`. Nil when the
+    /// stack has a single background or the host can't resolve it — the caller
+    /// then stays put. Defaults to nil.
+    func adjacentBackgroundCardNumber(forward: Bool) -> Int?
     /// Field *contents*, addressed like any part: by name, ordinal, or id,
     /// optionally restricted to the card or background layer. `onCard` names a
     /// different card the field lives on (`field "X" of prev card`); nil means
@@ -549,6 +555,7 @@ public extension HyperTalkHost {
         throw HostError("File not open.")
     }
     func fileExists(_ path: String) -> Bool { false }
+    func adjacentBackgroundCardNumber(forward: Bool) -> Int? { nil }
 
     /// Hosts without live mouse tracking read `the mouse` as up and the
     /// pointer as unknown.
