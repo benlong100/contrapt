@@ -196,6 +196,7 @@ struct ScriptFormSection: View {
                 Button("Check Script", systemImage: "checkmark.seal") {
                     checkResult = .checking(script)
                 }
+                ScriptExplainButton(objectLabel: title, script: script)
                 Spacer()
                 Button("Expand Editor", systemImage: "arrow.up.left.and.arrow.down.right") {
                     onExpand()
@@ -241,6 +242,9 @@ struct LargeScriptEditor: View {
                     Button("Check Script", systemImage: "checkmark.seal") {
                         checkResult = .checking(script)
                     }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    ScriptExplainButton(objectLabel: title, script: script)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

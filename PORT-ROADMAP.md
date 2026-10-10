@@ -376,6 +376,22 @@ Phase B — the experience (app-side, build-gated):
 5. **AI co-author** — the modern "gentle slope": describe a card, explain a
    handler, natural-language → HyperTalk, "make this resizable." Fits because
    HyperTalk is near-English.
+   - *Provider strategy (2026-10-10):* **hybrid** — Apple's on-device
+     FoundationModels powers the read-side (free/private/offline/no-key); the
+     write-side (generate/revise HyperTalk) is an **opt-in cloud** path (user's
+     Claude API key) because Apple documents the on-device model as unsuited to
+     code generation. A `CoAuthoring` protocol keeps providers pluggable.
+   - **Increment 1 — Explain (read-side): DONE 2026-10-10 (Ben builds app).**
+     An "Explain" button in the script editor (inline + expanded) runs the
+     script through the on-device model and shows a plain-language walkthrough.
+     Shared/tested prompt construction `HyperTalk.CoAuthor` (4 CoAuthorTests,
+     suite 676); app provider `FoundationModelsCoAuthor` + `ScriptExplainButton`
+     (graceful unavailable/error). Authoring-only (not in interpreter/web).
+   - **Increment 2 — Generate/revise (write-side), NEXT:** opt-in cloud provider
+     (Claude API key in Settings/Keychain); "write a handler that…" / "revise
+     this"; **validate every generated script by parsing with `HyperTalk.check`
+     before offering to apply** (the parse guard — testable). Then optionally:
+     describe-a-card, explain-an-error.
 6. **Components / reusable custom parts; finish color; audio/video/camera;
    iPad + Pencil (touch authoring).**
 

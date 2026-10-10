@@ -97,6 +97,20 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   image), so reflowing text would overflow frames — VoiceOver/semantics are the
   accessibility that fits.
 
+## Authoring
+- **AI co-author — "Explain" (read-side)** — *shipped (app; pending a build)*.
+  In the script editor (inline and expanded), an **Explain** button runs the
+  current script through Apple's **on-device** model (FoundationModels) and
+  shows a plain-language, handler-by-handler walkthrough — the "gentle slope"
+  on-ramp for learning HyperTalk. Private, offline, no API key; the result sheet
+  degrades gracefully when Apple Intelligence is off/unavailable. Prompt
+  construction is shared/tested (`HyperTalk.CoAuthor`); the model call sits
+  behind a `CoAuthoring` protocol so an **opt-in cloud** provider can power the
+  write-side (generate/revise HyperTalk) later — the on-device model is
+  deliberately used only for explaining, since Apple documents it as unsuited to
+  code generation. Authoring-only: nothing here ships in a stack or the web
+  export.
+
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders
   its contents as **Markdown** — styling plus **trappable links** — in a web
