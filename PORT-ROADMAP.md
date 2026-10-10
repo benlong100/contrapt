@@ -349,12 +349,19 @@ Phase B — the experience (app-side, build-gated):
      modern font); `theme` field on both Stack models (Codable, normalized);
      `the theme of this stack` get/set in both hosts; surfaced in `CardState`
      for live web re-apply. 13 theme tests; suite 666; sweep 48.
-   - **Next: presentation (build-gated):** apply the resolved palette in
-     `CardView` (via a theme Environment value; Classic unchanged) + a theme
-     picker in the inspector (app); inject CSS variables in `WebsiteExporter`
-     and apply from `CardState.theme` in the player (web). Then accessibility
-     (VoiceOver labels + Dynamic Type; semantic/ARIA HTML), then responsive
-     polish.
+   - **Presentation: DONE 2026-10-10 (Ben builds app; web live-switch needs a
+     wasm rebuild).** App: a `ResolvedTheme` SwiftUI Environment value
+     (`Contrapt/Views/Theme+App.swift`) resolves ThemeSpec→Color (Classic =
+     exact existing platform colors), applied in `CardView` (card surface,
+     `CardButtonLabel` chrome/hilite, `FieldChromeModifier`, default accent) +
+     `backdropColor` surround + a forced light/dark subtree appearance for modern
+     themes; a Theme picker in `ObjectScriptsInspector`'s Presentation section.
+     Web: CSS variables (`--surface/--ink/--accent/--border/--padding`, classic
+     defaults) + an `applyTheme()` the player calls at load (`stack.theme`) and
+     per update (`CardState.theme`). Package suite still 666 (presentation is
+     app/web, no package change).
+   - **Next in #4:** accessibility (VoiceOver labels + Dynamic Type; semantic/
+     ARIA HTML in the export), then responsive polish.
 5. **AI co-author** — the modern "gentle slope": describe a card, explain a
    handler, natural-language → HyperTalk, "make this resizable." Fits because
    HyperTalk is near-English.

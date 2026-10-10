@@ -62,8 +62,8 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   storage (the default) simply doesn't remember.
 
 ## Appearance
-- **Built-in themes (`the theme of this stack`)** — *partial (shared core
-  shipped; app + web presentation pending)*. A small curated set of themes a
+- **Built-in themes (`the theme of this stack`)** — *shipped (app pending a
+  build; web live-switch pending a wasm rebuild)*. A small curated set of themes a
   stack can adopt — **Classic** (default), **Modern Light**, **Dark** —
   selectable per stack and scriptable: `set the theme of this stack to "dark"`.
   The catalog is one shared, unit-tested `ThemeSpec` (in the HyperTalk package)
@@ -72,9 +72,16 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   OS light/dark), so it's a true no-op; Modern Light/Dark apply a fixed palette,
   corner rounding, a non-inverse button hilite, and a modern sans font. The
   `theme` property round-trips in `stack.json` and surfaces in the web engine's
-  `CardState` so a runtime `set the theme` re-applies live. *Done: the spec,
-  model field, and `theme` property on both hosts. Next: applying the palette in
-  CardView + an inspector picker (app), and CSS variables (web).*
+  `CardState` so a runtime `set the theme` re-applies live. **App:** a
+  `ResolvedTheme` SwiftUI Environment value drives the card surface, button
+  chrome/hilite, field chrome, default accent, and the desktop surround; modern
+  themes also force the card subtree's light/dark appearance so text stays
+  legible. A **Theme picker** sits in the inspector's Presentation section.
+  **Web:** the exported CSS is driven by `--surface`/`--ink`/`--accent`/
+  `--border`/`--padding` variables (classic defaults = the original look), set by
+  an `applyTheme()` the player calls at load (`stack.theme`) and on each update
+  (`CardState.theme`). Classic touches nothing — it resolves to the exact
+  pre-existing colors.
 
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders

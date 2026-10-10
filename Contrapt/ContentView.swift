@@ -862,9 +862,11 @@ struct ContentView: View {
     }
 
     private var backdropColor: Color {
-        // Windowed: the classic Mac gray "desktop" surrounds the card, as in
-        // HyperCard. Full screen uses the stack's scriptable paddingColor.
-        isPresentingFullScreen ? Color(stackColor: document.stack.paddingColor) : Color.cardDesktop
+        // Full screen uses the stack's scriptable paddingColor. Windowed: a
+        // modern theme tints the surround with its padding color; Classic keeps
+        // the Mac-gray "desktop," as in HyperCard.
+        if isPresentingFullScreen { return Color(stackColor: document.stack.paddingColor) }
+        return ResolvedTheme(named: document.stack.theme).paddingColor ?? Color.cardDesktop
     }
 
     /// A binding to the stack's full-screen flag, published to the scene so

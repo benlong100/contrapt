@@ -58,6 +58,10 @@ struct CardView: View {
     /// works in card coordinates regardless of display scale.
     static let canvasSpace = "cardCanvas"
 
+    /// The stack's resolved theme (Classic = the existing platform look). Drives
+    /// the card chrome here and, via the environment, the nested part views.
+    private var theme: ResolvedTheme { ResolvedTheme(named: stack.theme) }
+
     var body: some View {
         GeometryReader { proxy in
             // A cross-stack swap replaces `stack` before the parent corrects
@@ -68,6 +72,8 @@ struct CardView: View {
                 cardBody(proxy: proxy)
             }
         }
+        .environment(\.stackTheme, theme)
+        .themedColorScheme(theme.colorScheme)
     }
 
     @ViewBuilder
@@ -259,7 +265,7 @@ struct CardView: View {
     @ViewBuilder
     private var cardSurface: some View {
         let surface = RoundedRectangle(cornerRadius: 8)
-            .fill(Color.cardSurface)
+            .fill(theme.surface)
             .shadow(radius: 8)
         if isEditing {
             surface.onTapGesture { selectedPartIDs = [] }
@@ -358,7 +364,7 @@ struct CardView: View {
     /// or the app accent when unset.
     private var cardHighlight: Color {
         guard stack.cards.indices.contains(cardIndex),
-              let hex = stack.cards[cardIndex].highlightColor else { return .accentColor }
+              let hex = stack.cards[cardIndex].highlightColor else { return theme.accent }
         return Color(stackColor: hex)
     }
 
@@ -821,16 +827,34 @@ struct CardButtonStyle: ButtonStyle {
     var hasIcon: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
+        // The chrome reads the stack theme, which only resolves inside a View
+        // (not in a ButtonStyle struct) — hence the dedicated label view.
         let pressed = autoHilite && configuration.isPressed && !style.isToggle
         let inverted = !style.isToggle && (hilite || pressed)
-        return configuration.label
+        return CardButtonLabel(label: configuration.label, style: style,
+                               inverted: inverted, tint: tint, hasIcon: hasIcon)
+    }
+}
+
+/// The themed chrome of a card button — fill, border, and inverse-video hilite.
+/// Separated from CardButtonStyle so `@Environment(\.stackTheme)` resolves.
+private struct CardButtonLabel<Label: View>: View {
+    @Environment(\.stackTheme) private var theme
+    let label: Label
+    let style: ButtonStyleKind
+    let inverted: Bool
+    let tint: Color
+    let hasIcon: Bool
+
+    var body: some View {
+        label
             .font(.body)
             // Inverse video flips ink↔paper: a hilited button shows light label
             // on a black fill (and vice versa), classic 1-bit HyperCard.
-            .foregroundStyle(inverted ? Color.cardSurface : tint)
+            .foregroundStyle(inverted ? theme.surface : tint)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, (style == .transparent || hasIcon) ? 0 : 8)
-            .background(background(inverted: inverted))
+            .background(background)
             .overlay(border)
             .compositingGroup()
             .shadow(color: style == .shadow ? .black.opacity(0.45) : .clear, radius: 0, x: 3, y: 3)
@@ -841,17 +865,17 @@ struct CardButtonStyle: ButtonStyle {
     /// than a `.difference` blend, which escaped the part's clip and inflated a
     /// thin hilited "divider" button to its content height.
     @ViewBuilder
-    private func background(inverted: Bool) -> some View {
+    private var background: some View {
         if inverted {
-            shape.fill(Color.cardInk)
+            shape.fill(theme.ink)
         } else {
             switch style {
             case .transparent, .checkbox, .radio:
                 Color.clear
             case .roundRect:
-                shape.fill(Color.accentColor.opacity(0.12))
+                shape.fill(theme.accent.opacity(0.12))
             case .opaque, .rectangle, .shadow:
-                shape.fill(Color.cardSurface)
+                shape.fill(theme.surface)
             }
         }
     }
@@ -862,7 +886,7 @@ struct CardButtonStyle: ButtonStyle {
         case .transparent, .opaque, .checkbox, .radio:
             EmptyView()
         case .roundRect, .rectangle, .shadow:
-            shape.stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
+            shape.stroke(theme.accent.opacity(0.5), lineWidth: 1)
         }
     }
 
@@ -938,19 +962,32 @@ extension EnvironmentValues {
 extension View {
     /// A field's border/background per its FieldStyle — shared by plain and
     /// rich fields. Transparent draws nothing (content floats over the card);
-    /// opaque fills; rectangle adds a border; shadow adds a drop shadow.
-    @ViewBuilder
+    /// opaque fills; rectangle adds a border; shadow adds a drop shadow. The
+    /// fill/border colors come from the stack theme (Classic = the platform
+    /// semantic colors used before).
     func fieldChrome(style: FieldStyle, showLines: Bool = false, lineHeight: CGFloat = 0, inset: CGFloat = 0) -> some View {
-        self
+        modifier(FieldChromeModifier(style: style, showLines: showLines, lineHeight: lineHeight, inset: inset))
+    }
+}
+
+private struct FieldChromeModifier: ViewModifier {
+    @Environment(\.stackTheme) private var theme
+    let style: FieldStyle
+    let showLines: Bool
+    let lineHeight: CGFloat
+    let inset: CGFloat
+
+    func body(content: Content) -> some View {
+        content
             .background {
                 ZStack {
-                    if style != .transparent { Color.cardSurface }
-                    if showLines { FieldBaselineLines(lineHeight: lineHeight, inset: inset) }
+                    if style != .transparent { theme.surface }
+                    if showLines { FieldBaselineLines(lineHeight: lineHeight, inset: inset, color: theme.border) }
                 }
             }
             .overlay {
                 if style == .rectangle || style == .shadow || style == .scrolling {
-                    RoundedRectangle(cornerRadius: 6).stroke(Color.fieldStroke, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 6).stroke(theme.border, lineWidth: 1)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: style == .transparent ? 0 : 6))
@@ -966,6 +1003,7 @@ extension View {
 private struct FieldBaselineLines: View {
     let lineHeight: CGFloat
     let inset: CGFloat
+    var color: Color = .fieldStroke
 
     var body: some View {
         Canvas { context, size in
@@ -975,7 +1013,7 @@ private struct FieldBaselineLines: View {
                 var path = Path()
                 path.move(to: CGPoint(x: inset, y: y))
                 path.addLine(to: CGPoint(x: size.width - inset, y: y))
-                context.stroke(path, with: .color(Color.fieldStroke), lineWidth: 0.5)
+                context.stroke(path, with: .color(color), lineWidth: 0.5)
                 y += lineHeight
             }
         }

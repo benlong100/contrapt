@@ -114,48 +114,51 @@ extension WebsiteExporter {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Contrapt Stack</title>
     <style>
-      :root { color-scheme: light; }
-      html, body { margin: 0; height: 100%; background: #6b6b6b;
+      /* Theme variables — classic defaults; applyTheme() overrides for
+         Modern Light/Dark. Classic keeps the original black-on-white look. */
+      :root { color-scheme: light;
+        --surface: #fff; --ink: #000; --accent: #00f; --border: #000; --padding: #6b6b6b; }
+      html, body { margin: 0; height: 100%; background: var(--padding);
         font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; }
       #stage { position: absolute; inset: 0 0 64px 0; display: flex;
         align-items: center; justify-content: center; overflow: auto; }
-      #card { position: relative; background: #fff; transform-origin: center center;
+      #card { position: relative; background: var(--surface); transform-origin: center center;
         box-shadow: 0 2px 16px rgba(0,0,0,.4); overflow: hidden; }
       .paint { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
         image-rendering: pixelated; pointer-events: none; }
-      .layer { position: absolute; inset: 0; background: #fff; }
+      .layer { position: absolute; inset: 0; background: var(--surface); }
       .part { position: absolute; box-sizing: border-box; overflow: hidden;
-        color: #000; line-height: 1.15; }
+        color: var(--ink); line-height: 1.15; }
       .field { white-space: pre-wrap; }
-      .field.opaque, .field.rectangle, .field.shadow { background: #fff; }
-      .field.rectangle { border: 1px solid #000; }
-      .field.shadow { border: 1px solid #000; box-shadow: 3px 3px 0 rgba(0,0,0,.5); }
+      .field.opaque, .field.rectangle, .field.shadow { background: var(--surface); }
+      .field.rectangle { border: 1px solid var(--border); }
+      .field.shadow { border: 1px solid var(--border); box-shadow: 3px 3px 0 rgba(0,0,0,.5); }
       .button { display: flex; align-items: center; justify-content: center;
         gap: 4px; text-align: center; }
-      .button.rectangle, .button.shadow { border: 1px solid #000; }
-      .button.roundRect { border: 1px solid #000; border-radius: 8px; }
-      .button.opaque { background: #fff; }
+      .button.rectangle, .button.shadow { border: 1px solid var(--border); }
+      .button.roundRect { border: 1px solid var(--border); border-radius: 8px; }
+      .button.opaque { background: var(--surface); }
       .button.shadow { box-shadow: 3px 3px 0 rgba(0,0,0,.5); }
-      .button.hilite { background: #000; color: #fff; }
+      .button.hilite { background: var(--ink); color: var(--surface); }
       .button .icon { image-rendering: pixelated; }
       .button .icon-missing { width: 24px; height: 24px; border: 1px dashed #999;
         border-radius: 4px; flex: none; }
       .part.disabled { opacity: .4; pointer-events: none; }
-      .field.scrolling { overflow-y: auto; border: 1px solid #000; background: #fff; }
+      .field.scrolling { overflow-y: auto; border: 1px solid var(--border); background: var(--surface); }
       #menus { position: absolute; top: 0; left: 0; right: 0; height: 28px;
         display: none; align-items: center; gap: 18px; padding: 0 12px;
-        background: #fff; border-bottom: 1px solid #000; font-size: 14px;
-        z-index: 5; user-select: none; }
+        background: var(--surface); border-bottom: 1px solid var(--border); color: var(--ink);
+        font-size: 14px; z-index: 5; user-select: none; }
       body.has-menus #menus { display: flex; }
       body.has-menus #stage { top: 28px; }
       #menus .menu { position: relative; cursor: default; }
       #menus .menu.disabled { color: #999; pointer-events: none; }
       #menus .menu .drop { display: none; position: absolute; top: 24px; left: -8px;
-        min-width: 160px; background: #fff; border: 1px solid #000;
+        min-width: 160px; background: var(--surface); border: 1px solid var(--border);
         box-shadow: 2px 2px 0 rgba(0,0,0,.4); padding: 4px 0; }
       #menus .menu.open .drop { display: block; }
       #menus .drop .item { padding: 3px 18px; white-space: nowrap; }
-      #menus .drop .item:hover { background: #000; color: #fff; }
+      #menus .drop .item:hover { background: var(--ink); color: var(--surface); }
       #menus .drop .item.disabled { color: #999; pointer-events: none; }
       .label { display: flex; align-items: center; }
       #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 64px;
@@ -718,6 +721,7 @@ extension WebsiteExporter {
           const nav = (res.effects || []).find(e => e.type === 'navigate' && e.effects && e.effects.length);
           render(nav ? nav.effects[0] : undefined);
         }
+        if (res.state && res.state.theme) applyTheme(res.state.theme);
         applyState(res.state);
         applyEffects(res.effects);
         if (res.result != null) note.textContent = res.result;
@@ -731,6 +735,27 @@ extension WebsiteExporter {
       document.getElementById('next').onclick = () => go(idx + 1);
       window.addEventListener('resize', fit);
       document.title = stack.name || 'Contrapt Stack';
+
+      // --- Theme -------------------------------------------------------------
+      // Mirror of HyperTalk's ThemeSpec: Classic uses the :root defaults;
+      // Modern Light/Dark override the CSS variables. `set the theme` at runtime
+      // re-applies via CardState.theme in handle().
+      const THEMES = {
+        light: { '--surface': '#FFFFFF', '--ink': '#1C1C1E', '--accent': '#007AFF', '--border': '#D1D1D6', '--padding': '#F2F2F7' },
+        dark:  { '--surface': '#1C1C1E', '--ink': '#F2F2F7', '--accent': '#0A84FF', '--border': '#3A3A3C', '--padding': '#000000' },
+      };
+      let currentTheme = null;
+      function applyTheme(name) {
+        if (name === currentTheme) return;
+        currentTheme = name;
+        const root = document.documentElement;
+        ['--surface', '--ink', '--accent', '--border', '--padding'].forEach(v => root.style.removeProperty(v));
+        const t = THEMES[name];
+        if (t) for (const k in t) root.style.setProperty(k, t[k]);
+        root.style.colorScheme = (name === 'dark') ? 'dark' : 'light';
+      }
+      applyTheme(stack.theme || 'classic');
+
       render();
 
       function activateEngine() {

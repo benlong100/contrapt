@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import HyperTalk
 
 /// Edits the scripts of the container objects — the current card, its
 /// background, and the stack. Shown in the inspector when no part is
@@ -94,12 +95,17 @@ struct ObjectScriptsInspector: View {
                     Text("Card size applies to every card in the stack. Parts keep their positions, so shrinking may move some off the card.")
                 }
                 Section {
+                    Picker("Theme", selection: $stack.theme) {
+                        ForEach(ThemeSpec.all, id: \.name) { spec in
+                            Text(spec.displayName).tag(spec.name)
+                        }
+                    }
                     Toggle("Open Full Screen", isOn: $stack.isFullScreen)
                     ColorPicker("Padding Color", selection: paddingColorBinding, supportsOpacity: false)
                 } header: {
                     Text("Presentation")
                 } footer: {
-                    Text("Full screen fills the space around the card with the padding color and hides the app chrome. Press Escape to leave.")
+                    Text("Theme restyles the card's colors and controls; Classic keeps the original look and follows the system. Full screen fills the space around the card with the padding color and hides the app chrome. Press Escape to leave.")
                 }
             }
             ScriptFormSection(title: scriptTitle, script: scriptBinding, onExpand: { isEditorExpanded = true })
