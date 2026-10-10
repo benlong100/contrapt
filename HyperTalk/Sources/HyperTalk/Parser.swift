@@ -1243,13 +1243,27 @@ struct Parser {
             return .foundChunk
         }
         if let fieldRef = try parseFieldRefIfPresent() {
-            return .field(fieldRef)
+            return try containerBrackets(.field(fieldRef), line: line)
         }
         if let name = peekIdentifier() {
             advance()
-            return .variable(name)
+            return try containerBrackets(.variable(name), line: line)
         }
         throw ScriptError(line: line, message: "Expected a variable, field, or chunk here.")
+    }
+
+    /// Wrap a base container in any trailing array-index postfixes, so
+    /// `put x into a["k"]` / `a["x"]["y"]` address an associative-array element.
+    private mutating func containerBrackets(_ base: Container, line: Int) throws -> Container {
+        var container = base
+        while consumeSymbol("[") {
+            let key = try parseExpression()
+            guard consumeSymbol("]") else {
+                throw ScriptError(line: line, message: "Expected ']' after an array key.")
+            }
+            container = .element(key: key, base: container)
+        }
+        return container
     }
 
     /// The thing `convert` acts on. Clear container forms (a field, a chunk,
@@ -2997,7 +3011,22 @@ struct Parser {
         return nil
     }
 
+    /// A primary with any trailing array-index postfixes — `a["k"]`,
+    /// `data["a"]["b"]`. `[` binds tighter than every operator (it's postfix on
+    /// the atom). HyperCard never used `[`, so this is unambiguous.
     private mutating func parsePrimary() throws -> Expr {
+        var expr = try parsePrimaryAtom()
+        while consumeSymbol("[") {
+            let key = try parseExpression()
+            guard consumeSymbol("]") else {
+                throw ScriptError(line: current.line, message: "Expected ']' after an array key.")
+            }
+            expr = .element(key: key, base: expr)
+        }
+        return expr
+    }
+
+    private mutating func parsePrimaryAtom() throws -> Expr {
         let line = current.line
         expressionDepth += 1
         defer { expressionDepth -= 1 }
@@ -3102,6 +3131,18 @@ struct Parser {
             if let w = peekIdentifier(), w == "paramcount" || w == "params" {
                 advance()
                 return .call(w, [])
+            }
+            // `the keys of <array>` / `the number of elements of <array>` —
+            // associative-array readers (Contrapt structured data).
+            if peekIdentifier() == "keys", peekIdentifier(1) == "of" {
+                advance() // keys
+                advance() // of
+                return .arrayKeys(try parsePrimary())
+            }
+            if peekIdentifier() == "number", peekIdentifier(1) == "of",
+               peekIdentifier(2) == "elements", peekIdentifier(3) == "of" {
+                advance(); advance(); advance(); advance() // number of elements of
+                return .elementCount(try parsePrimary())
             }
             // `the number of words of X` → chunk count (but not
             // `the number of this card`, which is a card property).

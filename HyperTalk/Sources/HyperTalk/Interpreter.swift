@@ -1348,6 +1348,10 @@ final class Runtime {
             return try await ChunkResolver.resolve(kind: kind, selector: selector, in: source, itemDelimiter: itemDelimiter) {
                 Int(try Value.number(from: try await evaluate($0, line: line), line: line))
             }
+        case .element(let keyExpression, let base):
+            let source = try await containerValue(base, line: line)
+            let key = try await evaluate(keyExpression, line: line)
+            return HyperTalkArray.value(forKey: key, in: source)
         }
     }
 
@@ -1395,13 +1399,15 @@ final class Runtime {
     private func setContainer(_ container: Container, to value: String, line: Int) async throws {
         switch container {
         case .variable(let name):
+            // Variables keep the raw (possibly array-encoded) value so arrays
+            // round-trip; only user-visible sinks below render arrays as JSON.
             setVariable(name, to: value)
         case .field(let fieldRef):
             let (reference, domain, onCard) = try await resolveFieldRef(fieldRef, line: line)
-            try hostCall(line: line) { try host.setFieldText(reference, domain: domain, onCard: onCard, to: value) }
+            try hostCall(line: line) { try host.setFieldText(reference, domain: domain, onCard: onCard, to: Self.displayValue(value)) }
         case .messageBox:
-            messageBoxText = value
-            host.showMessage(value)
+            messageBoxText = Self.displayValue(value)
+            host.showMessage(Self.displayValue(value))
         case .selection:
             // Replace the selected text by writing to its field+range. No
             // selection → nothing to write (as in HyperCard).
@@ -1417,19 +1423,32 @@ final class Runtime {
             guard let field = meAsField(line: line) else {
                 throw ScriptError(line: line, message: "'me' is not a field here.")
             }
-            try hostCall(line: line) { try host.setFieldText(field.reference, domain: field.domain, onCard: nil, to: value) }
+            try hostCall(line: line) { try host.setFieldText(field.reference, domain: field.domain, onCard: nil, to: Self.displayValue(value)) }
         case .target:
             guard let field = targetAsField(line: line) else {
                 throw ScriptError(line: line, message: "The target is not a field here.")
             }
-            try hostCall(line: line) { try host.setFieldText(field.reference, domain: field.domain, onCard: nil, to: value) }
+            try hostCall(line: line) { try host.setFieldText(field.reference, domain: field.domain, onCard: nil, to: Self.displayValue(value)) }
         case .chunk(let kind, let selector, let base):
             let source = try await containerValue(base, line: line)
             let updated = try await ChunkResolver.replacing(kind: kind, selector: selector, in: source, with: value, itemDelimiter: itemDelimiter) {
                 Int(try Value.number(from: try await evaluate($0, line: line), line: line))
             }
             try await setContainer(base, to: updated, line: line)
+        case .element(let keyExpression, let base):
+            // Decode the base array, set the key, re-encode, write back. The
+            // base recurses, so `a["x"]["y"]` and arrays stored in a variable
+            // (kept encoded) work; a non-array base auto-vivifies to a new array.
+            let source = try await containerValue(base, line: line)
+            let key = try await evaluate(keyExpression, line: line)
+            try await setContainer(base, to: HyperTalkArray.setting(key: key, to: value, in: source), line: line)
         }
+    }
+
+    /// Render a value for a user-visible sink (field, message box): an encoded
+    /// associative array becomes readable JSON; plain text passes through.
+    private static func displayValue(_ value: String) -> String {
+        HyperTalkArray.isArray(value) ? HyperTalkArray.displayJSON(value) : value
     }
 
     private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain, GoDestination?) {
@@ -1536,6 +1555,9 @@ final class Runtime {
             return try await fieldAndRange(of: resolved, line: line)
         case .messageBox:
             return nil
+        case .element:
+            // An array element isn't text-selectable (not a field range).
+            return nil
         }
     }
 
@@ -1560,6 +1582,7 @@ final class Runtime {
         switch container {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
+        case .element(_, let base): return isVariableContainer(base)
         case .field, .messageBox, .me, .target, .selection, .foundChunk: return false
         }
     }
@@ -1831,6 +1854,22 @@ final class Runtime {
             // number of chars in (10/3) is 8 (oracle-verified, HC 2.3).
             let source = Value.displayString(try await chunkSource(sourceExpression, line: line))
             return String(ChunkResolver.count(kind: kind, in: source, itemDelimiter: itemDelimiter))
+
+        case .element(let keyExpression, let baseExpression):
+            // `array[key]` — an associative-array element read. Empty when the
+            // base isn't an array or the key is absent (HyperCard-ish: unset
+            // reads as empty rather than erroring).
+            let base = try await evaluate(baseExpression, line: line)
+            let key = try await evaluate(keyExpression, line: line)
+            return HyperTalkArray.value(forKey: key, in: base)
+
+        case .arrayKeys(let arrayExpression):
+            let array = try await evaluate(arrayExpression, line: line)
+            return HyperTalkArray.keys(of: array).joined(separator: "\n")
+
+        case .elementCount(let arrayExpression):
+            let array = try await evaluate(arrayExpression, line: line)
+            return String(HyperTalkArray.count(of: array))
 
         case .countDynamic(let expression):
             // The noun is computed — `the number of (item i of list & "s")`

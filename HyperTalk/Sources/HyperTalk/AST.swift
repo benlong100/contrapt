@@ -272,6 +272,9 @@ indirect enum Container {
     case foundChunk
     /// A chunk of another container: `word 2 of field "X"`.
     case chunk(ChunkKind, ChunkSelector, Container)
+    /// An associative-array element as a destination: `put x into a["k"]`.
+    /// The base is the array container; writes decode → set key → re-encode.
+    case element(key: Expr, base: Container)
 }
 
 /// What `convert` operates on: a container (rewritten in place) or a bare
@@ -354,6 +357,14 @@ indirect enum Expr {
     /// field and a character range; the run property is read over that range
     /// (uniform value, or "mixed").
     case chunkProperty(String, Container)
+    /// `array[key]` — an associative-array element read (Contrapt's structured
+    /// data). The base evaluates to an encoded array; the key selects an
+    /// element (empty when absent). Nests: `data["a"]["b"]`.
+    case element(key: Expr, base: Expr)
+    /// `the keys of <array>` — the element keys, one per line.
+    case arrayKeys(Expr)
+    /// `the number of elements of <array>` — how many top-level elements.
+    case elementCount(Expr)
     /// A chunk of text: `word 2 of X`, `char 1 to 5 of X`, `the last line of X`.
     case chunk(ChunkKind, ChunkSelector, Expr)
     /// `the number of words of X` — how many chunks of a kind are in X.
