@@ -64,6 +64,40 @@ import HyperTalk
     func reset() { stacks.removeAll() }
 }
 
+/// Remembered network-consent decisions, per (stack, host). "Always" answers
+/// persist in UserDefaults so a trusted stack doesn't re-prompt across launches;
+/// "Allow Once" and session denials live only for this app session. The stack
+/// being authored bypasses this entirely (see DocumentScriptHost.isNetworkAllowed).
+@MainActor final class NetworkConsentStore {
+    static let shared = NetworkConsentStore()
+    private var sessionAllow: Set<String> = []
+    private var sessionDeny: Set<String> = []
+
+    static func key(stackPath: String, host: String) -> String {
+        "\(stackPath)\n\(host.lowercased())"
+    }
+
+    private func defaultsKey(_ key: String) -> String { "network.consent.\(key)" }
+
+    /// A remembered allow (true) / deny (false), or nil if the stack hasn't
+    /// been asked about this host yet. Session answers win over persisted ones.
+    func remembered(_ key: String) -> Bool? {
+        if sessionAllow.contains(key) { return true }
+        if sessionDeny.contains(key) { return false }
+        return UserDefaults.standard.object(forKey: defaultsKey(key)) as? Bool
+    }
+
+    func record(_ key: String, allow: Bool, always: Bool) {
+        if always {
+            UserDefaults.standard.set(allow, forKey: defaultsKey(key))
+        } else if allow {
+            sessionAllow.insert(key)
+        } else {
+            sessionDeny.insert(key)
+        }
+    }
+}
+
 /// Where `find` last matched, so the view can box it on the card.
 struct FindHighlight: Equatable {
     var partID: UUID
@@ -196,6 +230,17 @@ final class DocumentScriptHost: HyperTalkHost {
     /// The document's classic-style colon path, for `the long name of this
     /// stack`. Empty for an unsaved stack (falls back to the bare name).
     private let stackPath: String
+    /// Whether the stack is being authored right now (edit mode). The stack you
+    /// are editing is trusted to reach the network without a consent prompt;
+    /// a stack merely being browsed must ask. Read live, so toggling Edit
+    /// changes the answer mid-session.
+    private let isAuthoring: () -> Bool
+    /// Presents the network-consent prompt for a host the running stack hasn't
+    /// been granted yet. Returns whether to allow the connection and whether to
+    /// remember that choice (Allow Always / Don't Allow persist; Allow Once is
+    /// allow=true, always=false). Suspends the script until the user answers,
+    /// like `answer`.
+    private let onNetworkConsent: (String) async -> (allow: Bool, always: Bool)
 
     init(
         stack: Binding<Stack>,
@@ -217,6 +262,8 @@ final class DocumentScriptHost: HyperTalkHost {
         assetsSnapshot: @escaping () -> [String: Data] = { [:] },
         onPresentPrint: @escaping (Data, String) -> Void = { _, _ in },
         onFlash: @escaping (Int) -> Void = { _ in },
+        isAuthoring: @escaping () -> Bool = { false },
+        onNetworkConsent: @escaping (String) async -> (allow: Bool, always: Bool) = { _ in (false, false) },
         cardWindowViewport: Binding<CGSize?> = .constant(nil),
         menuBar: Binding<[HyperTalkMenu]> = .constant([])
     ) {
@@ -239,6 +286,8 @@ final class DocumentScriptHost: HyperTalkHost {
         self.assetsSnapshot = assetsSnapshot
         self.onPresentPrint = onPresentPrint
         self.onFlash = onFlash
+        self.isAuthoring = isAuthoring
+        self.onNetworkConsent = onNetworkConsent
         self.cardWindowViewport = cardWindowViewport
         self.menuBar = menuBar
     }
@@ -1685,6 +1734,58 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func wait(seconds: Double) async {
         try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+    }
+
+    // MARK: - Networking
+
+    /// `url`/`post`/`delete url` — a real HTTP request, gated by per-stack/per-
+    /// host consent (see isNetworkAllowed). Carries the script's httpHeaders and
+    /// httpTimeout; returns the body, status, response headers, and (on failure)
+    /// an error that the interpreter routes to `the result`.
+    func httpRequest(method: String, url: String, body: String?,
+                     headers: [String: String], timeout: Double)
+        async -> (body: String, status: Int, headers: [String: String], error: String?) {
+
+        guard let parsed = URL(string: url),
+              let scheme = parsed.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let hostName = parsed.host else {
+            return ("", 0, [:], "That isn't a valid web address.")
+        }
+
+        guard await isNetworkAllowed(host: hostName) else {
+            return ("", 0, [:], "This stack isn't allowed to connect to \(hostName).")
+        }
+
+        var request = URLRequest(url: parsed)
+        request.httpMethod = method
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
+        if let body { request.httpBody = Data(body.utf8) }
+        if timeout > 0 { request.timeoutInterval = timeout }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let http = response as? HTTPURLResponse
+            var responseHeaders: [String: String] = [:]
+            for (key, value) in http?.allHeaderFields ?? [:] {
+                if let name = key as? String, let text = value as? String { responseHeaders[name] = text }
+            }
+            return (String(data: data, encoding: .utf8) ?? "",
+                    http?.statusCode ?? 0, responseHeaders, nil)
+        } catch {
+            return ("", 0, [:], error.localizedDescription)
+        }
+    }
+
+    /// Whether the running stack may reach `host`: the authored stack is always
+    /// allowed; a remembered decision wins; otherwise prompt once and remember
+    /// the Always answers (keyed by stack path + host).
+    private func isNetworkAllowed(host: String) async -> Bool {
+        if isAuthoring() { return true }
+        let key = NetworkConsentStore.key(stackPath: stackPath, host: host)
+        if let remembered = NetworkConsentStore.shared.remembered(key) { return remembered }
+        let decision = await onNetworkConsent(host)
+        NetworkConsentStore.shared.record(key, allow: decision.allow, always: decision.always)
+        return decision.allow
     }
 
     func exists(_ object: HyperTalkObject) -> Bool {

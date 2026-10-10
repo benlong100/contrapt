@@ -27,8 +27,8 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   string, so it works in the app and the web export; arrays render as readable
   JSON when shown in a field or the message box, while variables keep the array
   (round-trips).
-- **HTTP verbs (`url` container)** — *partial (language shipped; app transport
-  pending)*. The network unlock the arrays were the substrate for. A `url`
+- **HTTP verbs (`url` container)** — *shipped (web transport needs a wasm
+  rebuild)*. The network unlock the arrays were the substrate for. A `url`
   container addresses a web resource: **GET** by reading it (`put url "https://…"
   into x`, or inline `url "…"` in any expression — e.g. `JSONDecode(url "…")`),
   **PUT** by writing it (`put <data> into url "…"`), **POST** via `post <data>
@@ -40,9 +40,14 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   read-back:** `the httpStatus` (the last status code) and `the
   httpResponseHeaders` (an array). Runs through a host hook (`httpRequest`,
   carrying headers + timeout, returning body/status/headers/error) so the same
-  scripts work in the app and the web export. *App transport + per-stack/per-host
-  network consent + CORS handling land next (Priority 4 #2, increment 2 app
-  side).*
+  scripts work in the app and the web export. **Transport:** the app uses
+  `URLSession` behind a **per-stack/per-host consent** prompt (Allow Once /
+  Allow Always / Don't Allow, remembered per stack; the stack you're *editing*
+  is trusted and never prompts). The web export uses the browser's `fetch`,
+  **subject to the server's CORS policy** (a page can't proxy around it) and
+  governed by the browser's own permission model rather than an in-page prompt;
+  the `fetch` bridge is wired in the player and the engine's EngineInteraction —
+  the exported runtime picks it up on the next wasm rebuild.
 
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders

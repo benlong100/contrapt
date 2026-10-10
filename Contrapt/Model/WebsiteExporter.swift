@@ -828,6 +828,38 @@ extension WebsiteExporter {
         },
       };
 
+      // --- Networking --------------------------------------------------------
+      // `url`/`post`/`delete url` run through the browser's fetch(), so they are
+      // subject to the server's CORS policy — a page can't proxy around it, and
+      // there's no in-page consent prompt (the browser's own model governs it).
+      // The engine's EngineInteraction.httpRequest bridge resolves this promise
+      // with { body, status, headers, error }.
+      window.ContraptHttp = {
+        async request(method, url, body, headers, timeout) {
+          const controller = new AbortController();
+          const timer = timeout > 0 ? setTimeout(() => controller.abort(), timeout * 1000) : null;
+          try {
+            const response = await fetch(url, {
+              method,
+              headers: headers || {},
+              body: (body === null || body === undefined || method === 'GET') ? undefined : body,
+              signal: controller.signal,
+            });
+            const text = await response.text();
+            const responseHeaders = {};
+            response.headers.forEach((value, key) => { responseHeaders[key] = value; });
+            return { body: text, status: response.status, headers: responseHeaders, error: null };
+          } catch (e) {
+            const message = (e && e.name === 'AbortError')
+              ? 'The request timed out.'
+              : 'Couldn’t reach ' + url + ' (the server may not allow cross-origin requests).';
+            return { body: '', status: 0, headers: {}, error: message };
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
+        },
+      };
+
       // boot.js drives these while the engine downloads and starts.
       window.__contraptEngineProgress = fraction => {
         if (engineActive) return;

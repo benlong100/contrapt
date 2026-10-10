@@ -301,11 +301,20 @@ Phase A — the substrate (do first):
      (array) read-back. Host hook widened to carry headers + timeout and return
      status + headers. 7 more NetworkTests (16 total); suite 638; sweep 48. See
      EXTENSIONS.md.
-   - **Increment 2 — app transport (build-gated, NEXT, Ben builds):**
-     DocumentScriptHost URLSession impl honoring the headers/timeout + **per-
-     stack/per-host consent** (Allow Once/Always/Deny, remembered per stack; the
-     stack being authored defaults allowed); WebHost `fetch` bridge that
-     **honors browser CORS** (can't proxy), surfacing status/headers back.
+   - **Increment 2 — app transport: DONE 2026-10-10 (app build + wasm rebuild
+     still Ben's to run).** DocumentScriptHost `httpRequest` via `URLSession`
+     honoring headers/timeout, behind a **per-stack/per-host consent** prompt
+     (Allow Once / Allow Always / Don't Allow via a new `ScriptDialog.network`;
+     remembered in `NetworkConsentStore` — "always" persists in UserDefaults,
+     "once"/deny for the session; the stack being authored, `isEditing`, is
+     trusted and never prompts). Outgoing-network entitlement already set
+     (`ENABLE_OUTGOING_NETWORK_CONNECTIONS`). Web side: `EngineInteraction.http
+     Request` bridge + `WebHost` delegation + the player's `window.ContraptHttp`
+     `fetch` helper (**honors CORS**, AbortController timeout); 4 NetworkWebTests
+     (suite 642). **Remaining (Ben):** build the app target; bind the wasm
+     entry's EngineInteraction.httpRequest → `window.ContraptHttp.request`
+     (mirroring how `answer`/`ask` bind to `window.ContraptDialogs`) and rebuild
+     WebEngine.zip.
 3. **Persistent + shared stack data** — a stack that remembers between runs
    (file / localStorage), then optional multi-user. Small after #1–#2.
 

@@ -613,6 +613,19 @@ struct ContentView: View {
                     scriptDialog = nil
                     dialog.complete(nil)
                 }
+            case .network:
+                Button("Allow Once") {
+                    scriptDialog = nil
+                    dialog.complete("once")
+                }
+                Button("Allow Always") {
+                    scriptDialog = nil
+                    dialog.complete("always")
+                }
+                Button("Don’t Allow", role: .cancel) {
+                    scriptDialog = nil
+                    dialog.complete("deny")
+                }
             }
         }
         .inspector(isPresented: $isInspectorPresented) {
@@ -1224,6 +1237,25 @@ struct ContentView: View {
             assetsSnapshot: { document.assets },
             onPresentPrint: { pdf, title in PrintService.present(pdf: pdf, jobTitle: title) },
             onFlash: { count in flashScreen(times: count) },
+            // The stack you're editing is trusted to reach the network; a stack
+            // you're only browsing must ask first.
+            isAuthoring: { isEditing },
+            // A network-consent prompt for an untrusted stack reaching a host it
+            // hasn't been granted — suspends the script until the user chooses.
+            onNetworkConsent: { host in
+                await withCheckedContinuation { (continuation: CheckedContinuation<(allow: Bool, always: Bool), Never>) in
+                    scriptDialog = ScriptDialog(
+                        prompt: "“\(document.stack.name)” wants to connect to \(host).",
+                        kind: .network
+                    ) { choice in
+                        switch choice {
+                        case "always": continuation.resume(returning: (true, true))
+                        case "once": continuation.resume(returning: (true, false))
+                        default: continuation.resume(returning: (false, false))
+                        }
+                    }
+                }
+            },
             // `set the rect of card window` — the big-card-small-window crop.
             cardWindowViewport: $cardWindowViewport,
             // `create menu` … — the scripted menu bar strip.
@@ -2225,6 +2257,9 @@ struct ScriptDialog: Identifiable {
     enum Kind {
         case answer(buttons: [String])
         case ask
+        /// A network-consent prompt. `complete` is called with "once",
+        /// "always", or "deny" (nil is treated as deny).
+        case network
     }
 }
 

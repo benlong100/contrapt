@@ -44,16 +44,23 @@ public struct EngineInteraction: Sendable {
     /// default cancels, since a headless/web host has no file picker.
     public var answerFile: @Sendable (_ prompt: String, _ type: String?) async -> String?
     public var wait: @Sendable (_ seconds: Double) async -> Void
+    /// `url`/`post`/`delete url` — an HTTP request from the exported page. The JS
+    /// bridge supplies a `fetch`-backed implementation (subject to the browser's
+    /// CORS policy — the page can't proxy around it); the default reports that
+    /// networking isn't available, so headless runs and tests stay offline.
+    public var httpRequest: @Sendable (_ method: String, _ url: String, _ body: String?, _ headers: [String: String], _ timeout: Double) async -> (body: String, status: Int, headers: [String: String], error: String?)
 
     public init(
         answer: @escaping @Sendable (String, [String]) async -> String = { _, buttons in buttons.first ?? "OK" },
         ask: @escaping @Sendable (String, String) async -> String? = { _, initial in initial },
         answerFile: @escaping @Sendable (String, String?) async -> String? = { _, _ in nil },
-        wait: @escaping @Sendable (Double) async -> Void = { _ in }
+        wait: @escaping @Sendable (Double) async -> Void = { _ in },
+        httpRequest: @escaping @Sendable (String, String, String?, [String: String], Double) async -> (body: String, status: Int, headers: [String: String], error: String?) = { _, _, _, _, _ in ("", 0, [:], "Networking isn't available here.") }
     ) {
         self.answer = answer
         self.ask = ask
         self.answerFile = answerFile
         self.wait = wait
+        self.httpRequest = httpRequest
     }
 }

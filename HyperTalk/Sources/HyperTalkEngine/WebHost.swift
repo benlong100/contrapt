@@ -510,6 +510,15 @@ final class WebHost: HyperTalkHost {
     func answerFile(_ prompt: String, type: String?) async -> String? { await interaction.answerFile(prompt, type) }
     func wait(seconds: Double) async { await interaction.wait(seconds) }
 
+    /// `url`/`post`/`delete url` — delegated to the JS `fetch` bridge. The
+    /// browser enforces CORS, so a stack can only reach hosts that permit it;
+    /// there's no in-page consent prompt (unlike the app, the browser's own
+    /// permission model governs the request).
+    func httpRequest(method: String, url: String, body: String?, headers: [String: String], timeout: Double)
+        async -> (body: String, status: Int, headers: [String: String], error: String?) {
+        await interaction.httpRequest(method, url, body, headers, timeout)
+    }
+
     // MARK: - Exists
 
     func exists(_ object: HyperTalkObject) -> Bool {
