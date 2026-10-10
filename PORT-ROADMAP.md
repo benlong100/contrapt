@@ -295,12 +295,17 @@ Phase A — the substrate (do first):
      `httpRequest(method:url:body:headers:)` (default: "not available"), MockHost
      canned responses. 9 NetworkTests; suite 631; sweep unchanged (48). See
      EXTENSIONS.md.
-   - **Increment 2 — app transport (build-gated, NEXT):** DocumentScriptHost
-     URLSession impl + **per-stack/per-host consent** (Allow Once/Always/Deny,
-     remembered per stack; the stack being authored defaults allowed); WebHost
-     `fetch` bridge that **honors browser CORS** (can't proxy); response
-     status/headers exposed as an array; a `headers` clause; a request timeout
-     global.
+   - **Increment 2 — language-side request/response control: DONE 2026-10-10.**
+     `set the httpHeaders to <array-or-lines>`, `set the httpTimeout to
+     <seconds>` (modal globals); `the httpStatus` and `the httpResponseHeaders`
+     (array) read-back. Host hook widened to carry headers + timeout and return
+     status + headers. 7 more NetworkTests (16 total); suite 638; sweep 48. See
+     EXTENSIONS.md.
+   - **Increment 2 — app transport (build-gated, NEXT, Ben builds):**
+     DocumentScriptHost URLSession impl honoring the headers/timeout + **per-
+     stack/per-host consent** (Allow Once/Always/Deny, remembered per stack; the
+     stack being authored defaults allowed); WebHost `fetch` bridge that
+     **honors browser CORS** (can't proxy), surfacing status/headers back.
 3. **Persistent + shared stack data** — a stack that remembers between runs
    (file / localStorage), then optional multi-user. Small after #1–#2.
 

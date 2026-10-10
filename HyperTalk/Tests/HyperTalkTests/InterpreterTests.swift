@@ -34,13 +34,13 @@ final class MockHost: HyperTalkHost {
     // MARK: HTTP (for url-container tests)
 
     /// Canned responses keyed by "METHOD URL"; falls back to `httpDefault`.
-    var httpResponses: [String: (body: String, status: Int, error: String?)] = [:]
-    var httpDefault: (body: String, status: Int, error: String?) = ("", 200, nil)
-    /// Every request made, in order, as (method, url, body).
-    var httpRequests: [(method: String, url: String, body: String?)] = []
+    var httpResponses: [String: (body: String, status: Int, headers: [String: String], error: String?)] = [:]
+    var httpDefault: (body: String, status: Int, headers: [String: String], error: String?) = ("", 200, [:], nil)
+    /// Every request made, in order, with the headers and timeout it carried.
+    var httpRequests: [(method: String, url: String, body: String?, headers: [String: String], timeout: Double)] = []
 
-    func httpRequest(method: String, url: String, body: String?, headers: [String: String]) async -> (body: String, status: Int, error: String?) {
-        httpRequests.append((method, url, body))
+    func httpRequest(method: String, url: String, body: String?, headers: [String: String], timeout: Double) async -> (body: String, status: Int, headers: [String: String], error: String?) {
+        httpRequests.append((method, url, body, headers, timeout))
         return httpResponses["\(method) \(url)"] ?? httpDefault
     }
 

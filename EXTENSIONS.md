@@ -34,10 +34,15 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   **PUT** by writing it (`put <data> into url "…"`), **POST** via `post <data>
   to url "…"` (reply lands in `it`), and **DELETE** via `delete url "…"`.
   Transport/HTTP errors go to `the result` (empty on success). Arrays sent as a
-  body are serialized to JSON automatically. Runs through a host hook
-  (`httpRequest`) so the same scripts work in the app and the web export. *App
-  transport + per-stack/per-host network consent + CORS handling land next
-  (Priority 4 #2, increment 2).*
+  body are serialized to JSON automatically. **Request control (modal globals,
+  like `itemDelimiter`):** `set the httpHeaders to <array>` (name→value) or to
+  classic `Name: value` lines; `set the httpTimeout to <seconds>`. **Response
+  read-back:** `the httpStatus` (the last status code) and `the
+  httpResponseHeaders` (an array). Runs through a host hook (`httpRequest`,
+  carrying headers + timeout, returning body/status/headers/error) so the same
+  scripts work in the app and the web export. *App transport + per-stack/per-host
+  network consent + CORS handling land next (Priority 4 #2, increment 2 app
+  side).*
 
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders

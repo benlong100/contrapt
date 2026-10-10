@@ -270,6 +270,17 @@ final class Runtime {
     /// The delimiter `item` chunks split on. HyperTalk's `itemDelimiter`
     /// property — a comma by default, changeable at run time.
     private var itemDelimiter = ","
+
+    /// Request headers applied to every `url`/`post`/`delete url` call, set via
+    /// `set the httpHeaders to <array-or-lines>` (modal, like itemDelimiter).
+    private var httpHeaders: [String: String] = [:]
+    /// Request timeout in seconds for HTTP calls; 0 means the host's default.
+    /// `set the httpTimeout to <seconds>`.
+    private var httpTimeout: Double = 0
+    /// The last HTTP response's status code and headers, read back as `the
+    /// httpStatus` / `the httpResponseHeaders` (an array). Updated on each call.
+    private var httpResponseStatus = 0
+    private var httpResponseHeaders: [String: String] = [:]
     /// The message box's current text, so `put x into message`, `put after
     /// message`, and reading `message` as a container are consistent. The host
     /// owns display; this mirrors the content for the interpreter's own reads.
@@ -1009,16 +1020,14 @@ final class Runtime {
             // in `it`; any transport error goes to `the result`.
             let data = try await evaluate(dataExpression, line: statement.line)
             let address = try await evaluate(urlExpression, line: statement.line)
-            let response = await host.httpRequest(method: "POST", url: address, body: Self.displayValue(data), headers: [:])
-            lastResult = response.error ?? ""
-            setVariable("it", to: response.body)
+            let reply = await performHTTP(method: "POST", url: address, body: Self.displayValue(data))
+            setVariable("it", to: reply)
             return .normal
 
         case .deleteURL(let urlExpression):
             // `delete url <address>` — HTTP DELETE; errors go to `the result`.
             let address = try await evaluate(urlExpression, line: statement.line)
-            let response = await host.httpRequest(method: "DELETE", url: address, body: nil, headers: [:])
-            lastResult = response.error ?? ""
+            _ = await performHTTP(method: "DELETE", url: address, body: nil)
             return .normal
 
         case .setMarked(let mark, let target):
@@ -1287,6 +1296,13 @@ final class Runtime {
             case "itemdelimiter":
                 // HyperCard uses only the first character of the delimiter.
                 itemDelimiter = value.isEmpty ? "" : String(value.first!)
+            case "httpheaders":
+                // Request headers for `url`/`post`/`delete url` — an array
+                // (name→value) or classic `Name: value` lines; empty clears.
+                httpHeaders = Self.parseHeaderSpec(value)
+            case "httptimeout":
+                // Request timeout in seconds; empty/non-number → host default.
+                httpTimeout = Double(value.trimmingCharacters(in: .whitespaces)) ?? 0
             case _ where host.setPaintSetting(property, to: value):
                 // A modeled paint global (lineSize, pattern, filled, …) —
                 // the host stored it for the next scripted stroke.
@@ -1389,9 +1405,7 @@ final class Runtime {
         case .url(let addressExpression):
             // Reading a url container is an HTTP GET; errors go to `the result`.
             let address = try await evaluate(addressExpression, line: line)
-            let response = await host.httpRequest(method: "GET", url: address, body: nil, headers: [:])
-            lastResult = response.error ?? ""
-            return response.body
+            return await performHTTP(method: "GET", url: address, body: nil)
         }
     }
 
@@ -1485,8 +1499,7 @@ final class Runtime {
         case .url(let addressExpression):
             // Writing a url container is an HTTP PUT; errors go to `the result`.
             let address = try await evaluate(addressExpression, line: line)
-            let response = await host.httpRequest(method: "PUT", url: address, body: Self.displayValue(value), headers: [:])
-            lastResult = response.error ?? ""
+            _ = await performHTTP(method: "PUT", url: address, body: Self.displayValue(value))
         }
     }
 
@@ -1494,6 +1507,46 @@ final class Runtime {
     /// associative array becomes readable JSON; plain text passes through.
     private static func displayValue(_ value: String) -> String {
         HyperTalkArray.isArray(value) ? HyperTalkArray.displayJSON(value) : value
+    }
+
+    /// Run one HTTP request through the host, carrying the modal request headers
+    /// and timeout and recording the response status/headers for read-back. Sets
+    /// `the result` to the transport error (empty on success) and returns the
+    /// response body. Every `url`/`post`/`delete url` site funnels through here.
+    private func performHTTP(method: String, url: String, body: String?) async -> String {
+        let response = await host.httpRequest(method: method, url: url, body: body, headers: httpHeaders, timeout: httpTimeout)
+        lastResult = response.error ?? ""
+        httpResponseStatus = response.status
+        httpResponseHeaders = response.headers
+        return response.body
+    }
+
+    /// Parse a `set the httpHeaders` value into name→value pairs. Accepts an
+    /// encoded associative array (`h["Accept"]`), or classic text lines of
+    /// `Name: value` (LF- or CRLF-separated); empty clears the headers.
+    private static func parseHeaderSpec(_ value: String) -> [String: String] {
+        if HyperTalkArray.isArray(value) {
+            var result: [String: String] = [:]
+            for key in HyperTalkArray.keys(of: value) {
+                result[key] = HyperTalkArray.value(forKey: key, in: value)
+            }
+            return result
+        }
+        var result: [String: String] = [:]
+        for rawLine in value.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let name = line[..<colon].trimmingCharacters(in: .whitespaces)
+            let headerValue = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            if !name.isEmpty { result[name] = headerValue }
+        }
+        return result
+    }
+
+    /// Encode a header dictionary as a HyperTalk associative array (keys sorted
+    /// for a stable read-back), for `the httpHeaders`/`the httpResponseHeaders`.
+    private static func headerArray(_ headers: [String: String]) -> String {
+        HyperTalkArray.encode(headers.keys.sorted().map { (key: $0, value: headers[$0]!) })
     }
 
     private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain, GoDestination?) {
@@ -1937,9 +1990,7 @@ final class Runtime {
             // `url "https://…"` as a value — an HTTP GET. The body is the value;
             // any transport error goes to `the result` (empty on success).
             let address = try await evaluate(addressExpression, line: line)
-            let response = await host.httpRequest(method: "GET", url: address, body: nil, headers: [:])
-            lastResult = response.error ?? ""
-            return response.body
+            return await performHTTP(method: "GET", url: address, body: nil)
 
         case .arrayKeys(let arrayExpression):
             let array = try await evaluate(arrayExpression, line: line)
@@ -1984,6 +2035,14 @@ final class Runtime {
             switch property {
             case "itemdelimiter":
                 return itemDelimiter
+            case "httpheaders":
+                return Self.headerArray(httpHeaders)
+            case "httptimeout":
+                return Value.string(from: httpTimeout)
+            case "httpstatus":
+                return String(httpResponseStatus)
+            case "httpresponseheaders":
+                return Self.headerArray(httpResponseHeaders)
             case "stacks":
                 // HyperCard: the open stacks' paths, one per line, frontmost
                 // first. Contrapt shows one stack per window: its name. Pairs
