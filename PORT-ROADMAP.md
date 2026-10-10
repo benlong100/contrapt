@@ -276,12 +276,15 @@ the shared interpreter, so it's `swift test`-verifiable (fast lane, no app
 build) AND lands in app + web at once. Phase B is app-side / build-gated.
 
 Phase A — the substrate (do first):
-1. **Structured data: associative arrays + JSON.** The foundation everything
-   leans on (network responses are JSON; modern data needs real structures).
-   Pure interpreter. Open design call to settle first: readable access syntax
-   (`response["main"]["temp"]` bracket vs. property-style `the temp of
-   response`), and how arrays coexist with HyperCard's string/chunk containers
-   without breaking item/line/word semantics. (NEXT — awaiting a design pick.)
+1. **Structured data: associative arrays + JSON.** — DONE 2026-10-09 (commits
+   1a1fe75 arrays, 04c7ca0 JSON/iteration). Bracket syntax `a["k"]` /
+   `data["a"]["b"]` (chosen over property-style); `the keys of` / `the number of
+   elements of`; `JSONDecode`/`JSONEncode`; `repeat for each key|element`;
+   `split`/`combine`. Carried as a reserved-encoding string (sentinel + JSON of
+   ordered pairs) so the "everything is text" interpreter needed no retype and
+   it lands in app + web; arrays render as readable JSON at visible sinks,
+   variables keep the encoding (round-trip). 11 ArrayTests; suite 623; sweep
+   unchanged (48). See EXTENSIONS.md.
 2. **HTTP/JSON verbs** (`put url "…" into x`, async requests, JSONDecode/
    traversal). The transformative unlock — retires most XCMD use cases. Host
    hook: URLSession (app) / fetch (web). Depends on #1 being pleasant.
