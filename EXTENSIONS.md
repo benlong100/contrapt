@@ -14,6 +14,18 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
 
 ---
 
+## Language (HyperTalk extensions)
+- **Associative arrays + bracket syntax** — *partial (arrays shipped; JSON/
+  iteration next)*. Structured data via `a["key"]`, nestable `data["a"]["b"]`,
+  on any expression and as a `put` destination (auto-creates). `the keys of
+  <array>` (return-delimited) and `the number of elements of <array>`. String
+  elements still support chunks (`item 2 of data["list"]`). Carried in the
+  "everything is text" model as a reserved-encoding string, so it works in the
+  app and the web export; arrays render as readable JSON when shown in a field
+  or the message box, while variables keep the array (round-trips). *Next:*
+  `JSONDecode`/`JSONEncode`, `repeat for each key`, `split`/`combine` — then
+  HTTP verbs (Priority 4).
+
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders
   its contents as **Markdown** — styling plus **trappable links** — in a web
