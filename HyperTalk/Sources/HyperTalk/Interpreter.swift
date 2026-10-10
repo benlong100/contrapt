@@ -987,6 +987,23 @@ final class Runtime {
             try await setContainer(container, to: hadTrailingReturn ? sorted + "\n" : sorted, line: statement.line)
             return .normal
 
+        case .splitContainer(let container, let delimiterExpression):
+            let text = try await containerValue(container, line: statement.line)
+            let delimiter = try await splitDelimiter(delimiterExpression, line: statement.line)
+            let parts = text.isEmpty ? [] : text.components(separatedBy: delimiter)
+            let pairs = parts.enumerated().map { (key: String($0.offset + 1), value: $0.element) }
+            try await setContainer(container, to: HyperTalkArray.encode(pairs), line: statement.line)
+            return .normal
+
+        case .combineContainer(let container, let delimiterExpression):
+            let text = try await containerValue(container, line: statement.line)
+            let delimiter = try await splitDelimiter(delimiterExpression, line: statement.line)
+            let joined = HyperTalkArray.keys(of: text)
+                .map { HyperTalkArray.value(forKey: $0, in: text) }
+                .joined(separator: delimiter)
+            try await setContainer(container, to: joined, line: statement.line)
+            return .normal
+
         case .setMarked(let mark, let target):
             switch target {
             case .card(let cardRef):
@@ -1703,6 +1720,14 @@ final class Runtime {
         }
     }
 
+    /// The delimiter for `split`/`combine` — the evaluated expression, or a
+    /// comma when none is given (the common single-delimiter form).
+    private func splitDelimiter(_ expression: Expr?, line: Int) async throws -> String {
+        guard let expression else { return "," }
+        let value = try await evaluate(expression, line: line)
+        return value.isEmpty ? "," : value
+    }
+
     private func executeRepeat(_ kind: RepeatKind, _ body: [Stmt], line: Int) async throws -> Flow {
         func runBody() async throws -> Flow? {
             try spendStep(line: line)
@@ -1745,6 +1770,20 @@ final class Runtime {
                 setVariable(variable, to: Value.string(from: counter))
                 if let flow = try await runBody() { return flow }
                 counter += descending ? -1 : 1
+            }
+
+        case .forEachKey(let variable, let arrayExpression):
+            let array = try await evaluate(arrayExpression, line: line)
+            for key in HyperTalkArray.keys(of: array) {
+                setVariable(variable, to: key)
+                if let flow = try await runBody() { return flow }
+            }
+
+        case .forEachElement(let variable, let arrayExpression):
+            let array = try await evaluate(arrayExpression, line: line)
+            for key in HyperTalkArray.keys(of: array) {
+                setVariable(variable, to: HyperTalkArray.value(forKey: key, in: array))
+                if let flow = try await runBody() { return flow }
             }
         }
         return .normal
@@ -2177,6 +2216,15 @@ final class Runtime {
             case "mousev": return String(location.y)
             default: return "\(location.x),\(location.y)"
             }
+        case "jsondecode":
+            // Parse a JSON string into an associative array (Contrapt
+            // structured data) — `put JSONDecode(response) into data`.
+            return HyperTalkArray.fromJSON(arguments.first ?? "")
+        case "jsonencode":
+            // Serialize an array back to JSON. A second arg starting with "p"
+            // (e.g. "pretty") indents: `JSONEncode(data, "pretty")`.
+            let pretty = arguments.count > 1 && arguments[1].lowercased().hasPrefix("p")
+            return HyperTalkArray.toJSON(arguments.first ?? "", pretty: pretty)
         case "length":
             guard arguments.count == 1 else {
                 throw ScriptError(line: line, message: "length expects one value, like length(field \"Name\").")

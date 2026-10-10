@@ -886,6 +886,19 @@ struct Parser {
         case "sort":
             advance()
             return try parseSort(line: line)
+        case "split", "combine":
+            // `split <container> by <delim>` / `combine <container> by <delim>`
+            // — text ↔ associative array (delimiter defaults to comma).
+            let splitting = word == "split"
+            advance()
+            let container = try parseContainer(line: line)
+            var delimiter: Expr?
+            if consumeWord("by") || consumeWord("with") || consumeWord("using") {
+                delimiter = try parseExpression()
+            }
+            try expectNewline()
+            return Stmt(kind: splitting ? .splitContainer(container: container, delimiter: delimiter)
+                                        : .combineContainer(container: container, delimiter: delimiter), line: line)
         case "show", "hide":
             advance()
             return try parseShowHide(visible: word == "show", line: line)
@@ -2020,6 +2033,25 @@ struct Parser {
                 throw ScriptError(line: line, message: "Expected 'to' in 'repeat with'.")
             }
             kind = .counting(variable: variable, from: from, to: try parseExpression(), descending: descending)
+        } else if peekIdentifier() == "for", peekIdentifier(1) == "each" {
+            // `repeat for each key K in <array>` / `… element E in <array>`
+            // — iterate an associative array (Contrapt structured data).
+            advance() // for
+            advance() // each
+            let overElements = consumeWord("element")
+            if !overElements, !consumeWord("key") {
+                throw ScriptError(line: line, message: "Expected 'key' or 'element' after 'repeat for each'.")
+            }
+            guard let variable = peekIdentifier() else {
+                throw ScriptError(line: line, message: "Expected a variable name after 'repeat for each \(overElements ? "element" : "key")'.")
+            }
+            advance()
+            guard consumeWord("in") else {
+                throw ScriptError(line: line, message: "Expected 'in <array>' in 'repeat for each'.")
+            }
+            let source = try parseExpression()
+            kind = overElements ? .forEachElement(variable: variable, array: source)
+                                : .forEachKey(variable: variable, array: source)
         } else {
             _ = consumeWord("for")
             let count = try parseExpression()

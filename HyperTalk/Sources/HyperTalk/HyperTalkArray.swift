@@ -81,6 +81,66 @@ enum HyperTalkArray {
         return "{\n\(body)\n\(closePad)}"
     }
 
+    // MARK: - JSON bridge
+
+    /// Parse a JSON string into the encoded-array form (`JSONDecode`). Objects
+    /// become arrays keyed by name (keys sorted for determinism — array keys
+    /// are unordered, as in LiveCode); JSON arrays become arrays keyed "1","2",
+    /// …; scalars return their text (true/false/number/string; null → empty).
+    /// Invalid JSON returns empty.
+    static func fromJSON(_ text: String) -> String {
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return "" }
+        return encodeJSONNode(object)
+    }
+
+    private static func encodeJSONNode(_ object: Any) -> String {
+        if let dictionary = object as? [String: Any] {
+            return encode(dictionary.keys.sorted().map { (key: $0, value: encodeJSONNode(dictionary[$0]!)) })
+        }
+        if let array = object as? [Any] {
+            return encode(array.enumerated().map { (key: String($0.offset + 1), value: encodeJSONNode($0.element)) })
+        }
+        if let number = object as? NSNumber {
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue ? "true" : "false" }
+            return Value.string(from: number.doubleValue)
+        }
+        if let string = object as? String { return string }
+        return "" // NSNull / unknown → empty
+    }
+
+    /// Serialize an encoded array (or a scalar) back to a JSON string
+    /// (`JSONEncode`). An array whose keys are exactly 1…n becomes a JSON array;
+    /// otherwise a JSON object. `pretty` adds indentation.
+    static func toJSON(_ text: String, pretty: Bool) -> String {
+        let node = jsonNode(from: text)
+        var options: JSONSerialization.WritingOptions = [.fragmentsAllowed]
+        if pretty { options.insert(.prettyPrinted); options.insert(.sortedKeys) }
+        guard let data = try? JSONSerialization.data(withJSONObject: node, options: options),
+              let json = String(data: data, encoding: .utf8) else { return "" }
+        return json
+    }
+
+    private static func jsonNode(from text: String) -> Any {
+        guard let pairs = decode(text) else { return scalarNode(text) }
+        // Sequential 1…n keys → a JSON array; otherwise a JSON object.
+        let sequential = pairs.enumerated().allSatisfy { $0.element.key == String($0.offset + 1) }
+        if sequential, !pairs.isEmpty {
+            return pairs.map { jsonNode(from: $0.value) }
+        }
+        var dictionary: [String: Any] = [:]
+        for pair in pairs { dictionary[pair.key] = jsonNode(from: pair.value) }
+        return dictionary
+    }
+
+    /// A scalar string as a JSON node: bool, number, or string.
+    private static func scalarNode(_ text: String) -> Any {
+        if text == "true" { return true }
+        if text == "false" { return false }
+        if let number = Double(text), Value.string(from: number) == text { return number }
+        return text
+    }
+
     /// A scalar as JSON: a canonical number unquoted, otherwise a quoted string.
     private static func jsonScalar(_ text: String) -> String {
         if let n = Double(text), Value.string(from: n) == text { return text }

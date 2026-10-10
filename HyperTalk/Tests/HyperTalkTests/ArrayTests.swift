@@ -79,6 +79,80 @@ import Testing
     #expect(host.messages.last == "{\n  \"apples\": 5\n}")
 }
 
+@Test func jsonDecodeReadsNestedValues() async throws {
+    // HyperTalk string literals have no \" escape, so assemble the JSON with
+    // the `quote` constant: {"main":{"temp":72},"ok":true}
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put "{" & quote & "main" & quote & ":{" & quote & "temp" & quote & ":72}," & quote & "ok" & quote & ":true}" into j
+      put JSONDecode(j) into data
+      put data["main"]["temp"] & "," & data["ok"] into msg
+    end p
+    """, host: host)
+    #expect(host.messages.last == "72,true")
+}
+
+@Test func jsonDecodeArrayUsesNumericKeys() async throws {
+    // JSON array ["a","b","c"] → numeric keys "1".."3".
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put "[" & quote & "a" & quote & "," & quote & "b" & quote & "," & quote & "c" & quote & "]" into j
+      put JSONDecode(j) into list
+      put list["2"] & "/" & the number of elements of list into msg
+    end p
+    """, host: host)
+    #expect(host.messages.last == "b/3")
+}
+
+@Test func jsonEncodeRoundTrips() async throws {
+    // Build an array, encode to JSON, decode back, read a value.
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put 72 into data["temp"]
+      put "sf" into data["city"]
+      put JSONDecode(JSONEncode(data))["temp"] into msg
+    end p
+    """, host: host)
+    #expect(host.messages.last == "72")
+}
+
+@Test func repeatForEachKeyAndElement() async throws {
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put 10 into scores["a"]
+      put 20 into scores["b"]
+      put 0 into total
+      repeat for each element e in scores
+        add e to total
+      end repeat
+      put "" into klist
+      repeat for each key k in scores
+        put k after klist
+      end repeat
+      put total & "/" & klist into msg
+    end p
+    """, host: host)
+    #expect(host.messages.last == "30/ab")
+}
+
+@Test func splitAndCombineRoundTrip() async throws {
+    let host = MockHost()
+    _ = try await HyperTalk.run(handler: "p", in: """
+    on p
+      put "a,b,c" into list
+      split list
+      put list["2"] into picked
+      combine list by "-"
+      put picked & "/" & list into msg
+    end p
+    """, host: host)
+    #expect(host.messages.last == "b/a-b-c")
+}
+
 @Test func unsetElementIsEmpty() async throws {
     let host = MockHost()
     _ = try await HyperTalk.run(handler: "p", in: """

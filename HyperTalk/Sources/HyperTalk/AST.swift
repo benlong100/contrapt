@@ -131,6 +131,12 @@ indirect enum StmtKind {
     /// place. A nil key sorts by the element itself; in the key expression,
     /// `each` names the element being ranked.
     case sortContainer(items: Bool, container: Container, ascending: Bool, numeric: Bool, key: Expr?)
+    /// `split <container> by <delim>` — turn the container's delimited text
+    /// into an associative array keyed 1…n; `combine <container> by <delim>`
+    /// — join an array's values back into delimited text (Contrapt structured
+    /// data). The delimiter defaults to comma.
+    case splitContainer(container: Container, delimiter: Expr?)
+    case combineContainer(container: Container, delimiter: Expr?)
     /// `mark`/`unmark` a card's `marked` property: `mark card N`, `mark all
     /// cards`, `mark cards where <condition>` (and the `unmark` forms).
     case setMarked(mark: Bool, MarkTarget)
@@ -337,6 +343,11 @@ indirect enum RepeatKind {
     case whileTrue(Expr)
     case untilTrue(Expr)
     case counting(variable: String, from: Expr, to: Expr, descending: Bool)
+    /// `repeat for each key K in <array>` / `repeat for each element E in
+    /// <array>` — iterate an associative array's keys or values (Contrapt
+    /// structured data).
+    case forEachKey(variable: String, array: Expr)
+    case forEachElement(variable: String, array: Expr)
 }
 
 indirect enum Expr {
