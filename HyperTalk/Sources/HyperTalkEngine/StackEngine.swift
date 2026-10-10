@@ -17,7 +17,7 @@ public final class StackEngine {
     private let host: WebHost
 
     /// Loads an exported stack from its `stack.json` bytes.
-    public init(stackJSON: Data, interaction: EngineInteraction = EngineInteraction()) throws {
+    public init(stackJSON: Data, interaction: EngineInteraction = EngineInteraction(), persistentData: String = "") throws {
         let stack: Stack
         do {
             stack = try JSONDecoder().decode(Stack.self, from: stackJSON)
@@ -25,7 +25,7 @@ public final class StackEngine {
             throw EngineError("Couldn't read the stack: \(error.localizedDescription)")
         }
         guard !stack.cards.isEmpty else { throw EngineError("The stack has no cards.") }
-        host = WebHost(stack: stack, interaction: interaction)
+        host = WebHost(stack: stack, interaction: interaction, persistentData: persistentData)
     }
 
     // MARK: - Read-only snapshot

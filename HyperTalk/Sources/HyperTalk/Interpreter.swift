@@ -1406,6 +1406,8 @@ final class Runtime {
             // Reading a url container is an HTTP GET; errors go to `the result`.
             let address = try await evaluate(addressExpression, line: line)
             return await performHTTP(method: "GET", url: address, body: nil)
+        case .persistent:
+            return host.persistentData()
         }
     }
 
@@ -1500,6 +1502,11 @@ final class Runtime {
             // Writing a url container is an HTTP PUT; errors go to `the result`.
             let address = try await evaluate(addressExpression, line: line)
             _ = await performHTTP(method: "PUT", url: address, body: Self.displayValue(value))
+        case .persistent:
+            // Replace the whole store. The raw (possibly array-encoded) value is
+            // kept, so it round-trips like a variable; element writes come
+            // through here after load → set key → re-encode.
+            host.setPersistentData(value)
         }
     }
 
@@ -1659,6 +1666,9 @@ final class Runtime {
         case .url:
             // A url container isn't a text-selectable field range.
             return nil
+        case .persistent:
+            // The persistent store isn't a text-selectable field range.
+            return nil
         }
     }
 
@@ -1684,7 +1694,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent: return false
         }
     }
 
@@ -1991,6 +2001,11 @@ final class Runtime {
             // any transport error goes to `the result` (empty on success).
             let address = try await evaluate(addressExpression, line: line)
             return await performHTTP(method: "GET", url: address, body: nil)
+
+        case .persistentData:
+            // The stack's persistent store as a value — `put stackData into x`,
+            // `the keys of stackData`, `repeat for each key k in stackData`.
+            return host.persistentData()
 
         case .arrayKeys(let arrayExpression):
             let array = try await evaluate(arrayExpression, line: line)

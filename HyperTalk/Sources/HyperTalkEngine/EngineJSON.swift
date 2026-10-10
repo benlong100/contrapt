@@ -17,7 +17,7 @@ import Foundation
 
 extension HostEffect: Encodable {
     private enum CodingKeys: String, CodingKey {
-        case type, cardIndex, effects, text, scriptID, start, end, name, card
+        case type, cardIndex, effects, text, scriptID, start, end, name, card, encoded
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -48,6 +48,9 @@ extension HostEffect: Encodable {
         case .clickPart(let scriptID):
             try c.encode("clickPart", forKey: .type)
             try c.encode(scriptID, forKey: .scriptID)
+        case .persist(let encoded):
+            try c.encode("persist", forKey: .type)
+            try c.encode(encoded, forKey: .encoded)
         }
     }
 }

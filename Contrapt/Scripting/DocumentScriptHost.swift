@@ -98,6 +98,36 @@ import HyperTalk
     }
 }
 
+/// The stack's persistent `stackData` store — one encoded associative-array
+/// string per stack, kept in a per-stack file under Application Support so it
+/// survives between runs. Private to each stack (keyed by the stack's id); the
+/// stack file itself is never touched. A small in-memory cache fronts the file.
+@MainActor final class StackDataStore {
+    static let shared = StackDataStore()
+    private var cache: [String: String] = [:]
+
+    private func fileURL(for id: String) -> URL? {
+        guard let base = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("Stack Data", isDirectory: true) else { return nil }
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("\(id).json")
+    }
+
+    func data(for id: String) -> String {
+        if let cached = cache[id] { return cached }
+        let loaded = (fileURL(for: id).flatMap { try? String(contentsOf: $0, encoding: .utf8) }) ?? ""
+        cache[id] = loaded
+        return loaded
+    }
+
+    func set(_ data: String, for id: String) {
+        cache[id] = data
+        guard let url = fileURL(for: id) else { return }
+        try? data.write(to: url, atomically: true, encoding: .utf8)
+    }
+}
+
 /// Where `find` last matched, so the view can box it on the card.
 struct FindHighlight: Equatable {
     var partID: UUID
@@ -1680,6 +1710,16 @@ final class DocumentScriptHost: HyperTalkHost {
 
     func setGlobalValue(_ name: String, to value: String) {
         GlobalStore.shared.values[name] = value
+    }
+
+    // MARK: - Persistent stack data (`stackData`)
+
+    func persistentData() -> String {
+        StackDataStore.shared.data(for: stack.id.uuidString)
+    }
+
+    func setPersistentData(_ encoded: String) {
+        StackDataStore.shared.set(encoded, for: stack.id.uuidString)
     }
 
     // MARK: - Clock

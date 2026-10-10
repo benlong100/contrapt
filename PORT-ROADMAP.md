@@ -317,6 +317,20 @@ Phase A — the substrate (do first):
      WebEngine.zip.
 3. **Persistent + shared stack data** — a stack that remembers between runs
    (file / localStorage), then optional multi-user. Small after #1–#2.
+   - **Language layer: DONE 2026-10-10.** `stackData` — a per-stack key-value
+     store modeled as an associative array (chosen over a url-style container or
+     a single global), so it reuses the whole array/JSON/iteration machinery:
+     `stackData["k"]`, nesting, `the keys of stackData`, `the number of elements
+     of stackData`, `repeat for each key k in stackData`, `JSONEncode(stackData)`.
+     Scoped per stack. New host hook `persistentData()` / `setPersistentData(_)`
+     (default: not persisted). 8 PersistenceTests; suite 650; sweep unchanged
+     (48). See EXTENSIONS.md.
+   - **Transport: DONE 2026-10-10 (web needs a wasm rebuild).** App: a
+     per-stack file in Application Support (`StackDataStore`, keyed by stack id).
+     Web: an in-memory store seeded from `localStorage` at load, flushed back via
+     a `persist` effect. **Remaining (Ben):** seed/flush `localStorage` in the
+     player and rebuild WebEngine.zip. *Optional multi-user / a shared cross-
+     stack area deferred (the roadmap's "then optional multi-user").*
 
 Phase B — the experience (app-side, build-gated):
 4. **Reskin / theming + responsive layout + accessibility** — leans on the

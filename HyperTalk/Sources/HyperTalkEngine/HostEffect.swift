@@ -32,6 +32,9 @@ public enum HostEffect: Equatable, Sendable {
     case goStack(name: String, card: String?)
     /// `click at h,v` resolved to a part; the page may re-dispatch its mouseUp.
     case clickPart(scriptID: Int)
+    /// A write to the stack's persistent store (`stackData`) — the page flushes
+    /// `encoded` to localStorage, keyed by the stack, so it survives reloads.
+    case persist(encoded: String)
 }
 
 /// How the host answers the interactive, suspending commands. The JS bridge

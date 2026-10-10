@@ -288,6 +288,10 @@ indirect enum Container {
     /// `url "https://…"` as a destination — `put <body> into url "…"` is an
     /// HTTP PUT. Errors land in `the result`.
     case url(Expr)
+    /// `stackData` as a destination — the stack's persistent key-value store
+    /// (an associative array backed by disk). Usually written through an
+    /// element (`stackData["k"]`); writing the base replaces the whole store.
+    case persistent
 }
 
 /// What `convert` operates on: a container (rewritten in place) or a bare
@@ -382,6 +386,9 @@ indirect enum Expr {
     /// `url "https://…"` — an HTTP GET; the response body. Errors land in
     /// `the result` (empty on success). Pairs with JSONDecode.
     case urlContent(Expr)
+    /// `stackData` — the stack's persistent key-value store as an associative
+    /// array. Read whole, or indexed (`stackData["k"]`) via `.element`.
+    case persistentData
     /// `the keys of <array>` — the element keys, one per line.
     case arrayKeys(Expr)
     /// `the number of elements of <array>` — how many top-level elements.

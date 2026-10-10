@@ -40,6 +40,9 @@ final class WebHost: HyperTalkHost {
     /// nil shows the whole card; a size crops it, as in the app.
     var cardWindowViewport: (width: Double, height: Double)?
     private var globals: [String: String] = [:]
+    /// The stack's persistent `stackData` store (one encoded array string),
+    /// seeded from localStorage at load and flushed back via a `persist` effect.
+    private var persistentStore: String
     private var backStack: [String] = []      // push/pop card
     private var history: [String] = []         // go back
     private var findState = FindState()
@@ -124,9 +127,10 @@ final class WebHost: HyperTalkHost {
         }
     }
 
-    init(stack: Stack, interaction: EngineInteraction = EngineInteraction()) {
+    init(stack: Stack, interaction: EngineInteraction = EngineInteraction(), persistentData: String = "") {
         self.stack = stack
         self.interaction = interaction
+        self.persistentStore = persistentData
     }
 
     func takeEffects() -> [HostEffect] {
@@ -477,6 +481,17 @@ final class WebHost: HyperTalkHost {
 
     func globalValue(_ name: String) -> String? { globals[name] }
     func setGlobalValue(_ name: String, to value: String) { globals[name] = value }
+
+    // MARK: - Persistent stack data (`stackData`)
+
+    /// Reads from the in-memory store (seeded from localStorage at load).
+    func persistentData() -> String { persistentStore }
+    /// Updates the store and records a `persist` effect for the page to flush
+    /// to localStorage, so the write survives a reload.
+    func setPersistentData(_ encoded: String) {
+        persistentStore = encoded
+        recorded.append(.persist(encoded: encoded))
+    }
 
     // MARK: - Clock / convert
 

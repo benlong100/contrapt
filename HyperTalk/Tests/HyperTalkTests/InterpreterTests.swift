@@ -44,6 +44,15 @@ final class MockHost: HyperTalkHost {
         return httpResponses["\(method) \(url)"] ?? httpDefault
     }
 
+    // MARK: Persistent store (for stackData tests)
+
+    /// The stack's persistent store (`stackData`). Retained on the instance so a
+    /// value written in one run is readable from the next, as a real backing
+    /// store would survive between runs.
+    var persistentStore = ""
+    func persistentData() -> String { persistentStore }
+    func setPersistentData(_ encoded: String) { persistentStore = encoded }
+
     func drag(fromX: Int, fromY: Int, toX: Int, toY: Int) {
         drags.append(Drag(fromX: fromX, fromY: fromY, toX: toX, toY: toY))
     }

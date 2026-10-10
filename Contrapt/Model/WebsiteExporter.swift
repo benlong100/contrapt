@@ -689,10 +689,22 @@ extension WebsiteExporter {
         root.style.height = vh + 'px';
       }
 
+      // Per-stack localStorage key for the persistent `stackData` store.
+      const stackDataKey = 'contrapt.stackData.' + (stack.id || stack.name || 'stack');
+      // Seed the engine's store from localStorage; the wasm entry passes
+      // window.__STACK_DATA__ to StackEngine(persistentData:).
+      try { window.__STACK_DATA__ = localStorage.getItem(stackDataKey) || ''; }
+      catch (e) { window.__STACK_DATA__ = ''; }
+
       function applyEffects(effects) {
         (effects || []).forEach(e => {
           if (e.type === 'message') note.textContent = e.text;
           else if (e.type === 'beep') beep();
+          else if (e.type === 'persist') {
+            // `stackData` was written — flush it to localStorage so it survives
+            // a reload (the stack file itself is never modified).
+            try { localStorage.setItem(stackDataKey, e.encoded || ''); } catch (err) {}
+          }
           // 'navigate' is reflected by the returned state's cardIndex below.
         });
       }

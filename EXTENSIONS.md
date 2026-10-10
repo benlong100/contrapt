@@ -49,6 +49,18 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   the `fetch` bridge is wired in the player and the engine's EngineInteraction —
   the exported runtime picks it up on the next wasm rebuild.
 
+- **Persistent stack data (`stackData`)** — *shipped (web transport needs a
+  wasm rebuild)*. A per-stack key-value store that survives between runs,
+  modeled as an associative array so it reuses all the array machinery:
+  `put 500 into stackData["highScore"]`, `put stackData["highScore"] into x`,
+  nesting `stackData["prefs"]["theme"]`, `the keys of stackData`, `the number of
+  elements of stackData`, `repeat for each key k in stackData`, `JSONEncode
+  (stackData)`. The store is private to each stack (keyed by stack identity).
+  Storage is the host's: the app writes a per-stack file in Application Support;
+  the web export uses `localStorage`. Leaves the stack file itself untouched —
+  which is what lets it work for the immutable web export. A host without
+  storage (the default) simply doesn't remember.
+
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders
   its contents as **Markdown** — styling plus **trappable links** — in a web

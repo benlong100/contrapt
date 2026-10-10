@@ -1278,6 +1278,12 @@ struct Parser {
             advance()
             return .url(try parseExpression())
         }
+        // `stackData` / `stackData["k"]` as a destination — the persistent
+        // store. Brackets apply via containerBrackets, as for a variable.
+        if peekIdentifier() == "stackdata" {
+            advance()
+            return try containerBrackets(.persistent, line: line)
+        }
         if let fieldRef = try parseFieldRefIfPresent() {
             return try containerBrackets(.field(fieldRef), line: line)
         }
@@ -3291,6 +3297,11 @@ struct Parser {
             // url of `x` then concatenates, as HyperCard groups it.
             if word == "url" {
                 return .urlContent(try parsePrimary())
+            }
+            // `stackData` — the stack's persistent store, read whole or indexed
+            // (`stackData["k"]`, via the bracket postfix in parsePrimary).
+            if word == "stackdata" {
+                return .persistentData
             }
             // `there is a[n] <object>` / `there is no <object>` /
             // `there is not a[n] <object>` — existence.

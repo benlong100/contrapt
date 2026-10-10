@@ -308,6 +308,13 @@ public protocol HyperTalkHost: AnyObject {
     /// the app implements it with URLSession (gated by per-stack/per-host
     /// consent), the web export with `fetch` (subject to the browser's CORS).
     func httpRequest(method: String, url: String, body: String?, headers: [String: String], timeout: Double) async -> (body: String, status: Int, headers: [String: String], error: String?)
+    /// The stack's persistent key-value store (`stackData`) — one encoded
+    /// associative-array string per stack, surviving between runs. The host
+    /// owns scoping (per stack) and storage (a file in the app, localStorage on
+    /// the web). Default: not persisted — an empty store that drops writes, so a
+    /// host without storage simply doesn't remember.
+    func persistentData() -> String
+    func setPersistentData(_ encoded: String)
     /// The 1-based stack card number of the first card of the background
     /// adjacent to the current card's (next when `forward`, previous otherwise,
     /// wrapping in stack order), for `go next/previous background`. Nil when the
@@ -569,6 +576,8 @@ public extension HyperTalkHost {
     func httpRequest(method: String, url: String, body: String?, headers: [String: String], timeout: Double) async -> (body: String, status: Int, headers: [String: String], error: String?) {
         ("", 0, [:], "Networking isn't available here.")
     }
+    func persistentData() -> String { "" }
+    func setPersistentData(_ encoded: String) {}
 
     /// Hosts without live mouse tracking read `the mouse` as up and the
     /// pointer as unknown.
