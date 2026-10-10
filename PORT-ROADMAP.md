@@ -387,11 +387,18 @@ Phase B — the experience (app-side, build-gated):
      Shared/tested prompt construction `HyperTalk.CoAuthor` (4 CoAuthorTests,
      suite 676); app provider `FoundationModelsCoAuthor` + `ScriptExplainButton`
      (graceful unavailable/error). Authoring-only (not in interpreter/web).
-   - **Increment 2 — Generate/revise (write-side), NEXT:** opt-in cloud provider
-     (Claude API key in Settings/Keychain); "write a handler that…" / "revise
-     this"; **validate every generated script by parsing with `HyperTalk.check`
-     before offering to apply** (the parse guard — testable). Then optionally:
-     describe-a-card, explain-an-error.
+   - **Increment 2 — Generate/revise (write-side): DONE 2026-10-10 (Ben builds
+     app).** `CoAuthorTask.writeScript` + `sanitizeGeneratedScript` in the
+     package (6 more CoAuthorTests inc. the parse-guard integration; suite 682).
+     App: `CloudCoAuthor` (Anthropic Messages API, default `claude-sonnet-4-6`),
+     key in `CoAuthorKeychain` + a `Settings` pane (`CoAuthorSettings`), and
+     `ScriptWriteButton` (describe → generate → **sanitize + `HyperTalk.check`
+     preview** → Apply replaces the whole object script). Both script editors
+     carry Explain + Write with AI. Cloud call rides the existing outgoing-net
+     entitlement.
+   - **Optional later:** describe-a-card / build parts from NL; explain-an-error
+     (feed a runtime/parse error + script); an iOS key-entry surface (Settings
+     scene is macOS-only today).
 6. **Components / reusable custom parts; finish color; audio/video/camera;
    iPad + Pencil (touch authoring).**
 

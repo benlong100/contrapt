@@ -110,6 +110,18 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   deliberately used only for explaining, since Apple documents it as unsuited to
   code generation. Authoring-only: nothing here ships in a stack or the web
   export.
+- **AI co-author — "Write with AI" (write-side)** — *shipped (app; pending a
+  build)*. In the script editor, **Write with AI** takes a plain-language
+  request ("beep twice when clicked") and the **opt-in cloud** model (your own
+  Claude API key, stored in the Keychain; set in Settings/⌘,) returns the
+  **complete updated script** for the object. Every result is **sanitized**
+  (strips stray Markdown fences) and **parse-checked with `HyperTalk.check`**
+  before you can Apply — invalid code is flagged, never silently applied; Apply
+  then replaces the script in place (one clear before/after). Behind the same
+  `CoAuthoring` protocol as Explain; cloud because the on-device model isn't
+  suited to code generation. Sends the object's script + your request to
+  Anthropic only when invoked. Still authoring-only (never in a stack/web
+  export). Default model: Claude Sonnet 4.6.
 
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders

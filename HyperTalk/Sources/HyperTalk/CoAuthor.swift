@@ -17,6 +17,11 @@ public enum CoAuthorTask: Equatable, Sendable {
     /// Explain what a script does, in plain language, for a learner.
     /// `objectLabel` names what owns the script ("card button \"Save\"").
     case explainScript(objectLabel: String, script: String)
+    /// Write or revise a script from a natural-language request. The model
+    /// returns the COMPLETE updated script for the object (generate when
+    /// `currentScript` is empty, revise otherwise). Cloud-only (the on-device
+    /// model isn't suited to code generation).
+    case writeScript(objectLabel: String, instruction: String, currentScript: String)
 }
 
 /// The two text pieces a language-model session needs: the system `instructions`
@@ -38,6 +43,8 @@ public enum CoAuthor {
         switch task {
         case .explainScript(_, let script):
             return !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .writeScript(_, let instruction, _):
+            return !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
@@ -45,7 +52,51 @@ public enum CoAuthor {
         switch task {
         case .explainScript(let objectLabel, let script):
             return CoAuthorRequest(instructions: explainInstructions, prompt: explainPrompt(objectLabel: objectLabel, script: script))
+        case .writeScript(let objectLabel, let instruction, let currentScript):
+            return CoAuthorRequest(instructions: writeInstructions, prompt: writePrompt(objectLabel: objectLabel, instruction: instruction, currentScript: currentScript))
         }
+    }
+
+    /// Orders the model to emit a complete, ready-to-paste script and nothing
+    /// else — no prose, no Markdown fences (which `sanitizeGeneratedScript`
+    /// strips defensively anyway). The output is parse-checked before it's ever
+    /// offered to the author.
+    static let writeInstructions = """
+    You are an expert HyperTalk programmer for HyperCard and Contrapt. Given an object, its current script, and a request, \
+    return the COMPLETE updated script for that object — all handlers, ready to paste into the script editor. \
+    Write idiomatic, readable HyperTalk 2.x. Preserve existing handlers unless the request asks to change them. \
+    Output ONLY the HyperTalk script: no explanations, no commentary, and no Markdown code fences.
+    """
+
+    static func writePrompt(objectLabel: String, instruction: String, currentScript: String) -> String {
+        let owner = objectLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedScript = currentScript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = trimmedScript.isEmpty ? "(empty)" : currentScript
+        return """
+        Object: \(owner.isEmpty ? "(unnamed)" : owner)
+        Current script:
+        \(current)
+
+        Request: \(instruction)
+
+        Return the complete updated script.
+        """
+    }
+
+    /// Cleans a model's script output: strips a wrapping ```/```lang fence (the
+    /// most common deviation) and trims surrounding whitespace. Conservative —
+    /// it doesn't try to strip prose, so a well-behaved model passes through
+    /// untouched and a fenced one is unwrapped.
+    public static func sanitizeGeneratedScript(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.hasPrefix("```") else { return text }
+        var lines = text.components(separatedBy: "\n")
+        lines.removeFirst()                       // opening ``` or ```hypertalk
+        if let last = lines.last, last.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+            lines.removeLast()                    // closing ```
+        }
+        text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text
     }
 
     /// Teaches the model what HyperTalk is and how to explain it — kept short

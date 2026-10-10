@@ -36,3 +36,47 @@ import Testing
     #expect(req.instructions.lowercased().contains("do not invent")
             || req.instructions.lowercased().contains("only describe"))
 }
+
+// MARK: write-side
+
+@Test func writeRequestCarriesInstructionAndCurrentScript() {
+    let req = CoAuthor.request(for: .writeScript(objectLabel: "card button \"Go\"",
+                                                 instruction: "beep twice when clicked",
+                                                 currentScript: "on mouseUp\nend mouseUp"))
+    #expect(req.prompt.contains("beep twice when clicked"))
+    #expect(req.prompt.contains("on mouseUp"))
+    #expect(req.prompt.contains("card button \"Go\""))
+    // The model must return code only — no prose, no fences.
+    #expect(req.instructions.lowercased().contains("only"))
+    #expect(req.instructions.lowercased().contains("fence") || req.instructions.lowercased().contains("markdown"))
+}
+
+@Test func writePromptMarksAnEmptyCurrentScript() {
+    let req = CoAuthor.request(for: .writeScript(objectLabel: "x", instruction: "add a mouseUp", currentScript: "   "))
+    #expect(req.prompt.contains("(empty)"))
+}
+
+@Test func writeIsActionableOnlyWithAnInstruction() {
+    #expect(CoAuthor.isActionable(.writeScript(objectLabel: "x", instruction: "  ", currentScript: "beep")) == false)
+    #expect(CoAuthor.isActionable(.writeScript(objectLabel: "x", instruction: "do a thing", currentScript: "")) == true)
+}
+
+@Test func sanitizeStripsCodeFences() {
+    let fenced = "```hypertalk\non mouseUp\n  beep\nend mouseUp\n```"
+    #expect(CoAuthor.sanitizeGeneratedScript(fenced) == "on mouseUp\n  beep\nend mouseUp")
+    let bare = "on mouseUp\n  beep\nend mouseUp"
+    #expect(CoAuthor.sanitizeGeneratedScript(bare) == bare)
+    #expect(CoAuthor.sanitizeGeneratedScript("  \n```\nbeep\n```\n ") == "beep")
+}
+
+@Test func sanitizedGeneratedScriptPassesTheParseGuard() throws {
+    // The write-side only applies output that parses; a sanitized, valid script
+    // clears HyperTalk.check (the guard the app runs before offering Apply).
+    let script = CoAuthor.sanitizeGeneratedScript("```\non mouseUp\n  answer \"hi\"\nend mouseUp\n```")
+    try HyperTalk.check(script)   // throws if invalid
+}
+
+@Test func malformedGeneratedScriptFailsTheParseGuard() {
+    let bad = CoAuthor.sanitizeGeneratedScript("on mouseUp\n  repeat\n  -- never closed\nend mouseUp")
+    #expect(throws: (any Error).self) { try HyperTalk.check(bad) }
+}

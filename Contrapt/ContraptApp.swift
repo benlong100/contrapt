@@ -761,6 +761,10 @@ struct ContraptApp: App {
         // Don't show the open panel on launch; the app delegate opens Home.
         .defaultLaunchBehavior(.suppressed)
         .commands { stackCommands }
+        // Preferences (⌘,) — the AI co-author's opt-in cloud key.
+        Settings {
+            CoAuthorSettings()
+        }
         #else
         // iOS launches straight into Home. `openDocument` is unavailable on
         // iOS and a WindowGroup can't preempt a DocumentGroup's launch, so

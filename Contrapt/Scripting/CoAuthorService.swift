@@ -59,3 +59,65 @@ struct FoundationModelsCoAuthor: CoAuthoring {
         return response.content
     }
 }
+
+enum CoAuthorError: LocalizedError {
+    case noKey
+    case service(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noKey: "Add your Claude API key in Settings to use AI script writing."
+        case .service(let message): message
+        }
+    }
+}
+
+/// The opt-in cloud provider (Claude) for the write-side — generating and
+/// revising HyperTalk, which the on-device model isn't suited to. Uses the
+/// Anthropic Messages API with the key from the Keychain. The outgoing-network
+/// entitlement (already enabled for the `url` container) covers the request.
+struct CloudCoAuthor: CoAuthoring {
+    /// Default model — fast and strong at code; changeable here.
+    static let model = "claude-sonnet-4-6"
+    static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
+
+    var unavailableReason: String? {
+        CoAuthorKeychain.load() == nil ? CoAuthorError.noKey.errorDescription : nil
+    }
+
+    func respond(to request: CoAuthorRequest) async throws -> String {
+        guard let apiKey = CoAuthorKeychain.load() else { throw CoAuthorError.noKey }
+
+        var urlRequest = URLRequest(url: Self.endpoint)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        urlRequest.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": Self.model,
+            "max_tokens": 2000,
+            "system": request.instructions,
+            "messages": [["role": "user", "content": request.prompt]],
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let http = response as? HTTPURLResponse else {
+            throw CoAuthorError.service("The AI service didn’t respond.")
+        }
+        guard http.statusCode == 200 else {
+            throw CoAuthorError.service("The AI service returned an error (\(http.statusCode))\(Self.errorDetail(data).map { ": \($0)" } ?? ".")")
+        }
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = object["content"] as? [[String: Any]],
+              let text = content.first(where: { ($0["type"] as? String) == "text" })?["text"] as? String else {
+            throw CoAuthorError.service("Couldn’t read the AI response.")
+        }
+        return text
+    }
+
+    /// Pulls `error.message` out of an Anthropic error body, if present.
+    private static func errorDetail(_ data: Data) -> String? {
+        (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
+            .flatMap { ($0["error"] as? [String: Any])?["message"] as? String }
+    }
+}
