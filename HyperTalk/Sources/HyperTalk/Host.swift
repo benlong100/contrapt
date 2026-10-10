@@ -298,6 +298,13 @@ public protocol HyperTalkHost: AnyObject {
     /// false — a stack probing an external file that Contrapt doesn't have gets
     /// the correct "not present" answer instead of an error.
     func fileExists(_ path: String) -> Bool
+    /// An HTTP request for the `url` container and the `post`/`delete url`
+    /// verbs. Returns the response body, the HTTP status, and an error message
+    /// (nil on success). Awaited by the interpreter so the script reads
+    /// synchronously while the host stays responsive. Default: unavailable —
+    /// the app implements it with URLSession (gated by per-stack/per-host
+    /// consent), the web export with `fetch` (subject to the browser's CORS).
+    func httpRequest(method: String, url: String, body: String?, headers: [String: String]) async -> (body: String, status: Int, error: String?)
     /// The 1-based stack card number of the first card of the background
     /// adjacent to the current card's (next when `forward`, previous otherwise,
     /// wrapping in stack order), for `go next/previous background`. Nil when the
@@ -556,6 +563,9 @@ public extension HyperTalkHost {
     }
     func fileExists(_ path: String) -> Bool { false }
     func adjacentBackgroundCardNumber(forward: Bool) -> Int? { nil }
+    func httpRequest(method: String, url: String, body: String?, headers: [String: String]) async -> (body: String, status: Int, error: String?) {
+        ("", 0, "Networking isn't available here.")
+    }
 
     /// Hosts without live mouse tracking read `the mouse` as up and the
     /// pointer as unknown.

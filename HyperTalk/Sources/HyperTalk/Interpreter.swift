@@ -1004,6 +1004,23 @@ final class Runtime {
             try await setContainer(container, to: joined, line: statement.line)
             return .normal
 
+        case .postToURL(let dataExpression, let urlExpression):
+            // `post <data> to url <address>` — HTTP POST. The reply body lands
+            // in `it`; any transport error goes to `the result`.
+            let data = try await evaluate(dataExpression, line: statement.line)
+            let address = try await evaluate(urlExpression, line: statement.line)
+            let response = await host.httpRequest(method: "POST", url: address, body: Self.displayValue(data), headers: [:])
+            lastResult = response.error ?? ""
+            setVariable("it", to: response.body)
+            return .normal
+
+        case .deleteURL(let urlExpression):
+            // `delete url <address>` — HTTP DELETE; errors go to `the result`.
+            let address = try await evaluate(urlExpression, line: statement.line)
+            let response = await host.httpRequest(method: "DELETE", url: address, body: nil, headers: [:])
+            lastResult = response.error ?? ""
+            return .normal
+
         case .setMarked(let mark, let target):
             switch target {
             case .card(let cardRef):
@@ -1369,6 +1386,12 @@ final class Runtime {
             let source = try await containerValue(base, line: line)
             let key = try await evaluate(keyExpression, line: line)
             return HyperTalkArray.value(forKey: key, in: source)
+        case .url(let addressExpression):
+            // Reading a url container is an HTTP GET; errors go to `the result`.
+            let address = try await evaluate(addressExpression, line: line)
+            let response = await host.httpRequest(method: "GET", url: address, body: nil, headers: [:])
+            lastResult = response.error ?? ""
+            return response.body
         }
     }
 
@@ -1459,6 +1482,11 @@ final class Runtime {
             let source = try await containerValue(base, line: line)
             let key = try await evaluate(keyExpression, line: line)
             try await setContainer(base, to: HyperTalkArray.setting(key: key, to: value, in: source), line: line)
+        case .url(let addressExpression):
+            // Writing a url container is an HTTP PUT; errors go to `the result`.
+            let address = try await evaluate(addressExpression, line: line)
+            let response = await host.httpRequest(method: "PUT", url: address, body: Self.displayValue(value), headers: [:])
+            lastResult = response.error ?? ""
         }
     }
 
@@ -1575,6 +1603,9 @@ final class Runtime {
         case .element:
             // An array element isn't text-selectable (not a field range).
             return nil
+        case .url:
+            // A url container isn't a text-selectable field range.
+            return nil
         }
     }
 
@@ -1600,7 +1631,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url: return false
         }
     }
 
@@ -1901,6 +1932,14 @@ final class Runtime {
             let base = try await evaluate(baseExpression, line: line)
             let key = try await evaluate(keyExpression, line: line)
             return HyperTalkArray.value(forKey: key, in: base)
+
+        case .urlContent(let addressExpression):
+            // `url "https://…"` as a value — an HTTP GET. The body is the value;
+            // any transport error goes to `the result` (empty on success).
+            let address = try await evaluate(addressExpression, line: line)
+            let response = await host.httpRequest(method: "GET", url: address, body: nil, headers: [:])
+            lastResult = response.error ?? ""
+            return response.body
 
         case .arrayKeys(let arrayExpression):
             let array = try await evaluate(arrayExpression, line: line)

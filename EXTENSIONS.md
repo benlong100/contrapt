@@ -26,8 +26,18 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   to comma). Carried in the "everything is text" model as a reserved-encoding
   string, so it works in the app and the web export; arrays render as readable
   JSON when shown in a field or the message box, while variables keep the array
-  (round-trips). *Next (Priority 4 #2):* HTTP verbs — the network unlock these
-  arrays were the substrate for.
+  (round-trips).
+- **HTTP verbs (`url` container)** — *partial (language shipped; app transport
+  pending)*. The network unlock the arrays were the substrate for. A `url`
+  container addresses a web resource: **GET** by reading it (`put url "https://…"
+  into x`, or inline `url "…"` in any expression — e.g. `JSONDecode(url "…")`),
+  **PUT** by writing it (`put <data> into url "…"`), **POST** via `post <data>
+  to url "…"` (reply lands in `it`), and **DELETE** via `delete url "…"`.
+  Transport/HTTP errors go to `the result` (empty on success). Arrays sent as a
+  body are serialized to JSON automatically. Runs through a host hook
+  (`httpRequest`) so the same scripts work in the app and the web export. *App
+  transport + per-stack/per-host network consent + CORS handling land next
+  (Priority 4 #2, increment 2).*
 
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders

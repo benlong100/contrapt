@@ -288,6 +288,19 @@ Phase A — the substrate (do first):
 2. **HTTP/JSON verbs** (`put url "…" into x`, async requests, JSONDecode/
    traversal). The transformative unlock — retires most XCMD use cases. Host
    hook: URLSession (app) / fetch (web). Depends on #1 being pleasant.
+   - **Increment 1 — language layer: DONE 2026-10-09.** `url` container: GET
+     (read, incl. inline `url "…"` in expressions like `JSONDecode(url "…")`),
+     PUT (`put <data> into url "…"`), `post <data> to url "…"` (reply→`it`),
+     `delete url "…"`. Errors→`the result`; array bodies auto-JSON. Host hook
+     `httpRequest(method:url:body:headers:)` (default: "not available"), MockHost
+     canned responses. 9 NetworkTests; suite 631; sweep unchanged (48). See
+     EXTENSIONS.md.
+   - **Increment 2 — app transport (build-gated, NEXT):** DocumentScriptHost
+     URLSession impl + **per-stack/per-host consent** (Allow Once/Always/Deny,
+     remembered per stack; the stack being authored defaults allowed); WebHost
+     `fetch` bridge that **honors browser CORS** (can't proxy); response
+     status/headers exposed as an array; a `headers` clause; a request timeout
+     global.
 3. **Persistent + shared stack data** — a stack that remembers between runs
    (file / localStorage), then optional multi-user. Small after #1–#2.
 

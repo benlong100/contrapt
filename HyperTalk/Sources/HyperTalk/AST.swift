@@ -137,6 +137,10 @@ indirect enum StmtKind {
     /// data). The delimiter defaults to comma.
     case splitContainer(container: Container, delimiter: Expr?)
     case combineContainer(container: Container, delimiter: Expr?)
+    /// `post <data> to url <expr>` — HTTP POST; the reply lands in `it` and
+    /// errors in `the result`. `delete url <expr>` — HTTP DELETE.
+    case postToURL(data: Expr, url: Expr)
+    case deleteURL(Expr)
     /// `mark`/`unmark` a card's `marked` property: `mark card N`, `mark all
     /// cards`, `mark cards where <condition>` (and the `unmark` forms).
     case setMarked(mark: Bool, MarkTarget)
@@ -281,6 +285,9 @@ indirect enum Container {
     /// An associative-array element as a destination: `put x into a["k"]`.
     /// The base is the array container; writes decode → set key → re-encode.
     case element(key: Expr, base: Container)
+    /// `url "https://…"` as a destination — `put <body> into url "…"` is an
+    /// HTTP PUT. Errors land in `the result`.
+    case url(Expr)
 }
 
 /// What `convert` operates on: a container (rewritten in place) or a bare
@@ -372,6 +379,9 @@ indirect enum Expr {
     /// data). The base evaluates to an encoded array; the key selects an
     /// element (empty when absent). Nests: `data["a"]["b"]`.
     case element(key: Expr, base: Expr)
+    /// `url "https://…"` — an HTTP GET; the response body. Errors land in
+    /// `the result` (empty on success). Pairs with JSONDecode.
+    case urlContent(Expr)
     /// `the keys of <array>` — the element keys, one per line.
     case arrayKeys(Expr)
     /// `the number of elements of <array>` — how many top-level elements.

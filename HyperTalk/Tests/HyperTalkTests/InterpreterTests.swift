@@ -31,6 +31,19 @@ final class MockHost: HyperTalkHost {
     /// Scripted-paint drags, in order.
     var drags: [Drag] = []
 
+    // MARK: HTTP (for url-container tests)
+
+    /// Canned responses keyed by "METHOD URL"; falls back to `httpDefault`.
+    var httpResponses: [String: (body: String, status: Int, error: String?)] = [:]
+    var httpDefault: (body: String, status: Int, error: String?) = ("", 200, nil)
+    /// Every request made, in order, as (method, url, body).
+    var httpRequests: [(method: String, url: String, body: String?)] = []
+
+    func httpRequest(method: String, url: String, body: String?, headers: [String: String]) async -> (body: String, status: Int, error: String?) {
+        httpRequests.append((method, url, body))
+        return httpResponses["\(method) \(url)"] ?? httpDefault
+    }
+
     func drag(fromX: Int, fromY: Int, toX: Int, toY: Int) {
         drags.append(Drag(fromX: fromX, fromY: fromY, toX: toX, toY: toY))
     }

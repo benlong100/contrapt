@@ -703,6 +703,12 @@ struct Parser {
             do {
                 let saved = self
                 advance()
+                if consumeWord("url") {
+                    // `delete url "https://…"` — HTTP DELETE.
+                    let url = try parseExpression()
+                    try expectNewline()
+                    return Stmt(kind: .deleteURL(url), line: line)
+                }
                 if consumeWord("menu") {
                     let name = try parsePrimary()
                     try expectNewline()
@@ -886,6 +892,17 @@ struct Parser {
         case "sort":
             advance()
             return try parseSort(line: line)
+        case "post":
+            // `post <data> to url <expr>` — HTTP POST (reply in it, errors in
+            // the result).
+            advance()
+            let data = try parseExpression()
+            guard consumeWord("to"), consumeWord("url") else {
+                throw ScriptError(line: line, message: "Expected 'to url <address>' after 'post <data>'.")
+            }
+            let url = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .postToURL(data: data, url: url), line: line)
         case "split", "combine":
             // `split <container> by <delim>` / `combine <container> by <delim>`
             // — text ↔ associative array (delimiter defaults to comma).
@@ -1254,6 +1271,12 @@ struct Parser {
             if foundOffset == 1 { advance() } // the
             advance() // foundChunk
             return .foundChunk
+        }
+        // `url "https://…"` as a destination — `put <body> into url "…"` is an
+        // HTTP PUT. Checked before the bare-variable fallback.
+        if peekIdentifier() == "url" {
+            advance()
+            return .url(try parseExpression())
         }
         if let fieldRef = try parseFieldRefIfPresent() {
             return try containerBrackets(.field(fieldRef), line: line)
@@ -3263,6 +3286,12 @@ struct Parser {
             return .chunk(kind, selector, try parsePrimary())
         case .identifier(let word):
             advance()
+            // `url "https://…"` — an HTTP GET; the response body (errors go to
+            // `the result`). The URL is a primary so `url x & "?q=1"` reads the
+            // url of `x` then concatenates, as HyperCard groups it.
+            if word == "url" {
+                return .urlContent(try parsePrimary())
+            }
             // `there is a[n] <object>` / `there is no <object>` /
             // `there is not a[n] <object>` — existence.
             if word == "there", consumeWord("is") {
