@@ -1123,7 +1123,11 @@ struct PartView: View {
         // Locked (display-only, e.g. imported) fields use tight HyperCard-like
         // margins so text fills the field as it did originally; editable
         // fields keep roomier insets for entry.
-        let margin: CGFloat = properties.wideMargins ? 18 : (properties.lockText ? 3 : 8)
+        // Horizontal inset is lock-independent, so toggling Lock Text doesn't
+        // shift the text sideways. HyperCard sets field text just a few px in;
+        // the roomier editable inset was the only thing that differed, and the
+        // tight value is what imported stacks are tuned to.
+        let margin: CGFloat = properties.wideMargins ? 18 : 3
         // SwiftUI seats a text line's glyphs nearer the top of the line box
         // than HyperCard does, so locked text reads a bit high. Nudge it down
         // by a fraction of the field height — enough for a tall multi-row grid
@@ -1134,7 +1138,14 @@ struct PartView: View {
         // Fields with an imported textHeight own their vertical grid — they
         // get HyperCard's bare ~1px frame inset.
         let lockedNudge: CGFloat = properties.textHeight != nil ? 1 : (properties.showLines ? 16 : 4)
-        let topPadding: CGFloat = properties.lockText ? min(lockedNudge, max(2, fieldHeight * 0.2)) : min(8, max(2, fieldHeight * 0.18))
+        // The vertical start is lock-independent so toggling Lock Text doesn't
+        // shift the text (both anchor to the top, as HyperCard sets field text).
+        // Only imported ruled grids / exact-textHeight fields keep their special
+        // display-only nudge — and that's a locked-only concern.
+        let usesSpecialLockedNudge = properties.lockText && (properties.textHeight != nil || properties.showLines)
+        let topPadding: CGFloat = usesSpecialLockedNudge
+            ? min(lockedNudge, max(2, fieldHeight * 0.2))
+            : min(4, max(2, fieldHeight * 0.2))
         let bottomPadding: CGFloat = properties.lockText ? 2 : min(8, max(2, fieldHeight * 0.18))
         // Pre-formatted tabular text (several short, hard-broken lines, like a
         // calendar grid) should never soft-wrap — a row that's a hair too wide
@@ -1237,7 +1248,9 @@ struct PartView: View {
                     .font(properties.format.font)
                     .underline(properties.format.isUnderline)
                     .multilineTextAlignment(properties.format.align.swiftUI)
-                    .frame(maxHeight: .infinity, alignment: .center)
+                    // Top-anchor like the locked label so toggling Lock Text
+                    // doesn't move the text (HyperCard top-sets field text).
+                    .frame(maxHeight: .infinity, alignment: lockedAlignment(properties.format.align))
             }
         }
         .padding(.horizontal, margin)
