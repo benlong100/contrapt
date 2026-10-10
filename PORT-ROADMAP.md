@@ -336,6 +336,25 @@ Phase B — the experience (app-side, build-gated):
 4. **Reskin / theming + responsive layout + accessibility** — leans on the
    import strength; modernizes old stacks and makes new ones web-respectable
    (VoiceOver, Dynamic Type, resize a fixed 512×342 card).
+   - *Scoping note (2026-10-10):* **Responsive** is largely already done —
+     app (`CardView`) and web (`fit()`) both uniformly scale-to-fit with
+     actual-size + full-screen + `paddingColor` letterbox; true per-screen
+     *reflow* (part anchors/constraints) is the deep v2 model change
+     `DECISIONS.md` defers. **Accessibility** is greenfield. Chosen first:
+     **theming**, as a small curated set (Classic/Light/Dark) selectable per
+     stack + scriptable.
+   - **Theming core: DONE 2026-10-10 (app/web presentation pending).** Shared
+     `ThemeSpec` catalog in the HyperTalk package (Classic follows the system =
+     no-op; Light/Dark fixed palette + corner radius + non-inverse hilite +
+     modern font); `theme` field on both Stack models (Codable, normalized);
+     `the theme of this stack` get/set in both hosts; surfaced in `CardState`
+     for live web re-apply. 13 theme tests; suite 666; sweep 48.
+   - **Next: presentation (build-gated):** apply the resolved palette in
+     `CardView` (via a theme Environment value; Classic unchanged) + a theme
+     picker in the inspector (app); inject CSS variables in `WebsiteExporter`
+     and apply from `CardState.theme` in the player (web). Then accessibility
+     (VoiceOver labels + Dynamic Type; semantic/ARIA HTML), then responsive
+     polish.
 5. **AI co-author** — the modern "gentle slope": describe a card, explain a
    handler, natural-language → HyperTalk, "make this resizable." Fits because
    HyperTalk is near-English.

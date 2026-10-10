@@ -2152,6 +2152,7 @@ final class DocumentScriptHost: HyperTalkHost {
             case "height": return numberText(stack.cardSize.height)
             case "fullscreen": return stack.isFullScreen ? "true" : "false"
             case "paddingcolor": return stack.paddingColor
+            case "theme": return stack.theme
             // Stack properties Contrapt doesn't model (the SET side no-ops these
             // too — see the interpreter's ignorableStackProperties): report
             // benign defaults so guards like `if the cantModify of this stack`
@@ -2202,6 +2203,7 @@ final class DocumentScriptHost: HyperTalkHost {
             case "height": stackBinding.wrappedValue.cardSize.height = try number(value, for: property)
             case "fullscreen": stackBinding.wrappedValue.isFullScreen = try boolean(value, for: property)
             case "paddingcolor": stackBinding.wrappedValue.paddingColor = value
+            case "theme": stackBinding.wrappedValue.theme = ThemeSpec.canonicalName(value)
             default: throw Self.noSuchProperty(property, of: "this stack")
             }
         }

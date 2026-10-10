@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import HyperTalk
 
 // MARK: - Geometry
 
@@ -353,6 +354,9 @@ struct Stack: Hashable {
     var isFullScreen: Bool
     var paddingColor: String
     var presentAtActualSize: Bool
+    /// The stack's built-in visual theme (`the theme of this stack`): "classic"
+    /// (default), "light", or "dark". See ThemeSpec.
+    var theme: String
 
     mutating func claimScriptID() -> Int {
         let id = max(nextID, 1)
@@ -364,7 +368,7 @@ struct Stack: Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case name, cardSize, script, backgrounds, cards, nextID
-        case isFullScreen, paddingColor, presentAtActualSize
+        case isFullScreen, paddingColor, presentAtActualSize, theme
     }
 
     init(from decoder: Decoder) throws {
@@ -378,6 +382,7 @@ extension Stack: Codable {
         isFullScreen = try c.decodeIfPresent(Bool.self, forKey: .isFullScreen) ?? false
         paddingColor = try c.decodeIfPresent(String.self, forKey: .paddingColor) ?? "black"
         presentAtActualSize = try c.decodeIfPresent(Bool.self, forKey: .presentAtActualSize) ?? false
+        theme = ThemeSpec.canonicalName(try c.decodeIfPresent(String.self, forKey: .theme))
     }
     func encode(to encoder: Encoder) throws { throw EngineError("read-only") }
 }

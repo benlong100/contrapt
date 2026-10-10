@@ -50,6 +50,7 @@ extension WebHost {
             case "height": return numberText(stack.cardSize.height)
             case "fullscreen": return stack.isFullScreen ? "true" : "false"
             case "paddingcolor": return stack.paddingColor
+            case "theme": return stack.theme
             // Unmodeled stack properties read benign defaults (the SET side
             // no-ops them too) so guards run.
             case "cantmodify", "cantabort", "cantpeek", "cantdelete", "usermodify": return "false"
@@ -95,6 +96,7 @@ extension WebHost {
             case "height": stack.cardSize.height = try number(value, for: property)
             case "fullscreen": stack.isFullScreen = try boolean(value, for: property)
             case "paddingcolor": stack.paddingColor = value
+            case "theme": stack.theme = ThemeSpec.canonicalName(value)
             default: throw Self.noSuchProperty(property, of: "this stack")
             }
         }

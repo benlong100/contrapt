@@ -137,7 +137,8 @@ public final class StackEngine {
                           items: menu.items.map { .init(name: $0.name, enabled: $0.enabled, checkMark: $0.checkMark) })
             },
             viewportWidth: host.cardWindowViewport?.width,
-            viewportHeight: host.cardWindowViewport?.height
+            viewportHeight: host.cardWindowViewport?.height,
+            theme: host.stack.theme
         )
     }
 
@@ -230,6 +231,9 @@ public struct CardState: Codable, Equatable, Sendable {
     /// The card-window viewport crop; nil shows the whole card.
     public let viewportWidth: Double?
     public let viewportHeight: Double?
+    /// The stack's current theme name (`set the theme of this stack`), so the
+    /// page can re-apply the palette live after a dispatch changes it.
+    public let theme: String
 }
 
 /// A scripted menu, serialized for the page's menu strip.

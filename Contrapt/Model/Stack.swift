@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import HyperTalk
 
 /// The stack document model: Stack → Background/Card → Part.
 ///
@@ -76,6 +77,10 @@ nonisolated struct Stack: Identifiable, Hashable {
     /// fill the window — the classic small HyperCard card on a desktop.
     /// Imported stacks set this for an "original size" import.
     var presentAtActualSize: Bool = false
+    /// The stack's built-in visual theme: "classic" (default — keeps the classic
+    /// look and follows the OS), "light" (Modern Light), or "dark". Scriptable
+    /// as `the theme of this stack`; see HyperTalk's ThemeSpec for the palette.
+    var theme: String = "classic"
     /// The names of the stack's XCMD/XFCN externals, recorded at import from
     /// the legacy stack's resource fork. Contrapt can't run the compiled
     /// code; the interpreter no-ops calls to these names (functions return
@@ -112,7 +117,7 @@ nonisolated struct Stack: Identifiable, Hashable {
 extension Stack: Codable {
     private enum CodingKeys: String, CodingKey {
         case formatVersion, id, name, cardSize, script, backgrounds, cards, nextID
-        case isFullScreen, paddingColor, presentAtActualSize, externalCommands, sounds, fonts, icons, palettes
+        case isFullScreen, paddingColor, presentAtActualSize, externalCommands, sounds, fonts, icons, palettes, theme
     }
 
     init(from decoder: Decoder) throws {
@@ -133,6 +138,7 @@ extension Stack: Codable {
         fonts = try container.decodeIfPresent([String: StackFont].self, forKey: .fonts) ?? [:]
         icons = try container.decodeIfPresent([String: String].self, forKey: .icons) ?? [:]
         palettes = try container.decodeIfPresent([String: PaletteDefinition].self, forKey: .palettes) ?? [:]
+        theme = ThemeSpec.canonicalName(try container.decodeIfPresent(String.self, forKey: .theme))
     }
 }
 

@@ -61,6 +61,21 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   which is what lets it work for the immutable web export. A host without
   storage (the default) simply doesn't remember.
 
+## Appearance
+- **Built-in themes (`the theme of this stack`)** — *partial (shared core
+  shipped; app + web presentation pending)*. A small curated set of themes a
+  stack can adopt — **Classic** (default), **Modern Light**, **Dark** —
+  selectable per stack and scriptable: `set the theme of this stack to "dark"`.
+  The catalog is one shared, unit-tested `ThemeSpec` (in the HyperTalk package)
+  that both runtimes consume — the app maps it to SwiftUI colors/fonts, the web
+  export to CSS variables. **Classic follows the system** (keeps today's look and
+  OS light/dark), so it's a true no-op; Modern Light/Dark apply a fixed palette,
+  corner rounding, a non-inverse button hilite, and a modern sans font. The
+  `theme` property round-trips in `stack.json` and surfaces in the web engine's
+  `CardState` so a runtime `set the theme` re-applies live. *Done: the spec,
+  model field, and `theme` property on both hosts. Next: applying the palette in
+  CardView + an inspector picker (app), and CSS variables (web).*
+
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders
   its contents as **Markdown** — styling plus **trappable links** — in a web
