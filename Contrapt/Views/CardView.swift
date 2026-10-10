@@ -895,6 +895,37 @@ private struct CardButtonLabel<Label: View>: View {
     }
 }
 
+/// Applies VoiceOver labeling to a part per its shared accessibility role.
+/// Editable fields and buttons keep their native behavior (just a spoken name,
+/// important for icon-only buttons); static text and images become a single
+/// labeled element so the card is navigable and readable aloud.
+private struct PartAccessibilityModifier: ViewModifier {
+    let info: AccessibilityInfo
+
+    func body(content: Content) -> some View {
+        switch info.role {
+        case .button:
+            // The Button already carries the button trait; the label gives
+            // icon-only buttons a spoken name.
+            content.accessibilityLabel(info.label)
+        case .textField:
+            // Keep the native text-field element; just name it.
+            content.accessibilityLabel(info.label)
+        case .staticText:
+            content
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isStaticText)
+                .accessibilityLabel(info.label.isEmpty ? info.value : info.label)
+                .accessibilityValue(info.label.isEmpty ? "" : info.value)
+        case .image:
+            content
+                .accessibilityElement()
+                .accessibilityAddTraits(.isImage)
+                .accessibilityLabel(info.label)
+        }
+    }
+}
+
 extension FontDesign {
     var swiftUI: Font.Design {
         switch self {
@@ -1051,6 +1082,27 @@ struct PartView: View {
     @State private var textAtOpen: String?
 
     var body: some View {
+        partContent
+            .modifier(PartAccessibilityModifier(info: accessibility))
+    }
+
+    /// How this part is announced to VoiceOver — the shared rules in
+    /// HyperTalk's `Accessibility`, applied by PartAccessibilityModifier.
+    private var accessibility: AccessibilityInfo {
+        switch part.kind {
+        case .button(let b):
+            return Accessibility.part(kind: "button", name: part.name, title: b.title)
+        case .field(let f):
+            return Accessibility.part(kind: "field", name: part.name, text: f.text,
+                                      placeholder: f.placeholder, locked: f.lockText)
+        case .label(let l):
+            return Accessibility.part(kind: "label", text: l.text)
+        case .image:
+            return Accessibility.part(kind: "image", name: part.name)
+        }
+    }
+
+    @ViewBuilder private var partContent: some View {
         switch part.kind {
         case .button(let properties):
             // The Button's action is HyperCard's mouseUp: it fires on

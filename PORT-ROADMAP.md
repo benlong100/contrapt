@@ -360,8 +360,19 @@ Phase B — the experience (app-side, build-gated):
      defaults) + an `applyTheme()` the player calls at load (`stack.theme`) and
      per update (`CardState.theme`). Package suite still 666 (presentation is
      app/web, no package change).
-   - **Next in #4:** accessibility (VoiceOver labels + Dynamic Type; semantic/
-     ARIA HTML in the export), then responsive polish.
+   - **Accessibility: VoiceOver/semantics DONE 2026-10-10 (Ben builds app; web
+     on next export).** Shared, tested rules in `Accessibility.part(...)`
+     (HyperTalk package): buttons get a spoken name + button role; locked
+     fields/labels → static text read aloud; editable fields keep native
+     text-field behavior + a name; images get name/alt. App:
+     `PartAccessibilityModifier` (SwiftUI traits/labels). Web: `role`/`tabindex`/
+     `aria-label` on buttons (+ Enter/Space activation), `role=textbox`/
+     `aria-label` on editable fields, `alt` on images. 6 AccessibilityTests;
+     suite 672. **Dynamic Type deliberately out of scope** — a fixed-pixel card
+     can't reflow text; VoiceOver + semantics are the fit.
+   - **Next in #4:** responsive polish (scale-to-fit already works; true reflow
+     stays the v2 model change DECISIONS.md defers). Optional later: Reduce
+     Motion for `visual effect` transitions; theming the rich-field web view.
 5. **AI co-author** — the modern "gentle slope": describe a card, explain a
    handler, natural-language → HyperTalk, "make this resizable." Fits because
    HyperTalk is near-English.

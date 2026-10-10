@@ -364,9 +364,14 @@ extension WebsiteExporter {
         d.style.width = p.frame.width + 'px'; d.style.height = p.frame.height + 'px';
         if (p.enabled === false) d.classList.add('disabled');
         if (p.visible === false) { d.style.display = 'none'; return d; }
+        // Accessible name — mirrors HyperTalk's Accessibility rules (part name
+        // first), so a screen reader can announce each part.
+        const accName = (p.name && p.name.trim()) || '';
         if (p.type === 'field') {
           const f = p.field || {};
           d.className += ' field ' + (f.style || 'rectangle');
+          if (accName) d.setAttribute('aria-label', accName);
+          if (f.kind !== 'rich' && !f.lockText) d.setAttribute('role', 'textbox');
           styleText(d, f.format);
           // Imported HyperCard per-field line height — how tightly-set
           // stacks (the Tour) keep their vertical layout.
@@ -393,6 +398,13 @@ extension WebsiteExporter {
         } else if (p.type === 'button') {
           const b = p.button || {};
           d.className += ' button ' + (b.style || 'roundRect') + (b.hilite ? ' hilite' : '');
+          // A div-as-button is invisible to assistive tech without this — give
+          // it the button role, a spoken name (vital for icon-only buttons),
+          // and keyboard focusability.
+          d.setAttribute('role', 'button');
+          d.setAttribute('aria-label', accName || b.title || 'Button');
+          if (p.enabled === false) d.setAttribute('aria-disabled', 'true');
+          else d.tabIndex = 0;
           styleText(d, b.format);
           if (b.iconAsset) {
             const im = document.createElement('img');
@@ -414,6 +426,7 @@ extension WebsiteExporter {
           const im = document.createElement('img');
           im.style.width = '100%'; im.style.height = '100%';
           im.style.imageRendering = 'pixelated';
+          im.alt = accName || 'Image';
           im.src = 'assets/' + (p.image && p.image.assetName);
           d.appendChild(im);
         }
@@ -799,6 +812,17 @@ extension WebsiteExporter {
             }
           }
           handle(engine.mouseUp(Number(partEl.dataset.scriptId), line, word));
+        });
+        // Keyboard activation: a focused button (role="button", tabindex=0)
+        // fires its mouseUp on Enter/Space, so the stack is operable without a
+        // mouse (editable fields keep the keys for typing).
+        root.addEventListener('keydown', ev => {
+          if (ev.key !== 'Enter' && ev.key !== ' ') return;
+          const partEl = ev.target.closest('.part.button');
+          if (!partEl || partEl.dataset.scriptId == null) return;
+          if (partEl.classList.contains('disabled')) return;
+          ev.preventDefault();
+          handle(engine.mouseUp(Number(partEl.dataset.scriptId), null, null));
         });
         handle(engine.start());
       }

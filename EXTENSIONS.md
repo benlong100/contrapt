@@ -82,6 +82,20 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   an `applyTheme()` the player calls at load (`stack.theme`) and on each update
   (`CardState.theme`). Classic touches nothing — it resolves to the exact
   pre-existing colors.
+- **Accessibility / VoiceOver** — *shipped (app pending a build; web live on the
+  next export)*. Parts are announced to assistive technology by one shared,
+  unit-tested rule set (`Accessibility.part(...)` in the HyperTalk package):
+  buttons get a spoken name (name → title → "Button", vital for icon-only
+  buttons) and the button role/trait; locked fields and labels become a single
+  static-text element whose content is read; editable fields keep their native
+  text-field behavior with a spoken name; images get a name/alt. **App:** a
+  `PartAccessibilityModifier` applies the SwiftUI traits/labels per role. **Web:**
+  the player's DOM mirrors the rules — `role="button"` + `tabindex` + `aria-label`
+  on buttons (with **Enter/Space keyboard activation**), `role="textbox"` +
+  `aria-label` on editable fields, and `alt` on images. *Deliberately not doing
+  Dynamic Type:* a card is a fixed-pixel, absolutely-positioned medium (like an
+  image), so reflowing text would overflow frames — VoiceOver/semantics are the
+  accessibility that fits.
 
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders
