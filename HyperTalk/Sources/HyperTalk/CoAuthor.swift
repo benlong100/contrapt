@@ -65,6 +65,9 @@ public enum CoAuthor {
     You are an expert HyperTalk programmer for HyperCard and Contrapt. Given an object, its current script, and a request, \
     return the COMPLETE updated script for that object — all handlers, ready to paste into the script editor. \
     Write idiomatic, readable HyperTalk 2.x. Preserve existing handlers unless the request asks to change them. \
+    Use real HyperTalk idioms: change a field's contents with `put <value> into field "Name"` (the keyword `set` is only for \
+    properties, e.g. `set the visible of button "X" to false` — never `set field "X" to ...`). Read a field with `the text \
+    of field "Name"` or just `field "Name"`. \
     Output ONLY the HyperTalk script: no explanations, no commentary, and no Markdown code fences.
     """
 

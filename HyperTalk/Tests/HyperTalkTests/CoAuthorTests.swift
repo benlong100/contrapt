@@ -51,6 +51,13 @@ import Testing
     #expect(req.instructions.lowercased().contains("fence") || req.instructions.lowercased().contains("markdown"))
 }
 
+@Test func writeInstructionsSteerTowardFieldIdioms() {
+    // Guards the common LiveCode-ism: `set field "X" to ...` isn't HyperTalk.
+    let req = CoAuthor.request(for: .writeScript(objectLabel: "x", instruction: "fill the fields", currentScript: ""))
+    let lower = req.instructions.lowercased()
+    #expect(lower.contains("put") && lower.contains("into field"))
+}
+
 @Test func writePromptMarksAnEmptyCurrentScript() {
     let req = CoAuthor.request(for: .writeScript(objectLabel: "x", instruction: "add a mouseUp", currentScript: "   "))
     #expect(req.prompt.contains("(empty)"))
