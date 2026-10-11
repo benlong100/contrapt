@@ -16,6 +16,7 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
+import HyperTalk
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -424,6 +425,13 @@ enum ResourceFork {
 
     static func pictPNG(_ pictData: Data) -> Data? {
         #if canImport(AppKit)
+        // First try Contrapt's own QuickDraw decoder — it draws the v2
+        // PackBits/DirectBits color bitmaps (HyperCard AddColor backgrounds)
+        // that modern macOS no longer renders through NSPICTImageRep.
+        if let png = decodedPICTPNG([UInt8](pictData)) { return png }
+        // Fall back to the system PICT renderer for the v1 / vector PICTs it
+        // can still draw. (It returns blank for most color bitmaps, which the
+        // bitmapHasContent guard rejects — so we don't embed an empty asset.)
         // A PICT *resource* has no 512-byte file header; NSPICTImageRep expects
         // one, so prepend zeros. Render the rep into a bitmap and emit PNG.
         var framed = Data(count: 512)
@@ -452,6 +460,22 @@ enum ResourceFork {
     }
 
     #if canImport(AppKit)
+    /// Decodes a PICT's v2 color bitmap with Contrapt's own QuickDraw decoder
+    /// (PICTBitmap) and emits PNG. Nil when the PICT has no bitmap op the
+    /// decoder understands (v1 / vector) — the caller then tries the system
+    /// renderer.
+    private static func decodedPICTPNG(_ bytes: [UInt8]) -> Data? {
+        guard let decoded = PICTBitmap.decode(bytes), decoded.width > 0, decoded.height > 0,
+              let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: decoded.width, pixelsHigh: decoded.height,
+                                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                            colorSpaceName: .deviceRGB, bytesPerRow: decoded.width * 4, bitsPerPixel: 32),
+              let plane = bitmap.bitmapData else { return nil }
+        decoded.rgba.withUnsafeBytes { src in
+            if let base = src.baseAddress { plane.update(from: base.assumingMemoryBound(to: UInt8.self), count: decoded.rgba.count) }
+        }
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
     /// Whether a rendered bitmap holds a real image — sampled on a grid. A
     /// failed classic PICT render (modern macOS doesn't draw most color-PICT
     /// ops) comes back either fully transparent or a single flat fill color;

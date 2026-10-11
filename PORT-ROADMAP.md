@@ -403,6 +403,16 @@ Phase B — the experience (app-side, build-gated):
      scene is macOS-only today).
 6. **Components / reusable custom parts; finish color; audio/video/camera;
    iPad + Pencil (touch authoring).**
+   - **Finish color — PICT backgrounds: DONE 2026-10-11 (Ben builds app).**
+     `PICTBitmap` (HyperTalk package) decodes PICT v2 PackBitsRect (indexed) and
+     DirectBitsRect (direct RGB) — the color bitmaps NSPICTImageRep won't draw
+     on modern macOS. Verified via CLI probes against real Color Tools PICTs
+     (correct dims, image-like color counts, 34–83% pixel coherence) + a
+     synthetic 2×2 unit test (suite 687). `ResourceFork.pictPNG` tries it first,
+     falls back to the system renderer for v1/vector. Still open under "finish
+     color": button/field **tints** (HCcd types 1/2), **PICT v1**, and web/engine
+     color parity. Remaining #6 threads: components/custom parts, audio/video
+     (QuickTime), iPad+Pencil authoring.
 
 Extensibility (the modern XCMD) is considered SOLVED by this plan: built-in
 HTTP/JSON (#2) covers most cases; a JS/WASM extension API that runs in BOTH app

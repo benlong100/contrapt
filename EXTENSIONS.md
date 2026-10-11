@@ -153,11 +153,15 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   the OS already provides falls back to the system face (real bold/italic).
 - **Classic font-name mapping** — *shipped*. Chicago/Geneva/Palatino/etc. map to
   the nearest modern system design, width-calibrated so old line breaks hold.
-- **AddColor / Color Tools color layer** — *partial*. `HCcd`/`HCbg` color
-  resources decode at import; `rect` fills render beneath the 1-bit art
-  (multiply compositing). PICT-backed color and button/field tints are deferred
-  (`moov`/PICT need a QuickDraw decoder — see `quicktime-movies` note and the
-  roadmap).
+- **AddColor / Color Tools color layer** — *partial (PICT backgrounds now
+  render)*. `HCcd`/`HCbg` color resources decode at import; `rect` fills render
+  beneath the 1-bit art (multiply compositing). **PICT-backed color backgrounds
+  now draw** via Contrapt's own QuickDraw decoder (`PICTBitmap`, in the HyperTalk
+  package): PICT v2 **PackBitsRect** (indexed/paletted) and **DirectBitsRect**
+  (direct RGB) — the forms modern macOS no longer renders through
+  NSPICTImageRep. v1 / vector PICTs fall back to the system renderer. Still
+  deferred: button/field **tints** (types 1/2, parsed but not drawn), and the
+  web/engine color parity. (`moov` video stays separate — see `quicktime-movies`.)
 
 ## Distribution & format
 - **Web export** — *shipped*. A stack exports to a **self-contained static
