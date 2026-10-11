@@ -68,6 +68,23 @@ import Testing
     #expect(CoAuthor.isActionable(.writeScript(objectLabel: "x", instruction: "do a thing", currentScript: "")) == true)
 }
 
+@Test func fixRequestCarriesErrorAndBrokenScript() {
+    let broken = "on mouseUp\n  set field \"x\" to 1\nend mouseUp"
+    let req = CoAuthor.request(for: .fixScript(objectLabel: "card button \"Go\"",
+                                               brokenScript: broken,
+                                               error: "Line 2: Expected 'of <object> to …'"))
+    #expect(req.prompt.contains("Line 2: Expected"))
+    #expect(req.prompt.contains("set field \"x\" to 1"))
+    #expect(req.prompt.contains("card button \"Go\""))
+    // Reuses the write instructions, so the idiom guidance applies to repairs too.
+    #expect(req.instructions.lowercased().contains("into field"))
+}
+
+@Test func fixIsActionableOnlyWithABrokenScript() {
+    #expect(CoAuthor.isActionable(.fixScript(objectLabel: "x", brokenScript: "  ", error: "e")) == false)
+    #expect(CoAuthor.isActionable(.fixScript(objectLabel: "x", brokenScript: "beep", error: "e")) == true)
+}
+
 @Test func sanitizeStripsCodeFences() {
     let fenced = "```hypertalk\non mouseUp\n  beep\nend mouseUp\n```"
     #expect(CoAuthor.sanitizeGeneratedScript(fenced) == "on mouseUp\n  beep\nend mouseUp")

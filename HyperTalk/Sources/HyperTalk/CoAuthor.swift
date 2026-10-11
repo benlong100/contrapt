@@ -22,6 +22,9 @@ public enum CoAuthorTask: Equatable, Sendable {
     /// `currentScript` is empty, revise otherwise). Cloud-only (the on-device
     /// model isn't suited to code generation).
     case writeScript(objectLabel: String, instruction: String, currentScript: String)
+    /// Repair a generated script that failed to parse: feed the broken script
+    /// and the parse error back for one corrective pass. Cloud-only.
+    case fixScript(objectLabel: String, brokenScript: String, error: String)
 }
 
 /// The two text pieces a language-model session needs: the system `instructions`
@@ -45,6 +48,8 @@ public enum CoAuthor {
             return !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .writeScript(_, let instruction, _):
             return !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .fixScript(_, let brokenScript, _):
+            return !brokenScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
@@ -54,6 +59,8 @@ public enum CoAuthor {
             return CoAuthorRequest(instructions: explainInstructions, prompt: explainPrompt(objectLabel: objectLabel, script: script))
         case .writeScript(let objectLabel, let instruction, let currentScript):
             return CoAuthorRequest(instructions: writeInstructions, prompt: writePrompt(objectLabel: objectLabel, instruction: instruction, currentScript: currentScript))
+        case .fixScript(let objectLabel, let brokenScript, let error):
+            return CoAuthorRequest(instructions: writeInstructions, prompt: fixPrompt(objectLabel: objectLabel, brokenScript: brokenScript, error: error))
         }
     }
 
@@ -83,6 +90,18 @@ public enum CoAuthor {
         Request: \(instruction)
 
         Return the complete updated script.
+        """
+    }
+
+    static func fixPrompt(objectLabel: String, brokenScript: String, error: String) -> String {
+        let owner = objectLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+        This HyperTalk script\(owner.isEmpty ? "" : " for \(owner)") failed to compile with:
+        \(error)
+
+        Fix that error and return the complete corrected script.
+
+        \(brokenScript)
         """
     }
 

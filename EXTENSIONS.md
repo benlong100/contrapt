@@ -121,7 +121,12 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   `CoAuthoring` protocol as Explain; cloud because the on-device model isn't
   suited to code generation. Sends the object's script + your request to
   Anthropic only when invoked. Still authoring-only (never in a stack/web
-  export). Default model: Claude Sonnet 4.6.
+  export). Default model: Claude Sonnet 4.6. **Auto-repair:** if the generated
+  script fails the parse check, the parse error is fed back to the model for one
+  corrective pass before the preview is shown — so a stray non-HyperTalk line
+  (e.g. `set field "x" to …`) is usually fixed automatically. The write-side
+  instructions also steer toward real idioms (`put <value> into field "Name"`;
+  `set` only for properties).
 
 ## Fields & parts
 - **Rich-text fields** — *shipped*. A field mode (`FieldKind.rich`) that renders

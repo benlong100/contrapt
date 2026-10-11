@@ -24,7 +24,7 @@ struct ScriptWriteButton: View {
 
     private enum Phase {
         case input
-        case loading
+        case loading(String)
         case preview(script: String, check: ScriptCheckResult)
         case message(String)   // unavailable, or an error
     }
@@ -46,13 +46,21 @@ struct ScriptWriteButton: View {
     private func generate() {
         let ask = instruction
         guard CoAuthor.isActionable(.writeScript(objectLabel: objectLabel, instruction: ask, currentScript: script)) else { return }
-        phase = .loading
+        phase = .loading("Writing HyperTalk…")
         Task {
             do {
                 let request = CoAuthor.request(for: .writeScript(objectLabel: objectLabel, instruction: ask, currentScript: script))
-                let raw = try await coAuthor.respond(to: request)
-                let cleaned = CoAuthor.sanitizeGeneratedScript(raw)
-                phase = .preview(script: cleaned, check: .checking(cleaned))
+                var result = CoAuthor.sanitizeGeneratedScript(try await coAuthor.respond(to: request))
+                var check = ScriptCheckResult.checking(result)
+                // Auto-repair: if the first draft doesn't parse, hand the error
+                // back to the model once and re-check before showing the preview.
+                if !check.isValid {
+                    phase = .loading("Fixing a small error…")
+                    let fix = CoAuthor.request(for: .fixScript(objectLabel: objectLabel, brokenScript: result, error: check.message))
+                    result = CoAuthor.sanitizeGeneratedScript(try await coAuthor.respond(to: fix))
+                    check = .checking(result)
+                }
+                phase = .preview(script: result, check: check)
             } catch {
                 phase = .message(error.localizedDescription)
             }
@@ -65,10 +73,10 @@ struct ScriptWriteButton: View {
                 switch phase {
                 case .input:
                     inputForm
-                case .loading:
+                case .loading(let message):
                     VStack(spacing: 12) {
                         ProgressView()
-                        Text("Writing HyperTalk…").foregroundStyle(.secondary)
+                        Text(message).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .preview(let generated, let check):

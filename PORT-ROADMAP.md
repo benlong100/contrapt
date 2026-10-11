@@ -395,7 +395,9 @@ Phase B — the experience (app-side, build-gated):
      `ScriptWriteButton` (describe → generate → **sanitize + `HyperTalk.check`
      preview** → Apply replaces the whole object script). Both script editors
      carry Explain + Write with AI. Cloud call rides the existing outgoing-net
-     entitlement.
+     entitlement. **Auto-repair (2026-10-10):** on a failed parse the error is
+     fed back via `CoAuthorTask.fixScript` for one corrective pass before the
+     preview; instructions steer toward real field idioms (`put … into field`).
    - **Optional later:** describe-a-card / build parts from NL; explain-an-error
      (feed a runtime/parse error + script); an iOS key-entry surface (Settings
      scene is macOS-only today).
