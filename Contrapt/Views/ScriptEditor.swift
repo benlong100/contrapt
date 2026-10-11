@@ -14,15 +14,32 @@ struct ScriptEditor: View {
     @Binding var script: String
     @State private var text = AttributedString()
     @State private var selection = AttributedTextSelection()
+    /// The caret's 1-based line/column, shown under the editor so a bug report
+    /// can name a spot (and matching the error lines Check Script reports).
+    @State private var caretLine = 1
+    @State private var caretColumn = 1
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            editor
+            Text("Line \(caretLine), Col \(caretColumn)")
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    private var editor: some View {
         TextEditor(text: $text, selection: $selection)
             .font(.system(.callout, design: .monospaced))
             .autocorrectionDisabled()
             .codeEntryTraits()
             .frame(minHeight: 220)
+            .onChange(of: selection) { _, _ in recomputeCaret() }
             .onAppear {
                 text = highlighted(AttributedString(script))
+                recomputeCaret()
             }
             .onChange(of: script) { _, newScript in
                 // External change (part switched, undo): rebuild wholesale.
@@ -80,6 +97,31 @@ struct ScriptEditor: View {
 
     private func newlineCount(of string: String) -> Int {
         string.lazy.filter { $0 == "\n" }.count
+    }
+
+    /// Updates the line/column readout from the caret (or a selection's start).
+    private func recomputeCaret() {
+        let characters = text.characters
+        let caret: AttributedString.Index
+        switch selection.indices(in: text) {
+        case .insertionPoint(let index):
+            caret = index
+        case .ranges(let ranges):
+            guard let first = ranges.ranges.first else { return }
+            caret = first.lowerBound
+        @unknown default:
+            return
+        }
+        let offset = characters.distance(from: text.startIndex, to: caret)
+        let plain = String(characters)
+        let clamped = max(0, min(offset, plain.count))
+        let before = plain.prefix(clamped)
+        caretLine = 1 + before.lazy.filter { $0 == "\n" }.count
+        if let lastNewline = before.lastIndex(of: "\n") {
+            caretColumn = 1 + before.distance(from: before.index(after: lastNewline), to: before.endIndex)
+        } else {
+            caretColumn = 1 + clamped
+        }
     }
 
     /// Where the caret sits after an edit, derived from the old and new
