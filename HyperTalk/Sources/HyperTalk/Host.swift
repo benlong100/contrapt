@@ -409,6 +409,19 @@ public protocol HyperTalkHost: AnyObject {
     /// current card. `mark all cards` and `mark cards where …` call this once
     /// per card (by number). Throws if the card doesn't exist.
     func setMarked(_ marked: Bool, card: GoDestination?) throws
+    /// `delete [the] <card>` — remove a card (nil = the current one). The host
+    /// guards the last remaining card and cantDelete. Default: throws (a host
+    /// without a card model can't delete).
+    func deleteCard(_ card: GoDestination?) throws
+    /// `delete button 1` / `delete card field "x"` / `delete image 2` — remove
+    /// a part. The object is always a `.part`. Default: throws.
+    func deletePart(_ object: HyperTalkObject) throws
+    /// `delete background <ref>` — remove a background no card uses (throws
+    /// when cards still reference it). Default: throws.
+    func deleteBackground(_ reference: HyperTalkObject.Reference) throws
+    /// `delete [the] [card|bkgnd] picture [of <card>]` — remove the paint
+    /// layer. Default: throws.
+    func clearPicture(background: Bool, card: GoDestination?) throws
     /// `start using stack <name>` / `stop using stack <name>` — add/remove an
     /// auxiliary stack from the message hierarchy (session state the host owns,
     /// like globals). The host resolves the named stack's script.
@@ -578,6 +591,18 @@ public extension HyperTalkHost {
     }
     func persistentData() -> String { "" }
     func setPersistentData(_ encoded: String) {}
+    func deleteCard(_ card: GoDestination?) throws {
+        throw HostError("Cards can't be deleted here.")
+    }
+    func deletePart(_ object: HyperTalkObject) throws {
+        throw HostError("Parts can't be deleted here.")
+    }
+    func deleteBackground(_ reference: HyperTalkObject.Reference) throws {
+        throw HostError("Backgrounds can't be deleted here.")
+    }
+    func clearPicture(background: Bool, card: GoDestination?) throws {
+        throw HostError("Pictures can't be deleted here.")
+    }
 
     /// Hosts without live mouse tracking read `the mouse` as up and the
     /// pointer as unknown.

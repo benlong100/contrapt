@@ -305,6 +305,54 @@ final class WebHost: HyperTalkHost {
         stack.cards[index].isMarked = marked
     }
 
+    /// `delete button 1` / `delete card field "x"` / `delete image 2`.
+    func deletePart(_ object: HyperTalkObject) throws {
+        guard case .part(let kind, let domain, let reference, let onCard) = object else {
+            throw HostError("That isn't a deletable object.")
+        }
+        switch try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard) {
+        case .card(let cardIndex, let partIndex):
+            stack.cards[cardIndex].parts.remove(at: partIndex)
+        case .background(let backgroundIndex, let partIndex):
+            stack.backgrounds[backgroundIndex].parts.remove(at: partIndex)
+        }
+    }
+
+    /// `delete background <ref>` — only a background no card uses can go.
+    func deleteBackground(_ reference: HyperTalkObject.Reference) throws {
+        guard let id = backgroundID(for: reference) else { throw HostError("There is no such background.") }
+        guard !stack.cards.contains(where: { $0.backgroundID == id }) else {
+            throw HostError("That background still has cards — delete them first.")
+        }
+        stack.backgrounds.removeAll { $0.id == id }
+    }
+
+    /// `delete [the] [card|bkgnd] picture` — the engine model carries no paint
+    /// asset (the page reads paint from stack.json), so hiding the layer is
+    /// its observable effect; the app host truly removes the asset.
+    func clearPicture(background: Bool, card: GoDestination?) throws {
+        let ci = try card.map { try resolveCardIndex($0) } ?? cardIndex
+        if background {
+            let bgID = stack.cards[ci].backgroundID
+            guard let bi = stack.backgrounds.firstIndex(where: { $0.id == bgID }) else { return }
+            stack.backgrounds[bi].showPicture = false
+        } else {
+            stack.cards[ci].showPicture = false
+        }
+    }
+
+    /// `delete [the] <card>` — remove a card (nil = the current one), guarding
+    /// the last remaining card and cantDelete, then land on the nearest card.
+    func deleteCard(_ card: GoDestination?) throws {
+        let index = try card.map { try resolveCardIndex($0) } ?? cardIndex
+        guard stack.cards.count > 1 else { throw HostError("The last remaining card can't be deleted.") }
+        guard !stack.cards[index].cantDelete else { throw HostError("This card can't be deleted.") }
+        stack.cards.remove(at: index)
+        let next = min(currentIndex > index ? currentIndex - 1 : currentIndex, stack.cards.count - 1)
+        currentIndex = max(0, next)
+        recorded.append(.navigate(cardIndex: currentIndex, effects: []))
+    }
+
     func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }

@@ -725,11 +725,67 @@ struct Parser {
                     self = saved
                     advance()
                 }
+                // `delete [the] [card|bkgnd] picture [of <card>]` — remove the
+                // paint layer (HyperCard: select all + clear picture).
+                let beforePicture = self
+                if let picture = try? parseDeletablePicture(),
+                   current.kind == .newline || current.kind == .endOfScript {
+                    try expectNewline()
+                    return Stmt(kind: .deletePicture(background: picture.background, card: picture.card), line: line)
+                }
+                self = beforePicture
+                // `delete background 2` / `delete bkgnd "X"` / `bkgnd id 7` —
+                // remove an empty background. (`delete background button 1`
+                // is a part form, left for the object path below.)
+                let beforeBackground = self
+                _ = consumeWord("the")
+                if consumeBackgroundWord() {
+                    // `delete background button 1` / `bg picture` are other
+                    // forms — only a bare reference (number/name/id) is a
+                    // background deletion.
+                    let nextWord = peekIdentifier()
+                    let isOtherForm = nextWord.map {
+                        Self.partKindSynonyms.keys.contains($0) || $0 == "picture" || $0 == "pict"
+                    } ?? false
+                    if !isOtherForm {
+                        let isID = consumeWord("id")
+                        if let reference = try? parsePrimary(),
+                           current.kind == .newline || current.kind == .endOfScript {
+                            try expectNewline()
+                            return Stmt(kind: .deleteBackground(reference: reference, isID: isID), line: line)
+                        }
+                    }
+                }
+                self = beforeBackground
+                // `delete [the] last card` / `delete this card` / `delete card
+                // 3` / `delete card id 7` / bare `delete card` (the current
+                // one) — real card deletion, as in HyperCard 2.2+.
+                let beforeCard = self
+                if let cardRef = try? parseDeletableCardRef(),
+                   current.kind == .newline || current.kind == .endOfScript {
+                    try expectNewline()
+                    return Stmt(kind: .deleteCard(cardRef), line: line)
+                }
+                self = beforeCard
                 if let container = try? parseContainer(line: line),
                    isDeletableContainer(container),
                    current.kind == .newline || current.kind == .endOfScript {
                     try expectNewline()
                     return Stmt(kind: .deleteChunk(container), line: line)
+                }
+                self = saved
+                advance()
+                // `delete button 1` / `delete card field i` / `delete image 2`
+                // — remove a part (HyperCard 2.2's delete button/field).
+                if let object = try? parseObjectExpr(),
+                   current.kind == .newline || current.kind == .endOfScript {
+                    switch object {
+                    case .part, .partByID, .partByOrdinal:
+                        try expectNewline()
+                        return Stmt(kind: .deletePart(object), line: line)
+                    default:
+                        break
+                    }
                 }
                 self = saved
             }
@@ -2298,6 +2354,84 @@ struct Parser {
     /// An optional `of <card>` after a field reference — `field "X" of prev
     /// card`, `field 1 of card "About"`. Returns nil (consuming nothing) when
     /// no card owner follows.
+    /// `[the] [card|bkgnd] picture [of <card> | of this background]` for
+    /// `delete` — which paint layer, and whose card. Nil restores the parse
+    /// position (e.g. `delete picture 2` is an image-part form, not this).
+    private mutating func parseDeletablePicture() throws -> (background: Bool, card: CardRef?)? {
+        let saved = index
+        func fail() -> (background: Bool, card: CardRef?)? { index = saved; return nil }
+        _ = consumeWord("the")
+        var isBackground = false
+        if consumeBackgroundWord() { isBackground = true }
+        else { _ = consumeCardWord() }
+        guard consumeWord("picture") || consumeWord("pict") else { return fail() }
+        // `of this background` names the layer; `of <card>` scopes the card.
+        if peekIdentifier() == "of" || peekIdentifier() == "in" {
+            if let w1 = peekIdentifier(1), w1 == "this",
+               let w2 = peekIdentifier(2), Self.backgroundWords.contains(w2) {
+                advance(); advance(); advance()
+                isBackground = true
+            } else if let card = try parseFieldCardRef() {
+                return (isBackground, card)
+            }
+        }
+        return (isBackground, nil)
+    }
+
+    /// A bare card reference for `delete` (no leading of/in): `[the] last
+    /// card`, `this card`, `card 3`, `card id 7`, `card "Name"`, bare `card`
+    /// (the current one), `marked card N`, with an optional `of bkgnd …`
+    /// scope. Nil (restoring the parse position) when the words aren't a card
+    /// — so `delete card field 1` still falls through to the other forms.
+    private mutating func parseDeletableCardRef() throws -> CardRef? {
+        let saved = index
+        func fail() -> CardRef? { index = saved; return nil }
+        _ = consumeWord("the")
+        let ref: CardRef
+        if consumeWord("first") {
+            guard consumeCardWord() else { return fail() }
+            ref = .first
+        } else if consumeWord("last") {
+            guard consumeCardWord() else { return fail() }
+            ref = .last
+        } else if consumeWord("this") {
+            guard consumeCardWord() else { return fail() }
+            ref = .current
+        } else if consumeWord("next") {
+            guard consumeCardWord() else { return fail() }
+            ref = .next
+        } else if consumeWord("previous") || consumeWord("prev") {
+            guard consumeCardWord() else { return fail() }
+            ref = .previous
+        } else if consumeWord("marked") {
+            guard consumeCardWord() else { return fail() }
+            ref = .markedCard(try parsePrimary())
+        } else if consumeCardWord() {
+            // `delete card field …` / `delete card button …` is a part form,
+            // not a card — leave it for the paths below.
+            if let w = peekIdentifier(), ["field", "fld", "button", "btn", "part"].contains(w) {
+                return fail()
+            }
+            if current.kind == .newline || current.kind == .endOfScript {
+                ref = .current            // bare `delete card`
+            } else if consumeWord("id") {
+                ref = .idExpression(try parsePrimary())
+            } else {
+                ref = .expression(try parsePrimary())
+            }
+        } else {
+            return fail()
+        }
+        // `delete last card of bkgnd "X"` — scope to that background.
+        if let qualifier = try parseOfBackground() {
+            switch qualifier {
+            case .current: return .inBackground(ref, background: nil)
+            case .named(let background): return .inBackground(ref, background: background)
+            }
+        }
+        return ref
+    }
+
     private mutating func parseFieldCardRef() throws -> CardRef? {
         // `of card N` or, as HyperCard also allows, `in card N`
         // (`put card field "chain" in card 81 into beer`). `into` is a distinct
@@ -2824,7 +2958,8 @@ struct Parser {
             // Ambiguous with the `cards` plural; only treat as a qualifier if
             // a part-kind plural follows (`card buttons`, `card parts`).
             if let next = peekIdentifier(1), next == "buttons" || next == "btns"
-                || next == "fields" || next == "flds" || next == "parts" || next == "part" {
+                || next == "fields" || next == "flds" || next == "parts" || next == "part"
+                || next == "images" {
                 domain = .card; qualified = true; advance()
             }
         case "background", "bkgnd", "bg":
@@ -2844,6 +2979,9 @@ struct Parser {
         }
         if noun == "fields" || noun == "flds" {
             advance(); return .parts(kind: "field", domain: domain)
+        }
+        if noun == "images" {
+            advance(); return .parts(kind: "image", domain: domain)
         }
         // `[card|background] parts` — buttons and fields together (HyperCard's
         // `the number of card parts`). The pseudo-kind "part" counts both.

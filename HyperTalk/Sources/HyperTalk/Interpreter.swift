@@ -821,6 +821,33 @@ final class Runtime {
             }
             return .normal
 
+        case .deleteCard(let cardRef):
+            // `delete [the] last card` etc. — resolve to a destination (nil =
+            // the current card) and let the host remove it. The host guards
+            // the last-remaining card and cantDelete.
+            let destination = try await resolveCardRef(cardRef, line: statement.line)
+            try hostCall(line: statement.line) { try host.deleteCard(destination) }
+            return .normal
+
+        case .deletePart(let objectExpression):
+            // `delete button 1` / `delete card field i` / `delete image 2`.
+            let object = try await resolveObject(objectExpression, line: statement.line)
+            try hostCall(line: statement.line) { try host.deletePart(object) }
+            return .normal
+
+        case .deleteBackground(let referenceExpression, let isID):
+            // `delete background 2` — only an empty background can go.
+            let value = try await evaluate(referenceExpression, line: statement.line)
+            let ref: HyperTalkObject.Reference = isID ? .id(value) : reference(from: value)
+            try hostCall(line: statement.line) { try host.deleteBackground(ref) }
+            return .normal
+
+        case .deletePicture(let background, let cardRef):
+            // `delete [the] card picture` — remove the paint layer.
+            let destination = try await resolveCardRef(cardRef, line: statement.line)
+            try hostCall(line: statement.line) { try host.clearPicture(background: background, card: destination) }
+            return .normal
+
         case .deleteChunk(let container):
             // delete <chunk> of <container> — remove chunk AND delimiter.
             // `delete the foundChunk`/`the selection` resolve to their

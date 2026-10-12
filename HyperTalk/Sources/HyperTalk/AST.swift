@@ -103,6 +103,18 @@ indirect enum StmtKind {
     /// `delete <chunk> of <container>` — removes the chunk and its
     /// delimiter (delete item 2 of "a,b,c" is "a,c"). Always a `.chunk`.
     case deleteChunk(Container)
+    /// `delete [the] last card` / `delete card 3` / `delete this card` — real
+    /// card deletion (HyperCard 2.2's delete card).
+    case deleteCard(CardRef)
+    /// `delete button 1` / `delete card field "x"` / `delete image 2` — remove
+    /// a part (HyperCard 2.2's delete button/field, extended to image parts).
+    case deletePart(ObjectExpr)
+    /// `delete background 2` / `delete bkgnd "X"` / `delete bkgnd id 7` —
+    /// remove an empty background (one no card uses).
+    case deleteBackground(reference: Expr, isID: Bool)
+    /// `delete [the] [card|bkgnd] picture [of <card>]` — remove the paint
+    /// layer (HyperCard: select all + clear picture).
+    case deletePicture(background: Bool, card: CardRef?)
     /// Custom menus: `create menu X`, `delete menu X`, `delete menuItem I of
     /// menu X`, `put <items> into menu X [with menuMessages <msgs>]`,
     /// `enable/disable menu X / menuItem I of menu X`, `reset menubar`.
