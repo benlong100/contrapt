@@ -148,16 +148,22 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   default). Hilite stays a true inverse-video flip, custom colors or not. The
   colors round-trip in `stack.json` and render statically in the web export (a
   live web `set` needs the wasm rebuild + player state pass).
-- **Field colors (`textColor` / `borderColor`)** — *shipped (app pending a
-  build)*. A field can color its whole text and its border (for the styles
-  that draw one: rectangle, shadow, scrolling) — inspector pickers with Reset,
-  or by script in both runtimes: `set the textColor of field "Notes" to
-  "navy"`, `set the borderColor of cd fld 1 to "#333333"` (`edgeColor`
-  synonym; `empty` restores the themed default). Applies across editable,
-  locked, and imported exact-lineheight fields; outline-styled runs keep their
+- **Field colors (`textColor` / `borderColor`)** — *shipped*. A field can
+  color its whole text and its border (for the styles that draw one:
+  rectangle, shadow, scrolling) — inspector pickers with Reset, or by script
+  in both runtimes: `set the textColor of field "Notes" to "navy"`,
+  `set the borderColor of cd fld 1 to "#333333"` (`edgeColor` synonym; `empty`
+  restores the themed default). Applies across editable, locked, imported
+  exact-lineheight, **and rich** fields (the rich renderer colors the Markdown
+  body; links keep the card's highlightColor); outline-styled runs keep their
   classic white-on-black look. Round-trips in `stack.json`; renders statically
   in the web export. (Per-run text color would be a StyleRun extension —
   this is whole-field.)
+- **Rich-field leading via `textHeight`** — *shipped*. HyperCard's per-field
+  `textHeight` (line height in points, already imported and scriptable) now
+  also drives a rich field's leading — CSS line-height in the renderer, a
+  "Line Height" control in the rich inspector (0 = automatic). `set the
+  textHeight of field "X" to 20` re-renders live.
 - **SF Symbol button icons** — *shipped*. New buttons can use a built-in SF
   Symbol as their icon (the authoring library), distinct from imported 1-bit
   ICON/cicn art.
