@@ -1208,6 +1208,9 @@ struct PartView: View {
                     size: properties.format.size,
                     style: properties.style,
                     linkColorHex: linkColorHex,
+                    textColorHex: properties.textColor,
+                    borderColorHex: properties.borderColor,
+                    lineHeight: properties.textHeight,
                     onFollowLink: onFollowLink
                 )
             } else {

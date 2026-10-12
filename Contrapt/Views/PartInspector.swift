@@ -252,6 +252,28 @@ struct PartInspector: View {
                 }
                 Section {
                     fontAndSizeRow
+                    // Leading — the field's textHeight, in points (0 = auto).
+                    // Scriptable as `the textHeight of field`.
+                    HStack(spacing: 8) {
+                        Text("Line Height")
+                        TextField("Auto", value: fieldTextHeightBinding, format: .number)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 70)
+                        Text("pt — 0 is automatic").foregroundStyle(.secondary).font(.callout)
+                    }
+                    HStack(spacing: 8) {
+                        ColorPicker("Text Color", selection: fieldTextColorBinding, supportsOpacity: false)
+                        Button("Reset") { setField { $0.textColor = nil } }
+                            .buttonStyle(.borderless)
+                            .disabled(properties.textColor == nil)
+                    }
+                    HStack(spacing: 8) {
+                        ColorPicker("Edge Color", selection: fieldBorderBinding, supportsOpacity: false)
+                        Button("Reset") { setField { $0.borderColor = nil } }
+                            .buttonStyle(.borderless)
+                            .disabled(properties.borderColor == nil)
+                    }
                 }
             } else {
                 Section("Field") {
@@ -426,6 +448,18 @@ struct PartInspector: View {
         guard case .field(var properties) = part.kind else { return }
         mutate(&properties)
         part.kind = .field(properties)
+    }
+
+    /// The field's line height (leading) in points; 0 reads/writes as "auto"
+    /// (nil — the font's natural height). Scriptable as `the textHeight`.
+    private var fieldTextHeightBinding: Binding<Double> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return 0 }
+                return properties.textHeight ?? 0
+            },
+            set: { value in setField { $0.textHeight = value > 0 ? value : nil } }
+        )
     }
 
     /// The field's whole-text color; unset shows the label color and writes

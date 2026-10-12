@@ -18,13 +18,17 @@ enum MarkdownHTML {
     /// field's base font design and size. Headings and other elements scale
     /// relative to that base.
     /// `linkColor` is a CSS color (a #RRGGBB hex or a name) for `<a>` links —
-    /// the card's highlight; nil keeps the system link blue.
-    static func document(from markdown: String, fontDesign: FontDesign = .standard, size: Double = 17, linkColor: String? = nil) -> String {
+    /// the card's highlight; nil keeps the system link blue. `textColor` is
+    /// the field's whole-text color (the textColor property); nil follows the
+    /// system light/dark text.
+    /// `lineHeight` is the field's textHeight in points (leading); nil keeps
+    /// the default 1.45 relative line height.
+    static func document(from markdown: String, fontDesign: FontDesign = .standard, size: Double = 17, linkColor: String? = nil, textColor: String? = nil, lineHeight: Double? = nil) -> String {
         let body = renderBlocks(markdown)
         return """
         <!DOCTYPE html>
         <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>\(css(fontFamily: fontFamily(fontDesign), size: size, linkColor: linkColor))</style></head>
+        <style>\(css(fontFamily: fontFamily(fontDesign), size: size, linkColor: linkColor, textColor: textColor, lineHeight: lineHeight))</style></head>
         <body>\(body)</body></html>
         """
     }
@@ -223,14 +227,18 @@ enum MarkdownHTML {
             .replacingOccurrences(of: ">", with: "&gt;")
     }
 
-    private static func css(fontFamily: String, size: Double, linkColor: String? = nil) -> String {
+    private static func css(fontFamily: String, size: Double, linkColor: String? = nil, textColor: String? = nil, lineHeight: Double? = nil) -> String {
         let link = linkColor ?? "-apple-system-blue"
+        // A custom text color overrides the system light/dark body color.
+        let bodyColor = textColor.map { "color: \($0);" } ?? ""
+        // Leading: the field's textHeight in points, or the relative default.
+        let leading = lineHeight.map { "\(Int($0.rounded()))px" } ?? "1.45"
         return """
     :root { color-scheme: light dark; }
     body {
         font-family: \(fontFamily);
         font-size: \(Int(size.rounded()))px;
-        margin: 12px; line-height: 1.45;
+        margin: 12px; line-height: \(leading); \(bodyColor)
         -webkit-text-size-adjust: 100%;
     }
     h1, h2, h3, h4, h5, h6 { line-height: 1.2; margin: 0.6em 0 0.3em; }

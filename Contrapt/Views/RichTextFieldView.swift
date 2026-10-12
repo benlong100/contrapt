@@ -27,13 +27,20 @@ struct RichFieldView: View {
     var style: FieldStyle = .rectangle
     /// The card's highlight as a CSS link color, or nil for the default.
     var linkColorHex: String? = nil
+    /// The field's textColor/borderColor properties (a color name or #RRGGBB);
+    /// nil follows the system/theme, like a plain field.
+    var textColorHex: String? = nil
+    var borderColorHex: String? = nil
+    /// The field's textHeight (leading, points); nil keeps the default.
+    var lineHeight: Double? = nil
     var onFollowLink: (FieldLink) -> Void
 
     var body: some View {
         // The web view is transparent; the chrome supplies the fill/border so
         // a transparent field lets the card show through the rendered text.
-        RichTextWebView(markdown: markdown, fontDesign: fontDesign, size: size, linkColorHex: linkColorHex, onFollowLink: onFollowLink)
-            .fieldChrome(style: style)
+        RichTextWebView(markdown: markdown, fontDesign: fontDesign, size: size, linkColorHex: linkColorHex,
+                        textColorHex: textColorHex, lineHeight: lineHeight, onFollowLink: onFollowLink)
+            .fieldChrome(style: style, borderColor: borderColorHex.map(Color.init(stackColor:)))
     }
 }
 
@@ -84,6 +91,8 @@ private struct RichTextWebView {
     var fontDesign: FontDesign
     var size: Double
     var linkColorHex: String? = nil
+    var textColorHex: String? = nil
+    var lineHeight: Double? = nil
     var onFollowLink: (FieldLink) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onFollowLink: onFollowLink) }
@@ -116,12 +125,17 @@ private struct RichTextWebView {
     }
 
     /// Reload only when what affects the rendered HTML changes.
-    private var renderKey: String { "\(fontDesign.rawValue)|\(size)|\(linkColorHex ?? "")|\(markdown)" }
+    private var renderKey: String {
+        let leading: String = lineHeight.map { "\($0)" } ?? ""
+        let link: String = linkColorHex ?? ""
+        let text: String = textColorHex ?? ""
+        return "\(fontDesign.rawValue)|\(size)|\(link)|\(text)|\(leading)|\(markdown)"
+    }
 
     private func load(into webView: WKWebView, coordinator: Coordinator) {
         coordinator.lastRenderKey = renderKey
         webView.loadHTMLString(
-            MarkdownHTML.document(from: markdown, fontDesign: fontDesign, size: size, linkColor: linkColorHex),
+            MarkdownHTML.document(from: markdown, fontDesign: fontDesign, size: size, linkColor: linkColorHex, textColor: textColorHex, lineHeight: lineHeight),
             baseURL: nil
         )
     }
