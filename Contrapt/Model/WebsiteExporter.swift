@@ -372,6 +372,10 @@ extension WebsiteExporter {
           d.className += ' field ' + (f.style || 'rectangle');
           if (accName) d.setAttribute('aria-label', accName);
           if (f.kind !== 'rich' && !f.lockText) d.setAttribute('role', 'textbox');
+          // Custom field colors (textColor/borderColor properties) — names
+          // and #RRGGBB are both valid CSS.
+          if (f.textColor) d.style.color = f.textColor;
+          if (f.borderColor) d.style.borderColor = f.borderColor;
           styleText(d, f.format);
           // Imported HyperCard per-field line height — how tightly-set
           // stacks (the Tour) keep their vertical layout.
@@ -405,6 +409,12 @@ extension WebsiteExporter {
           d.setAttribute('aria-label', accName || b.title || 'Button');
           if (p.enabled === false) d.setAttribute('aria-disabled', 'true');
           else d.tabIndex = 0;
+          // Custom button colors (fillColor/borderColor properties) — color
+          // names and #RRGGBB are both valid CSS. A hilited button keeps its
+          // inverse-video look (the .hilite class), so no inline fill then.
+          if (b.fillColor && !b.hilite) d.style.background = b.fillColor;
+          if (b.borderColor) d.style.borderColor = b.borderColor;
+          if (b.textColor && !b.hilite) d.style.color = b.textColor;
           styleText(d, b.format);
           if (b.iconAsset) {
             const im = document.createElement('img');

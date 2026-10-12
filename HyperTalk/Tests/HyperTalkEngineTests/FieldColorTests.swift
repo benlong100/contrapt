@@ -65,9 +65,9 @@ private func fieldJSON(_ fieldExtras: String = "") -> Data {
     #expect(try await engine.runMessage("the borderColor of card field \"Notes\"") == "#333333")
 }
 
-@Test func buttonHasNoTextColor() async throws {
+@Test func textColorAppliesToButtonsToo() async throws {
+    // textColor spans fields and buttons (buttons gained it later).
     let engine = try StackEngine(stackJSON: fieldJSON())
-    await #expect(throws: (any Error).self) {
-        _ = try await engine.runMessage("the textColor of card button \"Go\"")
-    }
+    _ = try await engine.runMessage("set the textColor of card button \"Go\" to \"maroon\"")
+    #expect(try await engine.runMessage("the textColor of card button \"Go\"") == "maroon")
 }

@@ -30,13 +30,15 @@ struct LockedFieldLabel {
     var wrapWidth: CGFloat?
     /// Per-run styling (HyperCard styled text); empty = uniform `format`.
     var styleRuns: [StyleRun] = []
+    /// The field's whole-text color (the textColor property); nil = label color.
+    var textColor: PlatformColor? = nil
 
     /// Font/underline/outline/foreground for one run's format — everything
     /// except the whole-string paragraph style and baseline lift.
     private func glyphAttributes(_ format: TextFormat) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [
             .font: FieldClickHitTest.platformFont(for: format),
-            .foregroundColor: PlatformColor.labelColor,
+            .foregroundColor: textColor ?? PlatformColor.labelColor,
             .underlineStyle: format.isUnderline ? NSUnderlineStyle.single.rawValue : 0,
         ]
         if format.isOutline {

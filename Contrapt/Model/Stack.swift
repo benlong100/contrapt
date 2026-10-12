@@ -483,10 +483,20 @@ nonisolated struct ButtonPart: Hashable {
     /// Kept so icon get/set round-trips even though Contrapt draws from the
     /// rendered `iconAsset` rather than re-resolving the id at run time.
     var iconID: Int = 0
+    /// Custom fill/edge/title colors (a color name or #RRGGBB) — scriptable as
+    /// `the fillColor` / `the borderColor` (edgeColor) / `the textColor` `of
+    /// button`. The fill paints styles with a background (opaque, rectangle,
+    /// shadow, roundRect); the border colors styles with an edge; the text
+    /// color tints the title (and symbol icon) when not hilited. Nil keeps the
+    /// themed default.
+    var fillColor: String? = nil
+    var borderColor: String? = nil
+    var textColor: String? = nil
 
     init(title: String, showName: Bool = true, autoHilite: Bool = true,
          style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat(),
-         iconAsset: String? = nil, iconSymbol: String? = nil, iconMissing: Bool = false, iconID: Int = 0) {
+         iconAsset: String? = nil, iconSymbol: String? = nil, iconMissing: Bool = false, iconID: Int = 0,
+         fillColor: String? = nil, borderColor: String? = nil, textColor: String? = nil) {
         self.title = title
         self.showName = showName
         self.autoHilite = autoHilite
@@ -497,12 +507,15 @@ nonisolated struct ButtonPart: Hashable {
         self.iconSymbol = iconSymbol
         self.iconMissing = iconMissing
         self.iconID = iconID
+        self.fillColor = fillColor
+        self.borderColor = borderColor
+        self.textColor = textColor
     }
 }
 
 /// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol, iconMissing, iconID }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol, iconMissing, iconID, fillColor, borderColor, textColor }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -516,6 +529,9 @@ extension ButtonPart: Codable {
         iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol)
         iconMissing = try container.decodeIfPresent(Bool.self, forKey: .iconMissing) ?? false
         iconID = try container.decodeIfPresent(Int.self, forKey: .iconID) ?? 0
+        fillColor = try container.decodeIfPresent(String.self, forKey: .fillColor)
+        borderColor = try container.decodeIfPresent(String.self, forKey: .borderColor)
+        textColor = try container.decodeIfPresent(String.self, forKey: .textColor)
     }
 }
 
@@ -657,6 +673,13 @@ nonisolated struct FieldPart: Hashable {
     /// run. Imported from the stack's STBL decorations; the renderers build an
     /// attributed string from it.
     var styleRuns: [StyleRun] = []
+    /// Custom whole-field text and border colors (a color name or #RRGGBB) —
+    /// scriptable as `the textColor` / `the borderColor` (edgeColor) `of
+    /// field`. The border applies to styles that draw one (rectangle, shadow,
+    /// scrolling). Nil keeps the themed default. (Per-run color would be a
+    /// StyleRun extension — this is the whole field.)
+    var textColor: String? = nil
+    var borderColor: String? = nil
 
     init(text: String, placeholder: String, isMultiline: Bool = false, format: TextFormat = TextFormat(), kind: FieldKind = .plain, lockText: Bool = false, showLines: Bool = false, wideMargins: Bool = false, style: FieldStyle = .rectangle) {
         self.text = text
@@ -676,7 +699,7 @@ extension FieldPart: Codable {
     private enum CodingKeys: String, CodingKey {
         case text, placeholder, isMultiline, format, kind, lockText, showLines, wideMargins, style, textHeight
         case dontWrap, autoTab, autoSelect, multipleLines, fixedLineHeight, styleRuns, scroll
-        case sharedText
+        case sharedText, textColor, borderColor
     }
 
     init(from decoder: Decoder) throws {
@@ -699,6 +722,8 @@ extension FieldPart: Codable {
         styleRuns = try container.decodeIfPresent([StyleRun].self, forKey: .styleRuns) ?? []
         scroll = try container.decodeIfPresent(Double.self, forKey: .scroll) ?? 0
         sharedText = try container.decodeIfPresent(Bool.self, forKey: .sharedText) ?? false
+        textColor = try container.decodeIfPresent(String.self, forKey: .textColor)
+        borderColor = try container.decodeIfPresent(String.self, forKey: .borderColor)
     }
 }
 

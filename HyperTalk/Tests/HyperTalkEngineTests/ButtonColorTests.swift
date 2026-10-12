@@ -73,3 +73,12 @@ private func buttonJSON(_ buttonExtras: String = "") -> Data {
         _ = try await engine.runMessage("the fillColor of card field \"Notes\"")
     }
 }
+
+@Test func buttonTextColorSetGetAndClear() async throws {
+    let engine = try StackEngine(stackJSON: buttonJSON())
+    #expect(try await engine.runMessage("the textColor of card button \"Go\"") == "")
+    _ = try await engine.runMessage("set the textColor of card button \"Go\" to \"white\"")
+    #expect(try await engine.runMessage("the textColor of card button \"Go\"") == "white")
+    _ = try await engine.runMessage("set the textColor of card button \"Go\" to empty")
+    #expect(try await engine.runMessage("the textColor of card button \"Go\"") == "")
+}

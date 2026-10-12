@@ -116,6 +116,12 @@ struct ButtonPart: Codable, Hashable {
     /// The button wants an icon the import couldn't find — the player shows a
     /// placeholder instead of nothing.
     var iconMissing: Bool
+    /// Custom fill/edge/title colors (a color name or #RRGGBB) — `the
+    /// fillColor` / `the borderColor` / `the textColor of button`. Nil keeps
+    /// the themed default look.
+    var fillColor: String?
+    var borderColor: String?
+    var textColor: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -127,6 +133,9 @@ struct ButtonPart: Codable, Hashable {
         format = try c.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
         iconAsset = try c.decodeIfPresent(String.self, forKey: .iconAsset)
         iconMissing = try c.decodeIfPresent(Bool.self, forKey: .iconMissing) ?? false
+        fillColor = try c.decodeIfPresent(String.self, forKey: .fillColor)
+        borderColor = try c.decodeIfPresent(String.self, forKey: .borderColor)
+        textColor = try c.decodeIfPresent(String.self, forKey: .textColor)
     }
 }
 
@@ -153,6 +162,10 @@ struct FieldPart: Codable, Hashable {
     var scroll: Double
     /// `the textHeight of field` — line height in points (nil = natural).
     var textHeight: Double?
+    /// Custom whole-field text/border colors — `the textColor` / `the
+    /// borderColor of field`. Nil keeps the themed default.
+    var textColor: String?
+    var borderColor: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -174,6 +187,8 @@ struct FieldPart: Codable, Hashable {
         sharedText = try c.decodeIfPresent(Bool.self, forKey: .sharedText) ?? false
         scroll = try c.decodeIfPresent(Double.self, forKey: .scroll) ?? 0
         textHeight = try c.decodeIfPresent(Double.self, forKey: .textHeight)
+        textColor = try c.decodeIfPresent(String.self, forKey: .textColor)
+        borderColor = try c.decodeIfPresent(String.self, forKey: .borderColor)
     }
 }
 

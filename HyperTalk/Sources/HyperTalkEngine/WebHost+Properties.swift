@@ -139,6 +139,24 @@ extension WebHost {
         case "hilite", "hilight", "highlight", "highlite":
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.hilite ? "true" : "false"
+        case "fillcolor":
+            // A button's custom fill (empty = the themed default).
+            guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.fillColor ?? ""
+        case "bordercolor", "edgecolor":
+            // A button's or field's custom edge color (empty = themed default).
+            switch part.kind {
+            case .button(let p): return p.borderColor ?? ""
+            case .field(let p): return p.borderColor ?? ""
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
+        case "textcolor":
+            // A field's whole-text / a button's title color (empty = default).
+            switch part.kind {
+            case .field(let p): return p.textColor ?? ""
+            case .button(let p): return p.textColor ?? ""
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
         case "text":
             switch part.kind {
             case .field(let p): return p.text
@@ -241,6 +259,34 @@ extension WebHost {
         case "hilite", "hilight", "highlight", "highlite":
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             p.hilite = try boolean(value, for: property); part.kind = .button(p)
+        case "fillcolor":
+            // A color name or #RRGGBB; empty restores the themed default.
+            guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            let trimmed = value.trimmingCharacters(in: .whitespaces)
+            p.fillColor = trimmed.isEmpty ? nil : trimmed
+            part.kind = .button(p)
+        case "bordercolor", "edgecolor":
+            let trimmed = value.trimmingCharacters(in: .whitespaces)
+            switch part.kind {
+            case .button(var p):
+                p.borderColor = trimmed.isEmpty ? nil : trimmed
+                part.kind = .button(p)
+            case .field(var p):
+                p.borderColor = trimmed.isEmpty ? nil : trimmed
+                part.kind = .field(p)
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
+        case "textcolor":
+            let trimmedText = value.trimmingCharacters(in: .whitespaces)
+            switch part.kind {
+            case .field(var p):
+                p.textColor = trimmedText.isEmpty ? nil : trimmedText
+                part.kind = .field(p)
+            case .button(var p):
+                p.textColor = trimmedText.isEmpty ? nil : trimmedText
+                part.kind = .button(p)
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
         case "text":
             switch part.kind {
             case .field(var p): p.text = value; part.kind = .field(p)
