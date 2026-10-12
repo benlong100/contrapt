@@ -1155,6 +1155,71 @@ final class DocumentScriptHost: HyperTalkHost {
         stackBinding.wrappedValue.cards[index].isMarked = marked
     }
 
+    /// `delete [the] <card>` — remove a card (nil = the current one), guarding
+    /// the last remaining card and cantDelete, then land on the nearest card.
+    func deleteCard(_ card: GoDestination?) throws {
+        let index = try card.map { try resolveCardIndex($0) } ?? cardIndex
+        guard stack.cards.count > 1 else { throw HostError("The last remaining card can't be deleted.") }
+        guard !stack.cards[index].cantDelete else { throw HostError("This card can't be deleted.") }
+        let current = cardIndex   // before removal — it clamps to the array
+        stackBinding.wrappedValue.cards.remove(at: index)
+        let next = min(current > index ? current - 1 : current, stackBinding.wrappedValue.cards.count - 1)
+        onNavigate(max(0, next), [])
+    }
+
+    /// `delete button 1` / `delete card field "x"` / `delete image 2` — remove
+    /// a part, honoring the requested layer first (as lookups do).
+    func deletePart(_ object: HyperTalkObject) throws {
+        guard case .part(let kind, let domain, let reference, let onCard) = object else {
+            throw HostError("That isn't a deletable object.")
+        }
+        let ci = try onCard.map { try resolveCardIndex($0) } ?? cardIndex
+        let card = stack.cards[ci]
+        let backgroundIndex = stack.backgrounds.firstIndex { $0.id == card.backgroundID }
+        func cardHit() -> Int? { index(ofKind: kind, matching: reference, in: card.parts) }
+        func backgroundHit() -> Int? {
+            guard let backgroundIndex else { return nil }
+            return index(ofKind: kind, matching: reference, in: stack.backgrounds[backgroundIndex].parts)
+        }
+        if domain != .background, let i = cardHit() {
+            stackBinding.wrappedValue.cards[ci].parts.remove(at: i); return
+        }
+        if domain != .card, let backgroundIndex, let i = backgroundHit() {
+            stackBinding.wrappedValue.backgrounds[backgroundIndex].parts.remove(at: i); return
+        }
+        if let i = cardHit() {
+            stackBinding.wrappedValue.cards[ci].parts.remove(at: i); return
+        }
+        if let backgroundIndex, let i = backgroundHit() {
+            stackBinding.wrappedValue.backgrounds[backgroundIndex].parts.remove(at: i); return
+        }
+        throw HostError("There is no such \(kind) here.")
+    }
+
+    /// `delete background <ref>` — only a background no card uses can go.
+    func deleteBackground(_ reference: HyperTalkObject.Reference) throws {
+        guard let id = backgroundID(for: reference) else { throw HostError("There is no such background.") }
+        guard !stack.cards.contains(where: { $0.backgroundID == id }) else {
+            throw HostError("That background still has cards — delete them first.")
+        }
+        stackBinding.wrappedValue.backgrounds.removeAll { $0.id == id }
+    }
+
+    /// `delete [the] [card|bkgnd] picture [of <card>]` — remove the paint
+    /// layer's assets (the drawing and its rendered image).
+    func clearPicture(background: Bool, card: GoDestination?) throws {
+        let ci = try card.map { try resolveCardIndex($0) } ?? cardIndex
+        if background {
+            let bgID = stack.cards[ci].backgroundID
+            guard let bi = stack.backgrounds.firstIndex(where: { $0.id == bgID }) else { return }
+            stackBinding.wrappedValue.backgrounds[bi].paintImageAsset = nil
+            stackBinding.wrappedValue.backgrounds[bi].paintDrawingAsset = nil
+        } else {
+            stackBinding.wrappedValue.cards[ci].paintImageAsset = nil
+            stackBinding.wrappedValue.cards[ci].paintDrawingAsset = nil
+        }
+    }
+
     func beginUsingStack(_ name: String) { UsingStackStore.shared.begin(name) }
     func endUsingStack(_ name: String) { UsingStackStore.shared.end(name) }
     func inUseStackScripts() -> [(name: String, source: String)] { UsingStackStore.shared.stacks }
@@ -2247,6 +2312,24 @@ final class DocumentScriptHost: HyperTalkHost {
         case "hilite", "hilight", "highlight", "highlite":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.hilite ? "true" : "false"
+        case "fillcolor":
+            // A button's custom fill (empty = the themed default).
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.fillColor ?? ""
+        case "bordercolor", "edgecolor":
+            // A button's or field's custom edge color (empty = themed default).
+            switch part.kind {
+            case .button(let properties): return properties.borderColor ?? ""
+            case .field(let properties): return properties.borderColor ?? ""
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
+        case "textcolor":
+            // A field's whole-text / a button's title color (empty = default).
+            switch part.kind {
+            case .field(let properties): return properties.textColor ?? ""
+            case .button(let properties): return properties.textColor ?? ""
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
         case "icon":
             // The button's icon resource id (0 = none). Contrapt draws the
             // rendered `iconAsset`, so a `set` round-trips the id but doesn't
@@ -2374,6 +2457,34 @@ final class DocumentScriptHost: HyperTalkHost {
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.hilite = try boolean(value, for: property)
             part.kind = .button(properties)
+        case "fillcolor":
+            // A color name or #RRGGBB; empty restores the themed default.
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            let trimmed = value.trimmingCharacters(in: .whitespaces)
+            properties.fillColor = trimmed.isEmpty ? nil : trimmed
+            part.kind = .button(properties)
+        case "bordercolor", "edgecolor":
+            let trimmedBorder = value.trimmingCharacters(in: .whitespaces)
+            switch part.kind {
+            case .button(var properties):
+                properties.borderColor = trimmedBorder.isEmpty ? nil : trimmedBorder
+                part.kind = .button(properties)
+            case .field(var properties):
+                properties.borderColor = trimmedBorder.isEmpty ? nil : trimmedBorder
+                part.kind = .field(properties)
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
+        case "textcolor":
+            let trimmedText = value.trimmingCharacters(in: .whitespaces)
+            switch part.kind {
+            case .field(var properties):
+                properties.textColor = trimmedText.isEmpty ? nil : trimmedText
+                part.kind = .field(properties)
+            case .button(var properties):
+                properties.textColor = trimmedText.isEmpty ? nil : trimmedText
+                part.kind = .button(properties)
+            default: throw Self.noSuchProperty(property, of: kind)
+            }
         case "icon":
             // HyperCard sets an icon by numeric resource id OR by its name
             // (`set icon of btn to "General Essay"`). A numeric id resolves

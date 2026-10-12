@@ -40,6 +40,9 @@ struct MultipleSelectionInspector: View {
 /// Presented as a trailing inspector column so the card stays visible.
 struct PartInspector: View {
     @Binding var part: Part
+    /// Which layer the part lives on ("Card" / "Background"), shown with the
+    /// kind — the owner knows, the part itself doesn't carry it.
+    var layerName: String? = nil
     /// Begins Link To… — the owner shows a floating panel over the card so
     /// the user can navigate to a destination before capturing it.
     var onLinkTo: () -> Void = {}
@@ -74,7 +77,10 @@ struct PartInspector: View {
                         .monospacedDigit()
                 }
                 HStack(spacing: 8) {
-                    Text("Kind: \(kindName)")
+                    // "Kind: Background Button" — the layer matters for
+                    // scripting (`bg btn` vs `btn`) and for what deletes with
+                    // the card, so say it up front.
+                    Text("Kind: \(layerName.map { "\($0) " } ?? "")\(kindName)")
                         .foregroundStyle(.secondary)
                     if case .field = part.kind {
                         Picker("Field Kind", selection: fieldKind) {
@@ -91,7 +97,9 @@ struct PartInspector: View {
                         .labelsHidden()
                 }
                 Toggle(isOn: $part.isLocked) {
-                    Text("Locked (protect from selection in edit mode)")
+                    // Locked parts stay selectable — the lock pins geometry
+                    // (see EditablePart; "Move Locked Objects" overrides).
+                    Text("Locked (pin position and size)")
                 }
             }
             kindSection
@@ -183,6 +191,26 @@ struct PartInspector: View {
                     }
                 }
                 fontAndSizeRow
+                // Custom colors — scriptable as the fillColor / borderColor
+                // of the button. Unset keeps the themed default look.
+                HStack(spacing: 8) {
+                    ColorPicker("Fill Color", selection: buttonFillBinding, supportsOpacity: false)
+                    Button("Reset") { setButton { $0.fillColor = nil } }
+                        .buttonStyle(.borderless)
+                        .disabled(properties.fillColor == nil)
+                }
+                HStack(spacing: 8) {
+                    ColorPicker("Edge Color", selection: buttonBorderBinding, supportsOpacity: false)
+                    Button("Reset") { setButton { $0.borderColor = nil } }
+                        .buttonStyle(.borderless)
+                        .disabled(properties.borderColor == nil)
+                }
+                HStack(spacing: 8) {
+                    ColorPicker("Text Color", selection: buttonTextColorBinding, supportsOpacity: false)
+                    Button("Reset") { setButton { $0.textColor = nil } }
+                        .buttonStyle(.borderless)
+                        .disabled(properties.textColor == nil)
+                }
                 HStack(spacing: 8) {
                     Text("Icon").foregroundStyle(.secondary)
                     Spacer(minLength: 8)
@@ -239,12 +267,30 @@ struct PartInspector: View {
                             Toggle("Auto Select", isOn: fieldAutoSelect)
                         }
                     }
+                    // Custom colors — scriptable as the textColor / borderColor
+                    // of the field. Unset keeps the themed default look.
+                    HStack(spacing: 8) {
+                        ColorPicker("Text Color", selection: fieldTextColorBinding, supportsOpacity: false)
+                        Button("Reset") { setField { $0.textColor = nil } }
+                            .buttonStyle(.borderless)
+                            .disabled(properties.textColor == nil)
+                    }
+                    HStack(spacing: 8) {
+                        ColorPicker("Edge Color", selection: fieldBorderBinding, supportsOpacity: false)
+                        Button("Reset") { setField { $0.borderColor = nil } }
+                            .buttonStyle(.borderless)
+                            .disabled(properties.borderColor == nil)
+                    }
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Contents").foregroundStyle(.secondary)
-                        TextField("Contents", text: fieldContents, axis: .vertical)
-                            .labelsHidden()
-                            .lineLimit(1...6)
-                            .textFieldStyle(.roundedBorder)
+                        // A TextEditor, not a TextField(axis: .vertical): the
+                        // vertical-axis TextField SUBMITS on Return (and the
+                        // form's end-editing-on-submit then select-all'd the
+                        // text) — in an editor, Return types a return.
+                        TextEditor(text: fieldContents)
+                            .font(.body)
+                            .frame(minHeight: 60, maxHeight: 140)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                     }
                 }
                 Section {
@@ -331,6 +377,77 @@ struct PartInspector: View {
                 properties.style = $0
                 part.kind = .button(properties)
             }
+        )
+    }
+
+    /// Mutates the part's ButtonPart in place (no-op for non-buttons).
+    private func setButton(_ mutate: (inout ButtonPart) -> Void) {
+        guard case .button(var properties) = part.kind else { return }
+        mutate(&properties)
+        part.kind = .button(properties)
+    }
+
+    /// The custom fill color; unset shows white and writes as #RRGGBB hex
+    /// once chosen (Reset clears back to the themed default).
+    private var buttonFillBinding: Binding<Color> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return .white }
+                return properties.fillColor.map(Color.init(stackColor:)) ?? .white
+            },
+            set: { color in setButton { $0.fillColor = color.stackHexString } }
+        )
+    }
+
+    /// The custom title color; unset shows the label color.
+    private var buttonTextColorBinding: Binding<Color> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return .primary }
+                return properties.textColor.map(Color.init(stackColor:)) ?? .primary
+            },
+            set: { color in setButton { $0.textColor = color.stackHexString } }
+        )
+    }
+
+    /// The custom edge color; unset shows the accent.
+    private var buttonBorderBinding: Binding<Color> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return .accentColor }
+                return properties.borderColor.map(Color.init(stackColor:)) ?? .accentColor
+            },
+            set: { color in setButton { $0.borderColor = color.stackHexString } }
+        )
+    }
+
+    /// Mutates the part's FieldPart in place (no-op for non-fields).
+    private func setField(_ mutate: (inout FieldPart) -> Void) {
+        guard case .field(var properties) = part.kind else { return }
+        mutate(&properties)
+        part.kind = .field(properties)
+    }
+
+    /// The field's whole-text color; unset shows the label color and writes
+    /// as #RRGGBB hex once chosen (Reset clears back to the default).
+    private var fieldTextColorBinding: Binding<Color> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return .primary }
+                return properties.textColor.map(Color.init(stackColor:)) ?? .primary
+            },
+            set: { color in setField { $0.textColor = color.stackHexString } }
+        )
+    }
+
+    /// The field's custom border color; unset shows the accent.
+    private var fieldBorderBinding: Binding<Color> {
+        Binding(
+            get: {
+                guard case .field(let properties) = part.kind else { return .accentColor }
+                return properties.borderColor.map(Color.init(stackColor:)) ?? .accentColor
+            },
+            set: { color in setField { $0.borderColor = color.stackHexString } }
         )
     }
 

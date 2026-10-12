@@ -108,6 +108,10 @@ struct ContentView: View {
     #endif
     /// The button being linked, while the Link To panel floats over the card.
     @State private var linkingPartID: UUID?
+    /// Where Link To started — the button's card — so applying the link
+    /// returns there (the user flips to the destination to capture it, but
+    /// their editing context is the card with the button).
+    @State private var linkOriginIndex: Int?
     /// A `go stack "X"` whose stack isn't in the library yet — remembered
     /// while the locate picker is shown, so the pick can open it.
     @State private var pendingGoStack: PendingGoStack?
@@ -633,7 +637,8 @@ struct ContentView: View {
                 if let id = singleSelectedPartID, let partBinding = partBinding(for: id) {
                     PartInspector(
                         part: partBinding,
-                        onLinkTo: { linkingPartID = id },
+                        layerName: partLayerName(for: id),
+                        onLinkTo: { linkingPartID = id; linkOriginIndex = currentCardIndex },
                         onDeselect: { selectedPartIDs = [] }
                     ) {
                         deletePart(id: id)
@@ -906,7 +911,7 @@ struct ContentView: View {
                     .labelStyle(.iconOnly)
             }
             HStack(spacing: 12) {
-                Button("Cancel", role: .cancel) { linkingPartID = nil }
+                Button("Cancel", role: .cancel) { linkingPartID = nil; linkOriginIndex = nil }
                 Button("This Stack") { applyLink("go to first card") }
                 Button("This Card") {
                     applyLink("go to card id \(document.stack.cards[cardIndex].scriptID)")
@@ -923,9 +928,16 @@ struct ContentView: View {
 
     /// Writes a generated navigation handler to the linking button, found
     /// anywhere in the stack (it lives on a different card than the one the
-    /// user navigated to).
+    /// user navigated to) — then returns to the button's card, since that's
+    /// where the user is editing (as HyperCard's Link To did).
     private func applyLink(_ command: String) {
-        defer { linkingPartID = nil }
+        defer {
+            linkingPartID = nil
+            if let origin = linkOriginIndex, document.stack.cards.indices.contains(origin) {
+                currentCardIndex = origin
+            }
+            linkOriginIndex = nil
+        }
         guard let id = linkingPartID else { return }
         let script = "on mouseUp\n  \(command)\nend mouseUp"
         var updated = document.stack
@@ -1054,7 +1066,9 @@ struct ContentView: View {
                     addPart(.button(ButtonPart(title: "New Button")))
                 }
                 Button("Field", systemImage: "character.textbox") {
-                    addPart(.field(FieldPart(text: "", placeholder: "")))
+                    // Multiline by default — HyperCard fields wrap; a
+                    // single-line field is the (rarer) opt-out in the inspector.
+                    addPart(.field(FieldPart(text: "", placeholder: "", isMultiline: true)))
                 }
                 Button("Label", systemImage: "textformat") {
                     addPart(.label(LabelPart(text: "New Label")))
@@ -1109,8 +1123,9 @@ struct ContentView: View {
         Menu("Reveal", systemImage: "eye") {
             Toggle("Show Buttons", isOn: $revealButtons)
             Toggle("Show Fields", isOn: $revealFields)
-            // Escape hatch: pick a locked part (to unlock it in the inspector).
-            Toggle("Select Locked Objects", isOn: $selectLocked)
+            // Locked parts are always selectable; this override also lets them
+            // be moved and resized without unlocking first.
+            Toggle("Move Locked Objects", isOn: $selectLocked)
             Divider()
             // HyperCard's background mode (Cmd-B): see the background alone.
             Toggle("Background Only", isOn: $backgroundOnly)
@@ -1603,6 +1618,19 @@ struct ContentView: View {
     /// drives the single-part inspector, resize, link, and arrange.
     private var singleSelectedPartID: UUID? {
         selectedPartIDs.count == 1 ? selectedPartIDs.first : nil
+    }
+
+    /// Which layer the selected part lives on, for the inspector's "Kind:
+    /// Card Button" / "Kind: Background Field" line.
+    private func partLayerName(for id: UUID) -> String? {
+        let current = document.stack
+        if current.cards[cardIndex].parts.contains(where: { $0.id == id }) { return "Card" }
+        let card = current.cards[cardIndex]
+        if let backgroundIndex = current.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+           current.backgrounds[backgroundIndex].parts.contains(where: { $0.id == id }) {
+            return "Background"
+        }
+        return nil
     }
 
     private func partBinding(for id: UUID) -> Binding<Part>? {

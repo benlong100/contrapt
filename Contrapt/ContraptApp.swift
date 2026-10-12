@@ -211,6 +211,11 @@ private struct GoCommands: View {
         #endif
         #if os(macOS)
         Divider()
+        Button("Reveal Home Stack in Finder") {
+            // Your editable Home lives in the app's sandbox container — a
+            // non-obvious spot, so offer the direct route (backups, sharing).
+            NSWorkspace.shared.activateFileViewerSelecting([HomeStack.ensureSeeded()])
+        }
         Button("Reset Home to Default…") {
             HomeStack.reset()
             openHome()

@@ -123,6 +123,47 @@ struct EditKeyCatcher: NSViewRepresentable {
 }
 #endif
 
+// MARK: - TextEditor scroller suppression (macOS)
+
+#if os(macOS)
+/// Switches off the vertical scroller of a sibling TextEditor's NSScrollView.
+/// SwiftUI's `.scrollIndicators(.hidden)` is not honored by TextEditor on
+/// macOS, so with a mouse attached (always-show-scroll-bars) every editor pins
+/// a scroller track — but a non-scrolling HyperCard field clips, it doesn't
+/// scroll. Placed as a `.background` of the TextEditor; it walks a few levels
+/// up and back down to the editor's enclosing scroll view and disables the
+/// scroller (idempotent, reapplied on updates).
+struct TextEditorScrollerHider: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            var ancestor = nsView.superview
+            var hops = 0
+            while let root = ancestor, hops < 3 {
+                if Self.hideScroller(in: root) { return }
+                ancestor = root.superview
+                hops += 1
+            }
+        }
+    }
+
+    /// Finds the nearest text-view scroll view in this subtree and hides its
+    /// scroller. Returns whether one was found.
+    private static func hideScroller(in root: NSView) -> Bool {
+        if let scroll = root as? NSScrollView, scroll.documentView is NSTextView {
+            scroll.hasVerticalScroller = false
+            scroll.autohidesScrollers = true
+            return true
+        }
+        for sub in root.subviews {
+            if hideScroller(in: sub) { return true }
+        }
+        return false
+    }
+}
+#endif
+
 // MARK: - Message box toggle routing (macOS)
 
 /// Posted by the AppDelegate's key monitor when plain Cmd-M is pressed (and by

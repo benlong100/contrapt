@@ -136,6 +136,28 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
 - **Per-card `highlightColor`** — *shipped*. A scriptable accent color:
   `set the highlightColor of this card to "#FF3B30"` (a color name or
   `#RRGGBB`). Tints rich-field links and button icon/label accents.
+- **Button colors (`fillColor` / `borderColor` / `textColor`)** — *shipped (app
+  pending a build)*. Any button can carry a custom fill (styles with a
+  background: opaque, rectangle, shadow, roundRect), edge color (styles with a
+  border), and title color (tints the title and an SF-symbol icon), as a color
+  name or `#RRGGBB`. Set in the inspector (each with Reset back to the themed
+  default) or by script — in both runtimes:
+  `set the fillColor of card button "Go" to "#FF3B30"`,
+  `set the borderColor of btn 2 to "blue"` (`edgeColor` is a synonym),
+  `set the textColor of button "Go" to "white"` (setting `empty` restores the
+  default). Hilite stays a true inverse-video flip, custom colors or not. The
+  colors round-trip in `stack.json` and render statically in the web export (a
+  live web `set` needs the wasm rebuild + player state pass).
+- **Field colors (`textColor` / `borderColor`)** — *shipped (app pending a
+  build)*. A field can color its whole text and its border (for the styles
+  that draw one: rectangle, shadow, scrolling) — inspector pickers with Reset,
+  or by script in both runtimes: `set the textColor of field "Notes" to
+  "navy"`, `set the borderColor of cd fld 1 to "#333333"` (`edgeColor`
+  synonym; `empty` restores the themed default). Applies across editable,
+  locked, and imported exact-lineheight fields; outline-styled runs keep their
+  classic white-on-black look. Round-trips in `stack.json`; renders statically
+  in the web export. (Per-run text color would be a StyleRun extension —
+  this is whole-field.)
 - **SF Symbol button icons** — *shipped*. New buttons can use a built-in SF
   Symbol as their icon (the authoring library), distinct from imported 1-bit
   ICON/cicn art.
@@ -184,6 +206,13 @@ oracle-verified to match.)
   HC 2.3 rejects.
 - **`numberFormat` inside `do`** — no-op'd (HC effectively ignores it too).
 - **`delete <chunk>`** — implemented (was a silent no-op in some HC builds).
+- **Self-deletion allowed** — HyperCard refuses to delete an object whose
+  script is currently executing (or any container of it); Contrapt permits it
+  (the running script is a value snapshot, so nothing dangles — later
+  references to the deleted object's parts simply fail by name). Corpus
+  evidence says no working classic stack depends on the guard (it only fired
+  on already-broken paths), and permissiveness enables the natural
+  "Delete This Card" button on the card itself.
 
 ## Backward-compatibility niceties (not 2.4 features, but accepted)
 These make real old stacks run; listed so they're not mistaken for gaps:

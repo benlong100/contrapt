@@ -322,12 +322,61 @@ struct CardView: View {
     }
 
     /// Start a group drag: if the dragged part wasn't selected, collapse to it;
-    /// then snapshot every selected part's starting frame.
+    /// then snapshot every selected part's starting frame. Option-drag (macOS)
+    /// is the classic duplicate-drag: the selection is copied in place first,
+    /// the copies become the selection and the drag moves THEM — the originals
+    /// stay put.
     private func beginGroupMove(dragged id: UUID) {
         if !selectedPartIDs.contains(id) { selectedPartIDs = [id] }
+        #if os(macOS)
+        if NSEvent.modifierFlags.contains(.option) {
+            duplicateSelectionInPlace()
+        }
+        #endif
         var frames: [UUID: PartFrame] = [:]
-        for pid in selectedPartIDs { if let f = frame(of: pid) { frames[pid] = f } }
+        for pid in selectedPartIDs {
+            // Locked parts are selectable but pinned — they sit out a group
+            // drag (unless the Move Locked Objects override is on).
+            if !selectLocked, isLocked(pid) { continue }
+            if let f = frame(of: pid) { frames[pid] = f }
+        }
         dragStartFrames = frames
+    }
+
+    /// Whether the part with this id carries the layout lock.
+    private func isLocked(_ id: UUID) -> Bool {
+        if let i = stack.cards[cardIndex].parts.firstIndex(where: { $0.id == id }) {
+            return stack.cards[cardIndex].parts[i].isLocked
+        }
+        if let b = backgroundIndex, let i = stack.backgrounds[b].parts.firstIndex(where: { $0.id == id }) {
+            return stack.backgrounds[b].parts[i].isLocked
+        }
+        return false
+    }
+
+    /// Duplicates every selected part at its exact position, each on the layer
+    /// (card or background) it lives on, and selects the copies — the
+    /// option-drag copy. New ids and scriptIDs, so scripts address the copy
+    /// separately.
+    private func duplicateSelectionInPlace() {
+        var copies: Set<UUID> = []
+        for pid in selectedPartIDs {
+            if let i = stack.cards[cardIndex].parts.firstIndex(where: { $0.id == pid }) {
+                var copy = stack.cards[cardIndex].parts[i]
+                copy.id = UUID()
+                copy.scriptID = stack.claimScriptID()
+                stack.cards[cardIndex].parts.append(copy)
+                copies.insert(copy.id)
+            } else if let b = backgroundIndex,
+                      let i = stack.backgrounds[b].parts.firstIndex(where: { $0.id == pid }) {
+                var copy = stack.backgrounds[b].parts[i]
+                copy.id = UUID()
+                copy.scriptID = stack.claimScriptID()
+                stack.backgrounds[b].parts.append(copy)
+                copies.insert(copy.id)
+            }
+        }
+        if !copies.isEmpty { selectedPartIDs = copies }
     }
 
     /// Move every selected part by the dragged part's (already snapped) delta,
@@ -515,14 +564,9 @@ struct CardView: View {
             textHeight: field.textHeight
         ) else { return nil }
         box.origin.x += margin
-        let lineHeight = CGFloat(field.format.size) * 1.3
-        if field.isMultiline && part.frame.height > lineHeight * 2 {
-            // Top-aligned editor: the same top inset plainField applies.
-            box.origin.y += min(8, max(2, part.frame.height * 0.18))
-        } else {
-            // A compact single-line control centers its text vertically.
-            box.origin.y = (part.frame.height - box.height) / 2
-        }
+        // Both editors top-anchor with the same inset (see plainField's
+        // lock-independent alignment).
+        box.origin.y += min(4, max(2, part.frame.height * 0.2))
         return box
     }
 
@@ -689,16 +733,14 @@ private struct EditablePart: View {
             .opacity(part.isVisible ? 1 : 0.35)
             .allowsHitTesting(false)
             .contentShape(Rectangle())
-            // A locked part ignores selection and drags; the click falls
-            // through to whatever's beneath (or the card). Enable "Select
-            // Locked Objects" in the Reveal menu to pick one and unlock it.
+            // A locked part stays SELECTABLE (so you can inspect it, edit its
+            // script, or unlock it) — the lock only pins its position and size.
+            // "Move Locked Objects" in the Reveal menu overrides the pin.
             .onTapGesture(count: 2) {
-                guard !locksSelection else { return }
                 onSelect(false)
                 onOpenInspector()
             }
             .onTapGesture {
-                guard !locksSelection else { return }
                 onSelect(additiveSelectionModifierDown)
             }
             .gesture(moveGesture, including: locksSelection ? .subviews : .all)
@@ -731,7 +773,9 @@ private struct EditablePart: View {
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if isSoleSelection {
+                // The resize knob honors the lock too — a locked part is
+                // selectable but pinned.
+                if isSoleSelection, !locksSelection {
                     resizeHandle
                 }
             }
@@ -826,6 +870,9 @@ struct CardButtonStyle: ButtonStyle {
     /// classic icon buttons are often tiny hot-zones (17×16) whose 8pt padding
     /// would otherwise squeeze the icon to nothing.
     var hasIcon: Bool = false
+    /// The button's custom fill/edge colors; nil keeps the themed default.
+    var fillColor: Color? = nil
+    var borderColor: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
         // The chrome reads the stack theme, which only resolves inside a View
@@ -833,7 +880,8 @@ struct CardButtonStyle: ButtonStyle {
         let pressed = autoHilite && configuration.isPressed && !style.isToggle
         let inverted = !style.isToggle && (hilite || pressed)
         return CardButtonLabel(label: configuration.label, style: style,
-                               inverted: inverted, tint: tint, hasIcon: hasIcon)
+                               inverted: inverted, tint: tint, hasIcon: hasIcon,
+                               fillColor: fillColor, borderColor: borderColor)
     }
 }
 
@@ -846,6 +894,8 @@ private struct CardButtonLabel<Label: View>: View {
     let inverted: Bool
     let tint: Color
     let hasIcon: Bool
+    var fillColor: Color? = nil
+    var borderColor: Color? = nil
 
     var body: some View {
         label
@@ -868,7 +918,17 @@ private struct CardButtonLabel<Label: View>: View {
     @ViewBuilder
     private var background: some View {
         if inverted {
+            // Hilite stays a true inverse-video flip, custom fill or not.
             shape.fill(theme.ink)
+        } else if let fillColor {
+            // A custom fill paints any style with a background; transparent
+            // and the toggle glyphs stay unfilled.
+            switch style {
+            case .transparent, .checkbox, .radio:
+                Color.clear
+            case .roundRect, .opaque, .rectangle, .shadow:
+                shape.fill(fillColor)
+            }
         } else {
             switch style {
             case .transparent, .checkbox, .radio:
@@ -887,7 +947,7 @@ private struct CardButtonLabel<Label: View>: View {
         case .transparent, .opaque, .checkbox, .radio:
             EmptyView()
         case .roundRect, .rectangle, .shadow:
-            shape.stroke(theme.accent.opacity(0.5), lineWidth: 1)
+            shape.stroke(borderColor ?? theme.accent.opacity(0.5), lineWidth: 1)
         }
     }
 
@@ -997,8 +1057,8 @@ extension View {
     /// opaque fills; rectangle adds a border; shadow adds a drop shadow. The
     /// fill/border colors come from the stack theme (Classic = the platform
     /// semantic colors used before).
-    func fieldChrome(style: FieldStyle, showLines: Bool = false, lineHeight: CGFloat = 0, inset: CGFloat = 0) -> some View {
-        modifier(FieldChromeModifier(style: style, showLines: showLines, lineHeight: lineHeight, inset: inset))
+    func fieldChrome(style: FieldStyle, showLines: Bool = false, lineHeight: CGFloat = 0, inset: CGFloat = 0, borderColor: Color? = nil) -> some View {
+        modifier(FieldChromeModifier(style: style, showLines: showLines, lineHeight: lineHeight, inset: inset, borderColor: borderColor))
     }
 }
 
@@ -1008,6 +1068,8 @@ private struct FieldChromeModifier: ViewModifier {
     let showLines: Bool
     let lineHeight: CGFloat
     let inset: CGFloat
+    /// A custom border color (the field's borderColor property); nil = theme.
+    var borderColor: Color? = nil
 
     func body(content: Content) -> some View {
         content
@@ -1019,7 +1081,7 @@ private struct FieldChromeModifier: ViewModifier {
             }
             .overlay {
                 if style == .rectangle || style == .shadow || style == .scrolling {
-                    RoundedRectangle(cornerRadius: 6).stroke(theme.border, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 6).stroke(borderColor ?? theme.border, lineWidth: 1)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: style == .transparent ? 0 : 6))
@@ -1076,6 +1138,9 @@ struct PartView: View {
     /// (written back to the model when the gesture settles).
     @State private var fieldScrollPosition = ScrollPosition()
     @State private var liveScrollOffset: CGFloat = 0
+    /// The locked scrolling field's content height, measured so the scroll bar
+    /// only shows when there's actually something to scroll.
+    @State private var lockedContentHeight: CGFloat = 0
     /// Editable-field focus, for the openField/closeField messages.
     @FocusState private var fieldFocused: Bool
     /// The field's text when it gained focus — closeField only fires when the
@@ -1114,7 +1179,14 @@ struct PartView: View {
             } label: {
                 buttonLabel(properties)
             }
-            .buttonStyle(CardButtonStyle(style: properties.style, autoHilite: properties.autoHilite, hilite: properties.hilite, tint: highlight, hasIcon: properties.iconAsset != nil || !(properties.iconSymbol ?? "").isEmpty))
+            .buttonStyle(CardButtonStyle(
+                style: properties.style, autoHilite: properties.autoHilite, hilite: properties.hilite,
+                // The button's textColor overrides the card highlight for the
+                // title/symbol tint; hilite's inverse video ignores both.
+                tint: properties.textColor.map(Color.init(stackColor:)) ?? highlight,
+                hasIcon: properties.iconAsset != nil || !(properties.iconSymbol ?? "").isEmpty,
+                fillColor: properties.fillColor.map(Color.init(stackColor:)),
+                borderColor: properties.borderColor.map(Color.init(stackColor:))))
             // Pin the button to its exact part size and clip, so a thin part
             // (a 2px hilited "divider" rule) can't inflate to the button's
             // intrinsic/min content height. The compositingGroup flattens the
@@ -1205,11 +1277,16 @@ struct PartView: View {
         // must stay one line and clip, not reflow its last columns. Flowing
         // prose (a quote with no/long lines) still word-wraps.
         let preformatted = isPreformatted(properties.text)
-        // A field only ~one line tall renders as a compact single-line control
-        // even if flagged multi-line, so a short title/label (e.g. the 22pt
-        // "Title" field) isn't clipped by a TextEditor's height/insets.
-        let lineHeight = CGFloat(properties.format.size) * 1.3
-        let effectivelyMultiline = properties.isMultiline && fieldHeight > lineHeight * 2
+        // Multiple Lines decides the editor outright: a multiline field is a
+        // TextEditor (Return inserts a return, text wraps — HyperCard field
+        // behavior), a single-line field is the compact TextField. The old
+        // "~one line tall renders compact even if flagged multiline" height
+        // heuristic silently overrode the author's setting — a 56pt default
+        // field or a larger font failed it, and Return then select-all'd via
+        // NSTextField instead of inserting a newline. A deliberately short
+        // multiline field may clip a little vertically; that's the author's
+        // call now, not a guess.
+        let effectivelyMultiline = properties.isMultiline
         Group {
             if properties.lockText {
                 // Locked text is display-only and dispatches presses like a
@@ -1231,7 +1308,8 @@ struct PartView: View {
                             preformatted: unwrapped,
                             highlightRange: highlightRange,
                             wrapWidth: fieldWidth > 0 ? max(1, fieldWidth - 2 * margin) : nil,
-                            styleRuns: properties.styleRuns
+                            styleRuns: properties.styleRuns,
+                            textColor: properties.textColor.map { PlatformColor(Color(stackColor: $0)) }
                         )
                         // Ideal height, so a last line that only partially
                         // fits still draws (the part frame clips it) rather
@@ -1250,9 +1328,16 @@ struct PartView: View {
                         // drives the view; a user scroll writes back when the
                         // gesture settles (not per-tick — the stack binding
                         // registers undo on every write).
-                        ScrollView(.vertical, showsIndicators: true) {
-                            lockedText.frame(maxWidth: .infinity, alignment: lockedAlignment(properties.format.align))
+                        ScrollView(.vertical) {
+                            lockedText
+                                .frame(maxWidth: .infinity, alignment: lockedAlignment(properties.format.align))
+                                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+                                    lockedContentHeight = $0
+                                }
                         }
+                        // The bar only when there's real overflow to scroll (a
+                        // couple of px of slack so rounding can't summon it).
+                        .scrollIndicators(lockedContentHeight > fieldHeight - topPadding - bottomPadding + 2 ? .automatic : .hidden)
                         .scrollPosition($fieldScrollPosition)
                         .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, offset in
                             liveScrollOffset = offset
@@ -1282,9 +1367,23 @@ struct PartView: View {
                 TextEditor(text: fieldText)
                     .focused($fieldFocused)
                     .font(properties.format.font)
+                    .foregroundStyle(properties.textColor.map(Color.init(stackColor:)) ?? Color.primary)
                     .underline(properties.format.isUnderline)
                     .multilineTextAlignment(properties.format.align.swiftUI)
                     .scrollContentBackground(.hidden)
+                    // Only a scrolling-style field shows a scroll bar (HyperCard:
+                    // other styles clip). macOS with a mouse otherwise pins a
+                    // persistent scroller track on every editor — and TextEditor
+                    // ignores .scrollIndicators there, so an AppKit seam switches
+                    // the scroller off directly (see TextEditorScrollerHider).
+                    .scrollIndicators(properties.style == .scrolling ? .automatic : .hidden)
+                    .background {
+                        #if os(macOS)
+                        if properties.style != .scrolling {
+                            TextEditorScrollerHider()
+                        }
+                        #endif
+                    }
                     .overlay(alignment: .topLeading) {
                         if properties.text.isEmpty {
                             Text(properties.placeholder)
@@ -1299,6 +1398,7 @@ struct PartView: View {
                     .focused($fieldFocused)
                     .textFieldStyle(.plain)
                     .font(properties.format.font)
+                    .foregroundStyle(properties.textColor.map(Color.init(stackColor:)) ?? Color.primary)
                     .underline(properties.format.isUnderline)
                     .multilineTextAlignment(properties.format.align.swiftUI)
                     // Top-anchor like the locked label so toggling Lock Text
@@ -1313,7 +1413,8 @@ struct PartView: View {
             style: properties.style,
             showLines: properties.showLines,
             lineHeight: properties.format.size * 1.4,
-            inset: margin
+            inset: margin,
+            borderColor: properties.borderColor.map(Color.init(stackColor:))
         )
         // HyperCard's field-editing lifecycle: openField when the insertion
         // point arrives; on leaving, closeField if the text changed, else
@@ -1353,6 +1454,10 @@ struct PartView: View {
         var attributed = AttributedString(properties.text)
         attributed.font = properties.format.font
         if properties.format.isUnderline { attributed.underlineStyle = .single }
+        // The field's whole-text color (the textColor property), when set.
+        if let hex = properties.textColor {
+            attributed.foregroundColor = Color(stackColor: hex)
+        }
 
         let characters = attributed.characters
         func range(_ lo: Int, _ hi: Int) -> Range<AttributedString.Index>? {
@@ -1442,8 +1547,10 @@ struct PartView: View {
                         // HyperCard button titles are black (1-bit) — imported
                         // buttons (bitmap icon or plain title) label in the
                         // label color. Only the authoring library's SF-symbol
-                        // buttons keep the tint as a clickable affordance.
-                        .foregroundStyle(hasSymbol ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                        // buttons keep the tint as a clickable affordance. A
+                        // custom textColor overrides either.
+                        .foregroundStyle(properties.textColor.map { AnyShapeStyle(Color(stackColor: $0)) }
+                                         ?? (hasSymbol ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary)))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
