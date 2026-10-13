@@ -311,10 +311,8 @@ Phase A — the substrate (do first):
      (`ENABLE_OUTGOING_NETWORK_CONNECTIONS`). Web side: `EngineInteraction.http
      Request` bridge + `WebHost` delegation + the player's `window.ContraptHttp`
      `fetch` helper (**honors CORS**, AbortController timeout); 4 NetworkWebTests
-     (suite 642). **Remaining (Ben):** build the app target; bind the wasm
-     entry's EngineInteraction.httpRequest → `window.ContraptHttp.request`
-     (mirroring how `answer`/`ask` bind to `window.ContraptDialogs`) and rebuild
-     WebEngine.zip.
+     (suite 642). **Wasm entry bound 2026-10-12 (commit aed71d1)** — EngineInteraction.
+     httpRequest → `window.ContraptHttp.request`; just rebuild WebEngine.zip.
 3. **Persistent + shared stack data** — a stack that remembers between runs
    (file / localStorage), then optional multi-user. Small after #1–#2.
    - **Language layer: DONE 2026-10-10.** `stackData` — a per-stack key-value
@@ -328,8 +326,8 @@ Phase A — the substrate (do first):
    - **Transport: DONE 2026-10-10 (web needs a wasm rebuild).** App: a
      per-stack file in Application Support (`StackDataStore`, keyed by stack id).
      Web: an in-memory store seeded from `localStorage` at load, flushed back via
-     a `persist` effect. **Remaining (Ben):** seed/flush `localStorage` in the
-     player and rebuild WebEngine.zip. *Optional multi-user / a shared cross-
+     a `persist` effect. **Wasm entry bound 2026-10-12 (commit aed71d1)** — StackEngine seeded
+     from `window.__STACK_DATA__`; just rebuild WebEngine.zip. *Optional multi-user / a shared cross-
      stack area deferred (the roadmap's "then optional multi-user").*
 
 Phase A+ — web gathering, the idiom layer (language, fast lane; 2026-10-12):
