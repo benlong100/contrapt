@@ -190,7 +190,8 @@ extension WebsiteExporter {
       .layer { position: absolute; inset: 0; background: var(--surface); }
       .part { position: absolute; box-sizing: border-box; overflow: hidden;
         color: var(--ink); line-height: 1.15; }
-      .field { white-space: pre-wrap; }
+      .field { white-space: pre-wrap; padding: 4px 3px 3px 3px; }
+      .field.rich { padding: 12px; line-height: 1.45; }
       .field a { color: var(--accent, #0969da); text-decoration: underline; cursor: pointer; }
       .field.opaque, .field.rectangle, .field.shadow { background: var(--surface); }
       .field.rectangle { border: 1px solid var(--border); }
@@ -384,13 +385,13 @@ extension WebsiteExporter {
           if (m[1] != null) { const c = document.createElement('code'); c.textContent = m[1]; parent.appendChild(c); }
           else if (m[2] != null) {
             const a = document.createElement('a');
-            a.textContent = m[2]; a.href = '#';
+            mdInline(a, m[2]); a.href = '#';
             const href = m[3];
             a.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); followHref(href); };
             parent.appendChild(a);
           }
-          else if (m[4] != null) { const b = document.createElement('strong'); b.textContent = m[4]; parent.appendChild(b); }
-          else if (m[5] != null) { const i = document.createElement('em'); i.textContent = m[5]; parent.appendChild(i); }
+          else if (m[4] != null) { const b = document.createElement('strong'); mdInline(b, m[4]); parent.appendChild(b); }
+          else if (m[5] != null) { const i = document.createElement('em'); mdInline(i, m[5]); parent.appendChild(i); }
           last = m.index + m[0].length;
         }
         if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
@@ -404,7 +405,9 @@ extension WebsiteExporter {
           const heading = line.match(/^(#{1,3})\\s+(.*)$/);
           if (heading) {
             row.style.fontWeight = 'bold';
-            row.style.fontSize = (heading[1].length === 1 ? 1.5 : heading[1].length === 2 ? 1.25 : 1.1) + 'em';
+            row.style.fontSize = (heading[1].length === 1 ? 1.7 : heading[1].length === 2 ? 1.4 : 1.2) + 'em';
+            row.style.lineHeight = '1.2';
+            row.style.margin = '0.3em 0 0.15em';
             body = heading[2];
           } else if (/^[-*]\\s+/.test(line)) {
             body = '• ' + line.replace(/^[-*]\\s+/, '');
@@ -523,7 +526,8 @@ extension WebsiteExporter {
           const runs = perCard ? (perCard.styleRuns || []) : (f.styleRuns || []);
           // Styled runs render as spans in LOCKED fields (editable fields stay
           // plain text so contentEditable editing isn't fighting markup).
-          if (f.kind === 'rich') { richFields[p.scriptID] = true; renderMarkdown(d, text); }
+          if (f.wideMargins) d.style.padding = '18px';
+          if (f.kind === 'rich') { d.classList.add('rich'); richFields[p.scriptID] = true; renderMarkdown(d, text); }
           else if (runs.length && f.lockText) setRunStyledText(d, text, runs, f.format);
           else d.textContent = text;
           // A scrolling field starts at its stored scroll offset (layout must
