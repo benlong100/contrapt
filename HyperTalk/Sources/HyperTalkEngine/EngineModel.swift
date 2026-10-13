@@ -279,9 +279,25 @@ extension Part: Codable {
         }
     }
 
-    // The engine never re-encodes stacks (the app owns saving), so no encode().
+    // Parts DO encode — the state-driven web renderer sends the live card's
+    // parts (including script-created ones) to the player in the same shape
+    // the static stack.json uses, so one renderPart handles both. (Whole
+    // Card/Background/Stack encoding stays off — the app owns saving.)
     func encode(to encoder: Encoder) throws {
-        throw EngineError("The web engine does not encode stacks.")
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(frame, forKey: .frame)
+        try c.encode(script, forKey: .script)
+        try c.encode(isVisible, forKey: .visible)
+        try c.encode(isEnabled, forKey: .enabled)
+        try c.encode(scriptID, forKey: .scriptID)
+        switch kind {
+        case .button(let b): try c.encode("button", forKey: .type); try c.encode(b, forKey: .button)
+        case .field(let f): try c.encode("field", forKey: .type); try c.encode(f, forKey: .field)
+        case .label(let l): try c.encode("label", forKey: .type); try c.encode(l, forKey: .label)
+        case .image(let i): try c.encode("image", forKey: .type); try c.encode(i, forKey: .image)
+        }
     }
 }
 

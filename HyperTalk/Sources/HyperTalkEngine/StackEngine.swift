@@ -186,6 +186,10 @@ public final class StackEngine {
             theme: host.stack.theme
         )
         state.cardCount = host.stack.cards.count
+        state.backgroundID = background.map { $0.id.uuidString } ?? ""
+        state.cardPartsFull = card.parts
+        state.backgroundPartsFull = background?.parts ?? []
+        state.backgroundFieldContent = card.backgroundFieldContent
         return state
     }
 
@@ -287,6 +291,20 @@ public struct CardState: Codable, Equatable, Sendable {
     /// The stack's current theme name (`set the theme of this stack`), so the
     /// page can re-apply the palette live after a dispatch changes it.
     public let theme: String
+    /// The current card's background id, so the player finds its paint in the
+    /// static maps (paint never changes at runtime; the engine doesn't model
+    /// it). Empty when the card has no background.
+    public var backgroundID: String = ""
+    /// The live card's parts and its background's parts in the SAME shape as
+    /// stack.json, so the player's one `renderPart` builds script-created
+    /// parts and cards exactly like imported ones — the state-driven render.
+    // Internal (Part is an internal type) — still encoded to JSON for the
+    // player, just not part of the public Swift API.
+    var cardPartsFull: [Part] = []
+    var backgroundPartsFull: [Part] = []
+    /// This card's per-card text for non-sharedText background fields (part
+    /// UUID → content), so those fields show the right card's text.
+    var backgroundFieldContent: [String: BackgroundFieldContent] = [:]
 }
 
 /// A scripted menu, serialized for the page's menu strip.

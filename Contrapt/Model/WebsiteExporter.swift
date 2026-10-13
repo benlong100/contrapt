@@ -365,6 +365,14 @@ extension WebsiteExporter {
       const stack = window.__STACK__ || await (await fetch('stack.json')).json();
       const bgById = {};
       (stack.backgrounds || []).forEach(b => { bgById[b.id] = b; });
+      // Paint never changes at runtime and the engine doesn't model it, so the
+      // state-driven renderer looks it up here by stable id: card paint by
+      // card scriptID, background paint by background id. A script-created
+      // card isn't in these maps and simply has no paint (it never did).
+      const cardPaintByScriptID = {};
+      (stack.cards || []).forEach(c => { if (c.scriptID != null) cardPaintByScriptID[c.scriptID] = c.paintImageAsset; });
+      const bgPaintById = {};
+      (stack.backgrounds || []).forEach(b => { bgPaintById[b.id] = b.paintImageAsset; });
       const W = stack.cardSize.width, H = stack.cardSize.height;
       const root = document.getElementById('card');
       const label = document.getElementById('cardLabel');
@@ -661,6 +669,51 @@ extension WebsiteExporter {
         (card.parts || []).forEach(p => layer.appendChild(renderPart(p)));
         return layer;
       }
+      // The state-driven layer: built from the engine's live card state, so
+      // script-created parts and whole cards render exactly like imported
+      // ones (same renderPart). Paint comes from the static maps by stable id.
+      function buildLayerFromState(state) {
+        const layer = document.createElement('div');
+        layer.className = 'layer';
+        const bgPaintAsset = bgPaintById[state.backgroundID];
+        if (bgPaintAsset) {
+          const bp = paint(bgPaintAsset); bp.classList.add('bg-paint');
+          if (state.backgroundShowPicture === false) bp.style.display = 'none';
+          layer.appendChild(bp);
+        }
+        (state.backgroundPartsFull || []).forEach(p =>
+          layer.appendChild(renderPart(p, state.backgroundFieldContent || {})));
+        const cardPaintAsset = cardPaintByScriptID[state.cardScriptID];
+        if (cardPaintAsset) {
+          const cp = paint(cardPaintAsset); cp.classList.add('card-paint');
+          if (state.cardShowPicture === false) cp.style.display = 'none';
+          layer.appendChild(cp);
+        }
+        (state.cardPartsFull || []).forEach(p => layer.appendChild(renderPart(p)));
+        return layer;
+      }
+      // Swap in a freshly-built layer (static card or engine state), with the
+      // optional visual-effect transition. Shared tail of render/renderFromState.
+      function swapLayer(layer, fx, labelText) {
+        const previous = Array.from(root.querySelectorAll('.layer')).pop() || null;
+        root.style.width = W + 'px'; root.style.height = H + 'px';
+        if (fx && fx.kind && fx.kind !== 'plain' && previous) {
+          playEffect(fx, previous, layer);
+        } else {
+          root.innerHTML = '';
+          root.appendChild(layer);
+        }
+        label.textContent = labelText;
+        fit();
+        if (engineActive) enableFieldEditing();
+      }
+      function renderFromState(fx) {
+        if (!lastState) { render(fx); return; }
+        partEls = {}; richFields = {};
+        const total = engineCardCount || stack.cards.length;
+        swapLayer(buildLayerFromState(lastState), fx,
+          'Card ' + (idx + 1) + ' of ' + total + (lastState.cardName ? ' — ' + lastState.cardName : ''));
+      }
       function render(fx) {
         const previous = Array.from(root.querySelectorAll('.layer')).pop() || null;
         const card = stack.cards[idx];
@@ -797,6 +850,9 @@ extension WebsiteExporter {
       // and scripts don't run.
       let engine = window.ContraptEngine;
       let engineActive = false;
+      // The engine's most recent CardState — the source the state-driven
+      // renderer builds the current card from once the engine is live.
+      let lastState = null;
       // The engine's LIVE card count — scripts make and delete cards, so
       // navigation must wrap by this once the engine is running.
       let engineCardCount = 0;
@@ -966,15 +1022,43 @@ extension WebsiteExporter {
         let res;
         try { res = JSON.parse(await pending); } catch (e) { note.textContent = 'Engine error.'; return; }
         if (res.error) { note.textContent = 'Error: ' + res.error; return; }
+        if (res.state) lastState = res.state;
         if (res.state && res.state.cardIndex !== idx) {
+          // Navigation — rebuild the whole card from engine state (this is the
+          // only path that reaches script-created cards, which the static
+          // stack doesn't contain).
           idx = res.state.cardIndex;
           const nav = (res.effects || []).find(e => e.type === 'navigate' && e.effects && e.effects.length);
-          render(nav ? nav.effects[0] : undefined);
+          renderFromState(nav ? nav.effects[0] : undefined);
+        } else if (res.state) {
+          // Same card: overlay the text/hilite/scroll deltas onto the live DOM
+          // (preserving a field the visitor may be editing), then add any
+          // parts a script just created.
+          applyState(res.state);
+          reconcileCreatedParts(res.state);
         }
         if (res.state && res.state.theme) applyTheme(res.state.theme);
-        applyState(res.state);
         applyEffects(res.effects);
         if (res.result != null) note.textContent = res.result;
+      }
+
+      // Build DOM for parts the engine reports that aren't on the page yet
+      // (scaffolded background fields, a bare `import picture`, a scripted
+      // button). Existing elements are left untouched so an in-progress edit
+      // isn't disturbed; deletions are handled by applyState hiding.
+      function reconcileCreatedParts(state) {
+        const layer = Array.from(root.querySelectorAll('.layer')).pop();
+        if (!layer) return;
+        let added = false;
+        (state.backgroundPartsFull || []).forEach(p => {
+          if (partEls[p.scriptID]) return;
+          layer.appendChild(renderPart(p, state.backgroundFieldContent || {})); added = true;
+        });
+        (state.cardPartsFull || []).forEach(p => {
+          if (partEls[p.scriptID]) return;
+          layer.appendChild(renderPart(p)); added = true;
+        });
+        if (added && engineActive) enableFieldEditing();
       }
 
       function go(n) {
