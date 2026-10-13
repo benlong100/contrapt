@@ -419,6 +419,11 @@ extension WebHost {
     func textRunProperty(_ property: String, ofField reference: HyperTalkObject.Reference, domain: HyperTalkObject.PartDomain, range: Range<Int>) throws -> String {
         let loc = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
         guard case .field(let f) = effectivePart(at: loc, cardIndex: cardIndex).kind else { throw HostError("That part is not a field.") }
+        // `the link of <chunk>` — the Markdown link target covering the
+        // chunk, read from the field's source text.
+        if property == "link" {
+            return MarkdownLinks.link(in: f.text, at: range)
+        }
         return Self.runProperty(property, text: f.text, base: f.format, runs: f.styleRuns, range: range)
     }
 
@@ -426,6 +431,18 @@ extension WebHost {
         let loc = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
         var mutable = effectivePart(at: loc, cardIndex: cardIndex)
         guard case .field(var f) = mutable.kind else { throw HostError("That part is not a field.") }
+        // `set the link of <chunk> … to <url or card:…>` — rewrite the rich
+        // field's Markdown around the chunk (wrap / retarget / unwrap if
+        // empty). The write rides setFieldText so per-card background
+        // content is honored. Plain fields keep the group/clickText idiom.
+        if property == "link" {
+            guard f.kind == .rich else {
+                throw HostError("Links live in rich text fields — make the field rich first (or use group text and the clickText).")
+            }
+            try setFieldText(reference, domain: domain, onCard: nil,
+                             to: MarkdownLinks.settingLink(in: f.text, range: range, to: value))
+            return
+        }
         let newRuns = try Self.settingRuns(property, to: value, text: f.text,
                                            base: f.format, runs: f.styleRuns, range: range)
         if usesOverlay(loc) {
@@ -697,7 +714,7 @@ extension WebHost {
         stack.cards[ci].backgroundFieldContent[partID.uuidString] = content
     }
 
-    private func setPart(_ part: Part, at location: PartLocation) {
+    func setPart(_ part: Part, at location: PartLocation) {
         switch location {
         case .card(let ci, let i): stack.cards[ci].parts[i] = part
         case .background(let b, let i): stack.backgrounds[b].parts[i] = part

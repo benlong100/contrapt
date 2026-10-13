@@ -227,13 +227,14 @@ public final class StackEngine {
         var text: String?
         var hilite: Bool?
         var scroll: Double?
+        var asset: String?
         switch part.kind {
         case .button(let b): text = b.showName ? b.title : ""; hilite = b.hilite
         case .field(let f): text = f.text; scroll = f.scroll
         case .label(let l): text = l.text
-        case .image: text = nil
+        case .image(let i): asset = i.assetName
         }
-        return RenderPart(
+        var rendered = RenderPart(
             scriptID: part.scriptID,
             kind: part.kind.word,
             name: part.name,
@@ -244,6 +245,8 @@ public final class StackEngine {
             hilite: hilite,
             scroll: scroll
         )
+        rendered.asset = asset
+        return rendered
     }
 }
 
@@ -303,4 +306,7 @@ public struct RenderPart: Codable, Equatable, Sendable {
     /// (`select line 2 of field 1`); nil otherwise.
     public var selStart: Int?
     public var selEnd: Int?
+    /// An image part's asset name — or, after `import picture from url`, the
+    /// URL itself (the page's <img> loads either).
+    public var asset: String?
 }

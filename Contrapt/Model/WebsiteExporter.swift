@@ -130,6 +130,7 @@ extension WebsiteExporter {
       .part { position: absolute; box-sizing: border-box; overflow: hidden;
         color: var(--ink); line-height: 1.15; }
       .field { white-space: pre-wrap; }
+      .field a { color: var(--accent, #0969da); text-decoration: underline; cursor: pointer; }
       .field.opaque, .field.rectangle, .field.shadow { background: var(--surface); }
       .field.rectangle { border: 1px solid var(--border); }
       .field.shadow { border: 1px solid var(--border); box-shadow: 3px 3px 0 rgba(0,0,0,.5); }
@@ -276,6 +277,70 @@ extension WebsiteExporter {
       // scriptID -> element for the current card, rebuilt by render(); the
       // engine's CardState is overlaid onto these after each event.
       let partEls = {};
+      // scriptID -> true for RICH fields (Markdown source) — applyState
+      // re-renders these as Markdown instead of plain text.
+      let richFields = {};
+
+      // Rich fields hold Markdown source; render the same subset the app's
+      // MarkdownHTML does (headings, bullets, links, bold/italic/code) with
+      // DOM nodes — never innerHTML from stack text. A card: link goes to
+      // the card; web links open a new tab.
+      // An image part's source: an exported asset by name, or — after
+      // `import picture from url` — the URL itself.
+      function imageSrc(name) {
+        name = name || '';
+        return /^https?:/i.test(name) ? name : 'assets/' + name;
+      }
+      function followHref(href) {
+        const h = String(href || '');
+        if (h.toLowerCase().startsWith('card:')) {
+          const ref = h.slice(5).trim();
+          const n = Number(ref);
+          let target = (ref !== '' && !isNaN(n)) ? n - 1
+            : stack.cards.findIndex(c => (c.name || '').toLowerCase() === ref.toLowerCase());
+          if (target >= 0 && target < stack.cards.length) go(target);
+        } else if (/^https?:|^mailto:|^tel:/i.test(h)) {
+          window.open(h, '_blank', 'noopener');
+        }
+      }
+      function mdInline(parent, text) {
+        const pattern = /`([^`]+)`|\\[([^\\]]+)\\]\\(([^)]+)\\)|\\*\\*([^*]+)\\*\\*|\\*([^*]+)\\*/g;
+        let last = 0, m;
+        while ((m = pattern.exec(text))) {
+          if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+          if (m[1] != null) { const c = document.createElement('code'); c.textContent = m[1]; parent.appendChild(c); }
+          else if (m[2] != null) {
+            const a = document.createElement('a');
+            a.textContent = m[2]; a.href = '#';
+            const href = m[3];
+            a.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); followHref(href); };
+            parent.appendChild(a);
+          }
+          else if (m[4] != null) { const b = document.createElement('strong'); b.textContent = m[4]; parent.appendChild(b); }
+          else if (m[5] != null) { const i = document.createElement('em'); i.textContent = m[5]; parent.appendChild(i); }
+          last = m.index + m[0].length;
+        }
+        if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+      }
+      function renderMarkdown(el, text) {
+        el.textContent = '';
+        el.dataset.md = text || '';
+        String(text || '').split('\n').forEach(line => {
+          const row = document.createElement('div');
+          let body = line;
+          const heading = line.match(/^(#{1,3})\\s+(.*)$/);
+          if (heading) {
+            row.style.fontWeight = 'bold';
+            row.style.fontSize = (heading[1].length === 1 ? 1.5 : heading[1].length === 2 ? 1.25 : 1.1) + 'em';
+            body = heading[2];
+          } else if (/^[-*]\\s+/.test(line)) {
+            body = '• ' + line.replace(/^[-*]\\s+/, '');
+          }
+          if (body === '') row.appendChild(document.createElement('br'));
+          else mdInline(row, body);
+          el.appendChild(row);
+        });
+      }
 
       function fontFamily(d) {
         if (d === 'serif') return 'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif';
@@ -385,7 +450,8 @@ extension WebsiteExporter {
           const runs = perCard ? (perCard.styleRuns || []) : (f.styleRuns || []);
           // Styled runs render as spans in LOCKED fields (editable fields stay
           // plain text so contentEditable editing isn't fighting markup).
-          if (runs.length && f.lockText) setRunStyledText(d, text, runs, f.format);
+          if (f.kind === 'rich') { richFields[p.scriptID] = true; renderMarkdown(d, text); }
+          else if (runs.length && f.lockText) setRunStyledText(d, text, runs, f.format);
           else d.textContent = text;
           // A scrolling field starts at its stored scroll offset (layout must
           // exist first, hence the frame callback).
@@ -437,7 +503,8 @@ extension WebsiteExporter {
           im.style.width = '100%'; im.style.height = '100%';
           im.style.imageRendering = 'pixelated';
           im.alt = accName || 'Image';
-          im.src = 'assets/' + (p.image && p.image.assetName);
+          im.src = imageSrc(p.image && p.image.assetName);
+          im.dataset.src = im.getAttribute('src');
           d.appendChild(im);
         }
         return d;
@@ -474,6 +541,7 @@ extension WebsiteExporter {
         const previous = Array.from(root.querySelectorAll('.layer')).pop() || null;
         const card = stack.cards[idx];
         partEls = {};
+        richFields = {};
         const layer = buildLayer(card);
         root.style.width = W + 'px'; root.style.height = H + 'px';
         if (fx && fx.kind && fx.kind !== 'plain' && previous) {
@@ -632,6 +700,12 @@ extension WebsiteExporter {
             // Never clobber the field the visitor is typing in.
             if (el === document.activeElement) return;
             const text = rp.text || '';
+            // A rich field re-renders its Markdown when the text changes
+            // (e.g. a script set the link of a chunk).
+            if (richFields[rp.scriptID]) {
+              if (el.dataset.md !== text) renderMarkdown(el, text);
+              return;
+            }
             if (rp.selStart != null && rp.selEnd != null && rp.selEnd > rp.selStart) {
               // The script selection (`select line 2 of field 1`): show the
               // range highlighted, HyperCard-style.
@@ -644,6 +718,12 @@ extension WebsiteExporter {
               el.appendChild(document.createTextNode(text.slice(rp.selEnd)));
             } else if (el.textContent !== text || el.querySelector('.sel')) {
               el.textContent = text;
+            }
+          } else if (rp.kind === 'image') {
+            const im = el.querySelector('img');
+            if (im && rp.asset != null) {
+              const want = imageSrc(rp.asset);
+              if (im.dataset.src !== want) { im.dataset.src = want; im.src = want; }
             }
           } else if (rp.kind === 'button') {
             el.classList.toggle('hilite', !!rp.hilite);

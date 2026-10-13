@@ -109,6 +109,39 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   `make a card for each element of FeedItems(url "…") using background
   "Story"` is a one-line news stack.
 
+- **Scriptable links in rich fields (`the link of <chunk> of field …`)** —
+  *shipped*. Rich fields already linked (Markdown `[label](url)`, the
+  `card:` scheme for in-stack navigation); now scripts can attach them:
+  `set the link of line 2 of field "Stories" to story["link"]` wraps the
+  chunk's characters as a Markdown link, a chunk already inside a link
+  retargets it, `to empty` unwraps it, and `the link of <chunk>` reads the
+  covering target. Rich fields only — plain fields keep the classic
+  group/clickText idiom (the error says so). Rides the per-chunk property
+  machinery; the rewrite goes through setFieldText, so per-card background
+  content is honored. **Web-export parity:** the exported player now
+  renders rich fields' Markdown (headings, bullets, links, bold/italic/
+  code — DOM-built, no innerHTML) instead of showing raw source, restyles
+  links with the theme accent, opens web links in a new tab, and follows
+  `card:` links to their card. Rich fields on the web were previously raw
+  text — this closes that gap for static exports immediately (no wasm
+  rebuild needed for rendering; live script updates re-render via state).
+
+- **`import picture from url "…" [into image <ref>]`** — *shipped*. The
+  visual counterpart of `put url into field` (HyperCard's Import Paint was
+  menu-only; the exact `from url` shape is the command — real stacks'
+  own `import paint` handlers still dispatch, the corpus sweep caught
+  that). Into an existing image part, the picture replaces its asset;
+  with no target a new centered image part appears on the current card.
+  `it` gets the part's id (`image id it`). App: the bytes are fetched
+  behind the same per-host consent as the url container, validated as an
+  image, and stored as a document asset — part of the stack from then on.
+  Web export: the image part points at the URL itself and the page's
+  <img> fetches it (display isn't CORS-gated), session-only like all
+  web-side mutations. Known web gap (also affects `make a card`): the
+  exported player renders from the static stack, so runtime-CREATED parts
+  and cards don't display there yet — importing into an existing part is
+  the web-safe form; see PORT-ROADMAP.
+
 - **Timed send (`send <msg> [to <object>] in <time>`)** — *shipped (web
   delivery rides the next wasm rebuild)*. LiveCode's idiom, credited: the
   dispatch happens later — `send "refresh" to this card in 2 minutes` makes

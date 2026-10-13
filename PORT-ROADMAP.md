@@ -343,7 +343,22 @@ idiom, don't grow a new syntax class. In order:
    Keyed on `url` so object `title`/`text` properties keep their meaning; pure
    `HTMLPage` extractor in the package. 10 PageReaderTests; suite 721; sweep
    unchanged (48). See EXTENSIONS.md.
-2. **`import picture from url "…"`** — the visual counterpart (app + web).
+2. **`import picture from url` — DONE 2026-10-12:** into an existing image
+   part (asset swap) or bare (new centered part on the current card);
+   `it` = the part's id. App: URLSession behind the url-container consent,
+   ImageIO-validated, stored as a document asset. Web: the part points at
+   the URL (the <img> fetches; RenderPart gained `asset` so live swaps
+   render). Parser claims ONLY the exact `import picture|paint from url`
+   shape — the sweep caught HyperPatterns' own `import paint` handler
+   breaking (48→49) and the where-clause fix restored it (pinned by test).
+   5 tests; suite 773; sweep 48.
+   **Follow-up (new, affects #3 too): web player rendering of
+   runtime-CREATED parts/cards.** The exported player renders from the
+   static stack JSON; parts and cards created by scripts (make a card,
+   scaffolded fields, bare import picture) live in the engine but don't
+   display on the page. Needs a state-driven card renderer (CardState
+   would have to carry full part chrome). Until then, the web-safe forms
+   are the into-existing ones.
 3. **Cards-from-data merge — DONE 2026-10-12:** `make a card [using
    background <ref>]` (scripted creation, appends at end, no navigation,
    `it` = card number) and `make a card for each element of <array> [using
@@ -372,8 +387,16 @@ idiom, don't grow a new syntax class. In order:
    (note: CRLF is ONE Swift Character — handled). Pure `CSVTable` reader.
    5 CSVTests. Suite 740 after #4+#5; sweep unchanged (48, no grammar
    change). See EXTENSIONS.md.
-6. **Field hyperlinks** — `set the link of word 4 of field 1 to card id 12`
-   (or a URL); rides the styleRun machinery, maps to `<a>` in web export.
+6. **Field links — DONE 2026-10-12** (rescoped: rich fields already had
+   Markdown links + the card: scheme; plain fields keep group/clickText):
+   `set the link of <chunk> of field … to <url|card:…|empty>` and
+   `the link of <chunk>` on RICH fields — wrap/retarget/unwrap the
+   Markdown around the chunk (`MarkdownLinks` pure helper; parser
+   whitelist + both hosts' run-property paths; write rides setFieldText).
+   Plus web parity: the player now RENDERS rich fields' Markdown (was raw
+   source!) with a DOM-built subset + theme-accent links, card: → go,
+   web → new tab; player JS node-check verified. 10 tests; suite 768;
+   sweep 48.
 7. **Timed send — DONE 2026-10-12** (LiveCode prior art, credited):
    `send <msg> [to <object>] in <N> [seconds|ticks|minutes]` (bare N =
    seconds; `wait` gained minutes). Everything evaluates at schedule time;

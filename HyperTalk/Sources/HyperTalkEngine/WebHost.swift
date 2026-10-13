@@ -431,6 +431,33 @@ final class WebHost: HyperTalkHost {
                                       afterSeconds: afterSeconds))
     }
 
+    /// `import picture from url …` — the web export points the image part at
+    /// the URL itself (the page's <img> fetches it; session-only, like every
+    /// web-side mutation). Nil target = a new centered image part on the
+    /// current card. Returns the part's id.
+    func importPicture(fromURL url: String, into target: HyperTalkObject?) async throws -> Int {
+        if let target {
+            guard case .part(let kind, let domain, let reference, let onCard) = target, kind == "image" else {
+                throw HostError("'import picture … into' needs an image part, like image \"Photo\".")
+            }
+            let location = try locatePart(kind: "image", domain: domain, reference: reference, onCard: onCard)
+            var part = self.part(at: location)
+            part.kind = .image(ImagePart(assetName: url))
+            setPart(part, at: location)
+            return part.scriptID
+        }
+        let width = min(200.0, stack.cardSize.width - 40)
+        let height = min(150.0, stack.cardSize.height - 40)
+        var part = Part(id: UUID(), name: "",
+                        frame: PartFrame(x: (stack.cardSize.width - width) / 2,
+                                         y: (stack.cardSize.height - height) / 2,
+                                         width: width, height: height),
+                        script: "", kind: .image(ImagePart(assetName: url)))
+        part.scriptID = stack.claimScriptID()
+        stack.cards[cardIndex].parts.append(part)
+        return part.scriptID
+    }
+
     func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }

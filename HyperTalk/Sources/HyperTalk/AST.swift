@@ -120,6 +120,10 @@ indirect enum StmtKind {
     /// array's keys into same-named fields on that card (the merge's fill,
     /// for one existing card).
     case putIntoCard(Expr, CardRef)
+    /// `import picture from url <expr> [into image <ref>]` — fetch an image
+    /// and show it in an image part (no `into` = make a new one on the
+    /// current card). `it` gets the image part's id.
+    case importPicture(url: Expr, into: ObjectExpr?)
     /// `delete [the] [card|bkgnd] picture [of <card>]` — remove the paint
     /// layer (HyperCard: select all + clear picture).
     case deletePicture(background: Bool, card: CardRef?)

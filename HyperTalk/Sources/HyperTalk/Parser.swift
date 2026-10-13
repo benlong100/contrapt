@@ -808,6 +808,22 @@ struct Parser {
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
+        case "import" where (peekIdentifier(1) == "picture" || peekIdentifier(1) == "paint")
+            && peekIdentifier(2) == "from" && peekIdentifier(3) == "url":
+            // `import picture from url <expr> [into image <ref>]` — fetch an
+            // image into an image part (Contrapt web gathering; HyperCard's
+            // Import Paint was menu-only). Any OTHER `import …` shape stays a
+            // plain message send — real stacks (HyperPatterns) call their own
+            // `import paint` XCMD-style handlers, and those must keep working.
+            advance() // import
+            advance() // picture/paint
+            advance() // from
+            advance() // url
+            let address = try parsePrimary()
+            var target: ObjectExpr? = nil
+            if consumeWord("into") { target = try parseObjectExpr() }
+            try expectNewline()
+            return Stmt(kind: .importPicture(url: address, into: target), line: line)
         case "make" where peekIdentifier(1) == "card" || peekIdentifier(1) == "cards"
             || (peekIdentifier(1) == "a" && peekIdentifier(2) == "card"):
             // `make a card [using background <ref>]` — scripted card creation;
@@ -1146,7 +1162,7 @@ struct Parser {
                 // A chunk-of-field target: `set textStyle of line 2 of fld
                 // "X" to bold` — a real per-run style write.
                 index = saved
-                if ["textstyle", "textfont", "textsize"].contains(property.lowercased()),
+                if ["textstyle", "textfont", "textsize", "link"].contains(property.lowercased()),
                    let container = try? parseContainer(line: line),
                    case .chunk = container,
                    peekIdentifier() == "to" {

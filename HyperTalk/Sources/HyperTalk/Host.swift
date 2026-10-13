@@ -424,6 +424,13 @@ public protocol HyperTalkHost: AnyObject {
     /// Returns the new card's 1-based number. Default: throws (a host without
     /// a card model can't make cards).
     func makeCard(background: HyperTalkObject.Reference?) throws -> Int
+    /// `import picture from url … [into image <ref>]` — fetch an image and
+    /// show it in an image part (nil target = make a new one on the current
+    /// card, centered). Returns the image part's id. The app fetches the
+    /// bytes (behind the network-consent prompt) into a document asset; the
+    /// web export points the part at the URL itself and lets the browser's
+    /// <img> do the fetching. Default: throws.
+    func importPicture(fromURL url: String, into target: HyperTalkObject?) async throws -> Int
     /// `send <msg> to <object> in <time>` — a timed send. The message,
     /// arguments, and target are already resolved; the host owns the clock
     /// and dispatches along the target's path when the delay elapses.
@@ -624,6 +631,9 @@ public extension HyperTalkHost {
     func scaffoldBackgroundFields(keys: [String], background: HyperTalkObject.Reference?) throws {}
     func scheduleSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) throws {
         throw HostError("Timed sends aren't available here.")
+    }
+    func importPicture(fromURL url: String, into target: HyperTalkObject?) async throws -> Int {
+        throw HostError("Pictures can't be imported here.")
     }
     func clearPicture(background: Bool, card: GoDestination?) throws {
         throw HostError("Pictures can't be deleted here.")

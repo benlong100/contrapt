@@ -902,6 +902,21 @@ final class Runtime {
             }
             return .normal
 
+        case .importPicture(let urlExpression, let objectExpression):
+            // `import picture from url … [into image <ref>]` — the host does
+            // the fetch (app: bytes behind consent; web: the <img> itself).
+            // `it` gets the image part's id, so `image id it` addresses it.
+            let address = try await evaluate(urlExpression, line: statement.line)
+            var target: HyperTalkObject? = nil
+            if let objectExpression {
+                target = try await resolveObject(objectExpression, line: statement.line)
+            }
+            let partID = try await hostCall(line: statement.line) {
+                try await host.importPicture(fromURL: address, into: target)
+            }
+            setVariable("it", to: String(partID))
+            return .normal
+
         case .deletePicture(let background, let cardRef):
             // `delete [the] card picture` — remove the paint layer.
             let destination = try await resolveCardRef(cardRef, line: statement.line)

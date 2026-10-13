@@ -1254,6 +1254,53 @@ final class DocumentScriptHost: HyperTalkHost {
         }
     }
 
+    /// `import picture from url … [into image <ref>]` — fetch the bytes
+    /// (behind the same per-host consent as the url container), store them
+    /// as a document asset, and point the image part at it. Nil target = a
+    /// new centered image part on the current card. Returns the part's id.
+    func importPicture(fromURL urlString: String, into target: HyperTalkObject?) async throws -> Int {
+        guard let url = URL(string: urlString.trimmingCharacters(in: .whitespaces)),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              let webHost = url.host else {
+            throw HostError("import picture needs a web address, like \"https://example.com/photo.png\".")
+        }
+        guard await isNetworkAllowed(host: webHost) else {
+            throw HostError("\"\(stack.name)\" isn't allowed to connect to \(webHost).")
+        }
+        let data: Data
+        do {
+            (data, _) = try await URLSession.shared.data(from: url)
+        } catch {
+            throw HostError("Couldn't fetch the picture: \(error.localizedDescription)")
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 0 else {
+            throw HostError("That url didn't return a picture.")
+        }
+        let ext = ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(url.pathExtension.lowercased())
+            ? url.pathExtension.lowercased() : "png"
+        let assetName = "imported-\(UUID().uuidString).\(ext)"
+        onAssetWrite(assetName, data)
+        if let target {
+            guard case .part(let kind, let domain, let reference, let onCard) = target, kind == "image" else {
+                throw HostError("'import picture … into' needs an image part, like image \"Photo\".")
+            }
+            let location = try locatePart(kind: "image", domain: domain, reference: reference, onCard: onCard)
+            setKind(.image(ImagePart(assetName: assetName)), at: location)
+            return part(at: location).scriptID
+        }
+        let width = min(200.0, stack.cardSize.width - 40)
+        let height = min(150.0, stack.cardSize.height - 40)
+        var newPart = Part(id: UUID(), name: "",
+                           frame: PartFrame(x: (stack.cardSize.width - width) / 2,
+                                            y: (stack.cardSize.height - height) / 2,
+                                            width: width, height: height),
+                           script: "", kind: .image(ImagePart(assetName: assetName)))
+        newPart.scriptID = stackBinding.wrappedValue.claimScriptID()
+        stackBinding.wrappedValue.cards[cardIndex].parts.append(newPart)
+        return newPart.scriptID
+    }
+
     /// `make a card [using background <ref>]` — append a card at the end of
     /// the stack (nil background = the current card's), without navigating.
     func makeCard(background: HyperTalkObject.Reference?) throws -> Int {
@@ -2695,6 +2742,11 @@ final class DocumentScriptHost: HyperTalkHost {
         guard case .field(let properties) = effectivePart(at: location, cardIndex: cardIndex).kind else {
             throw HostError("That part is not a field.")
         }
+        // `the link of <chunk>` — the Markdown link target covering the
+        // chunk, read from the field's source text.
+        if property == "link" {
+            return MarkdownLinks.link(in: properties.text, at: range)
+        }
         return Self.runProperty(property, text: properties.text, base: properties.format,
                                 runs: properties.styleRuns, range: range)
     }
@@ -2703,6 +2755,18 @@ final class DocumentScriptHost: HyperTalkHost {
         let location = try locatePart(kind: "field", domain: domain, reference: reference, onCard: nil)
         guard case .field(var properties) = effectivePart(at: location, cardIndex: cardIndex).kind else {
             throw HostError("That part is not a field.")
+        }
+        // `set the link of <chunk> … to <url or card:…>` — rewrite the rich
+        // field's Markdown around the chunk (wrap / retarget / unwrap if
+        // empty). The write rides setFieldText so per-card background
+        // content is honored. Plain fields keep the group/clickText idiom.
+        if property == "link" {
+            guard properties.kind == .rich else {
+                throw HostError("Links live in rich text fields — make the field rich first (or use group text and the clickText).")
+            }
+            try setFieldText(reference, domain: domain, onCard: nil,
+                             to: MarkdownLinks.settingLink(in: properties.text, range: range, to: value))
+            return
         }
         let newRuns = try Self.settingRuns(property, to: value, text: properties.text,
                                            base: properties.format, runs: properties.styleRuns,
