@@ -21,3 +21,6 @@ Web Site/Screenshots/
 WasmPlayer/.build/
 WasmPlayer/Package.resolved
 Contrapt/WebEngine.zip
+
+# Local API keys (never commit)
+openAI api key.txt
