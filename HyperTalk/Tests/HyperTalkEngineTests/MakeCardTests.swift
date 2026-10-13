@@ -171,6 +171,47 @@ private let mergeJSON = """
     #expect(try await engine.runMessage("field \"Notes\" of card 4") == "the real engine in a page")
 }
 
+@Test func putArrayIntoThisCardFillsItsFields() async throws {
+    // `put <array> into this card` — the merge's fill for one card: keys
+    // land in same-named fields, unmatched keys are ignored.
+    let engine = try StackEngine(stackJSON: mergeJSON)
+    _ = try await engine.runMessage("go to card 2")
+    _ = try await engine.runMessage("""
+    put "Fresh" into story["Title"]
+    put "stray" into story["Author"]
+    put story into this card
+    """)
+    #expect(try await engine.runMessage("field \"Title\"") == "Fresh")
+    #expect(engine.cardCount == 2)
+}
+
+@Test func putArrayIntoAnotherCardByNumber() async throws {
+    let engine = try StackEngine(stackJSON: mergeJSON)
+    _ = try await engine.runMessage("""
+    put "From afar" into story["Notes"]
+    put story into card 2
+    """)
+    #expect(try await engine.runMessage("field \"Notes\" of card 2") == "From afar")
+    // Still on card 1 — filling doesn't navigate.
+    #expect(try await engine.runMessage("the name of this card") == "Home")
+}
+
+@Test func putNonArrayIntoCardErrors() async throws {
+    let engine = try StackEngine(stackJSON: mergeJSON)
+    await #expect(throws: (any Error).self) {
+        _ = try await engine.runMessage("put \"plain text\" into this card")
+    }
+}
+
+@Test func putIntoCardFieldStaysAFieldWrite() async throws {
+    // The card target only claims a BARE card ref ending the line —
+    // `put … into card field …` keeps its part meaning.
+    let engine = try StackEngine(stackJSON: mergeJSON)
+    _ = try await engine.runMessage("go to card 2")
+    _ = try await engine.runMessage("put \"direct\" into field \"Notes\"")
+    #expect(try await engine.runMessage("field \"Notes\"") == "direct")
+}
+
 private let makeHandlerJSON = """
 {
   "formatVersion": 1,

@@ -34,7 +34,10 @@ nonisolated enum WebFeed {
         return allMatches("(?is)<entry\\b[^>]*>(.*?)</entry>", in: xml)
     }
 
-    /// One item's fields as an encoded array.
+    /// One item's fields as an encoded array: the four normalized keys
+    /// first, then any OTHER simple tags the feed carries (author, category,
+    /// dc:creator → "creator", …) so nothing a feed offers is thrown away —
+    /// `the keys of items[1]` shows what this particular feed provides.
     private static func item(_ block: String) -> String {
         let title = plainText(firstTag(["title"], in: block))
         let date = plainText(firstTag(["pubDate", "published", "updated", "dc:date"], in: block))
@@ -42,12 +45,48 @@ nonisolated enum WebFeed {
         // way `the text of url` reads a page.
         let body = HTMLPage.text(of: unwrapCDATA(firstTag(
             ["description", "summary", "content:encoded", "content"], in: block)))
-        return HyperTalkArray.encode([
+        var pairs: [(key: String, value: String)] = [
             (key: "title", value: title),
             (key: "link", value: link(in: block)),
             (key: "date", value: date),
             (key: "text", value: body),
-        ])
+        ]
+        for extra in extraTags(in: block) where !pairs.contains(where: {
+            $0.key.caseInsensitiveCompare(extra.key) == .orderedSame
+        }) {
+            pairs.append(extra)
+        }
+        return HyperTalkArray.encode(pairs)
+    }
+
+    /// The tags already folded into the normalized four — their local names
+    /// never become extra keys.
+    private static let normalizedTags: Set<String> = [
+        "title", "link", "pubdate", "published", "updated", "date",
+        "description", "summary", "content", "encoded",
+    ]
+
+    /// Every other simple `<tag>text</tag>` child, keyed by its local name
+    /// (namespace prefix dropped: `dc:creator` → "creator"), first value
+    /// wins, empties skipped — a feed's author/category/guid come through.
+    private static func extraTags(in block: String) -> [(key: String, value: String)] {
+        guard let regex = try? NSRegularExpression(
+            pattern: "(?is)<([a-zA-Z][\\w:.-]*)\\b[^>]*>(.*?)</\\1>") else { return [] }
+        var found: [(key: String, value: String)] = []
+        let range = NSRange(block.startIndex..., in: block)
+        regex.enumerateMatches(in: block, range: range) { match, _, _ in
+            guard let match,
+                  let nameRange = Range(match.range(at: 1), in: block),
+                  let innerRange = Range(match.range(at: 2), in: block) else { return }
+            let name = String(block[nameRange])
+            let local = (name.split(separator: ":").last.map(String.init) ?? name).lowercased()
+            guard !normalizedTags.contains(local),
+                  !found.contains(where: { $0.key == local }) else { return }
+            let value = plainText(String(block[innerRange]))
+            guard !value.isEmpty else { return }
+            found.append((key: local, value: value))
+        }
+        return found
     }
 
     /// RSS puts the URL in `<link>…</link>`; Atom in `<link href="…"/>`

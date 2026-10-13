@@ -116,6 +116,10 @@ indirect enum StmtKind {
     /// card, `it` = its number); with `for each element of <array>`, one card
     /// per element, fields filled by key name (`it` = how many were made).
     case makeCards(data: Expr?, background: Expr?, backgroundIsID: Bool)
+    /// `put <array> into [this] card` / `into card 3` — distribute the
+    /// array's keys into same-named fields on that card (the merge's fill,
+    /// for one existing card).
+    case putIntoCard(Expr, CardRef)
     /// `delete [the] [card|bkgnd] picture [of <card>]` — remove the paint
     /// layer (HyperCard: select all + clear picture).
     case deletePicture(background: Bool, card: CardRef?)

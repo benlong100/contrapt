@@ -358,7 +358,11 @@ idiom, don't grow a new syntax class. In order:
    gets one bg field per data key via host hook
    `scaffoldBackgroundFields(keys:background:)` (no-op default; WebHost +
    DocumentScriptHost); designed backgrounds untouched. +2 tests; suite
-   742; sweep 48.
+   742; sweep 48. **One-card fill added 2026-10-12** (Ben: RSS into
+   specific fields on ONE card): `put <array> into [this] card / card N`
+   — the merge's fill as a put target (StmtKind.putIntoCard, reuses
+   parseDeletableCardRef + setFieldText(onCard:); no new host surface).
+   +4 tests; suite 746; sweep 48.
 4. **Feeds — DONE 2026-10-12:** `FeedItems(url "…")` (function-level, like
    JSONDecode) — RSS 2.0 + Atom → elements with title/link/date/text keys,
    the exact shape #3 fills fields from. Pure `WebFeed` reader in the

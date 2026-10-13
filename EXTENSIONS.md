@@ -83,6 +83,13 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   so `make a card for each element of FeedItems(url "…")` works with zero
   setup. A background that already has any field is never touched: the
   author's design wins, and unmatched keys are ignored as before.
+  **One-card fill (`put <array> into [this] card`):** the same fill without
+  making a card — `put stories[1] into this card` / `into card 3`
+  distributes the array's keys into same-named fields on that card
+  (unmatched keys ignored; no navigation; a non-array errors). Only a bare
+  card ref ending the line is a card target, so `put x into card field 1`
+  keeps its field meaning. The dashboard idiom: one designed card, fields
+  named after the feed's keys, refreshed with two readable lines.
 
 - **Feed and table readers (`FeedItems(…)`, `CSVItems(…)`)** — *shipped*.
   Function-level (like `JSONDecode` — no new grammar), returning the same
@@ -90,7 +97,12 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   `FeedItems(url "…")` parses RSS 2.0 and Atom into items with the keys
   `title`/`link`/`date`/`text` (CDATA unwrapped, the body read like `the
   text of url` — HTML stripped, entities decoded; Atom link prefers
-  `rel="alternate"`). `CSVItems(url "…")` parses comma-separated tables:
+  `rel="alternate"`), **plus whatever other simple tags the feed carries**
+  (`author`, `category`, `guid`, `dc:creator` → `creator`, … — keyed by
+  local name, first value wins). Discovery is a message-box one-liner, no
+  menu needed: `the keys of FeedItems(url "…")[1]` lists what a particular
+  feed provides, one per line (same recipe for `CSVItems` headers and
+  `JSONDecode` shapes; a bare `items[1]` shows the whole item as JSON). `CSVItems(url "…")` parses comma-separated tables:
   the header row names the keys (blank → "column N", duplicates suffixed),
   each data row is one element; quoted fields carry commas, newlines, and
   `""` quotes. A feed is practically a background waiting for cards:

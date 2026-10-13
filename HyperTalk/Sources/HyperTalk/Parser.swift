@@ -1245,6 +1245,20 @@ struct Parser {
             return Stmt(kind: .noOp, line: line)
         }
 
+        // `put <array> into [this] card` / `into card 3` — distribute the
+        // array's keys into same-named fields on that card (the merge's
+        // fill, for one card). Only a bare card ref ENDING the line is a
+        // card target: `put x into card field 1` keeps its field meaning.
+        if mode == .into {
+            let saved = index
+            if let cardRef = (try? parseDeletableCardRef()) ?? nil,
+               current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .putIntoCard(value, cardRef), line: line)
+            }
+            index = saved
+        }
+
         let container = try parseContainer(line: line)
         try expectNewline()
         return Stmt(kind: .put(value, mode, container), line: line)

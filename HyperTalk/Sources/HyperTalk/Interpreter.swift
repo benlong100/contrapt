@@ -889,6 +889,19 @@ final class Runtime {
             }
             return .normal
 
+        case .putIntoCard(let valueExpression, let cardRef):
+            // `put <array> into this card` — each key fills the same-named
+            // field (unmatched keys are ignored, like the merge's fill).
+            let value = try await evaluate(valueExpression, line: statement.line)
+            guard let fields = HyperTalkArray.decode(value) else {
+                throw ScriptError(line: statement.line, message: "'put … into a card' needs an array — its keys fill same-named fields.")
+            }
+            let destination = try await resolveCardRef(cardRef, line: statement.line)
+            for (key, fieldValue) in fields {
+                try? host.setFieldText(.named(key), domain: .any, onCard: destination, to: Self.displayValue(fieldValue))
+            }
+            return .normal
+
         case .deletePicture(let background, let cardRef):
             // `delete [the] card picture` — remove the paint layer.
             let destination = try await resolveCardRef(cardRef, line: statement.line)
