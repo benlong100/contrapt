@@ -69,6 +69,34 @@ let interaction = EngineInteraction(
             }
             _ = JSObject.global.setTimeout.function?(timer, seconds * 1000)
         }
+    },
+    // `url` / `post` / `delete url` ride the player's fetch helper
+    // (window.ContraptHttp — honors CORS and the script's timeout). Mirrors
+    // how answer/ask bind to window.ContraptDialogs.
+    httpRequest: { method, url, body, headers, timeout in
+        let global = JSObject.global
+        guard let http = global.ContraptHttp.object, let request = http.request.function else {
+            return ("", 0, [:], "Networking isn't available here.")
+        }
+        let headersObject = global.Object.function!.new()
+        for (name, value) in headers { headersObject[name] = .string(value) }
+        let call = request(this: http, method, url, body ?? JSValue.null, headersObject, timeout)
+        guard let promise = JSPromise(from: call),
+              let value = try? await promise.value, let reply = value.object else {
+            return ("", 0, [:], "The page's network helper failed.")
+        }
+        var responseHeaders: [String: String] = [:]
+        if let headersValue = reply.headers.object,
+           let names = global.Object.object?.keys.function?(headersValue).object {
+            let count = Int(names.length.number ?? 0)
+            for index in 0..<count {
+                if let name = names[index].string, let headerValue = headersValue[name].string {
+                    responseHeaders[name] = headerValue
+                }
+            }
+        }
+        let error = reply.error.isNull ? nil : reply.error.string
+        return (reply.body.string ?? "", Int(reply.status.number ?? 0), responseHeaders, error)
     }
 )
 
@@ -93,7 +121,11 @@ func installEngine() {
 
     let engine: StackEngine
     do {
-        engine = try StackEngine(stackJSON: Data(jsonString.utf8), interaction: interaction)
+        // `stackData` persistence: the page seeds window.__STACK_DATA__ from
+        // localStorage; `persist` effects flush writes back (player.js).
+        let persisted = global.__STACK_DATA__.string ?? ""
+        engine = try StackEngine(stackJSON: Data(jsonString.utf8), interaction: interaction,
+                                 persistentData: persisted)
     } catch {
         _ = global.console.object?.error.function?("ContraptEngine: couldn't load the stack: \(error)")
         return
