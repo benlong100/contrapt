@@ -458,6 +458,26 @@ final class WebHost: HyperTalkHost {
         return part.scriptID
     }
 
+    /// A clicked checkbox/radio flips its hilite — HyperCard's checked state,
+    /// applied before mouseUp dispatches (mirrors the app's CardView). Other
+    /// styles and non-buttons are untouched.
+    func toggleHiliteIfToggleStyle(partScriptID id: Int) {
+        let card = stack.cards[currentIndex]
+        if let index = card.parts.firstIndex(where: { $0.scriptID == id }),
+           case .button(var button) = card.parts[index].kind,
+           button.style == .checkbox || button.style == .radio {
+            button.hilite.toggle()
+            stack.cards[currentIndex].parts[index].kind = .button(button)
+            return
+        }
+        guard let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+              let index = stack.backgrounds[backgroundIndex].parts.firstIndex(where: { $0.scriptID == id }),
+              case .button(var button) = stack.backgrounds[backgroundIndex].parts[index].kind,
+              button.style == .checkbox || button.style == .radio else { return }
+        button.hilite.toggle()
+        stack.backgrounds[backgroundIndex].parts[index].kind = .button(button)
+    }
+
     func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }

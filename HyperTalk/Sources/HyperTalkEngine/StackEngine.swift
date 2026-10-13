@@ -61,6 +61,9 @@ public final class StackEngine {
                 host.clickText = clickText ?? ""
             }
         }
+        // A checkbox/radio click flips its hilite (the checked state) before
+        // the message dispatches — exactly the app's CardView order.
+        host.toggleHiliteIfToggleStyle(partScriptID: partScriptID)
         return try await send("mouseUp", toPartWithScriptID: partScriptID)
     }
 
