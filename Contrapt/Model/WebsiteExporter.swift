@@ -325,7 +325,7 @@ extension WebsiteExporter {
       function renderMarkdown(el, text) {
         el.textContent = '';
         el.dataset.md = text || '';
-        String(text || '').split('\n').forEach(line => {
+        String(text || '').split('\\n').forEach(line => {
           const row = document.createElement('div');
           let body = line;
           const heading = line.match(/^(#{1,3})\\s+(.*)$/);
