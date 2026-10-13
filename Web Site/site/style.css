@@ -255,6 +255,12 @@ code {
 .feature.reverse .feature-text { order: 2; }
 .feature.reverse figure { order: 1; }
 
+/* A code card in a feature column holds wide, non-wrapping lines. Without
+   this, the grid item's default min-width:auto lets that content expand the
+   track past its fr share and crush the text column — so pin it to 0 and let
+   the pre's own overflow-x scroll. */
+.feature .talk-script { min-width: 0; }
+
 .feature h3 {
   font-size: clamp(26px, 3.5vw, 34px);
   font-weight: 600;
