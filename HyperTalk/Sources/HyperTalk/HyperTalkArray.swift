@@ -102,7 +102,11 @@ enum HyperTalkArray {
             return encode(array.enumerated().map { (key: String($0.offset + 1), value: encodeJSONNode($0.element)) })
         }
         if let number = object as? NSNumber {
-            if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue ? "true" : "false" }
+            // A JSON true/false parses to an NSNumber whose objCType is "c"
+            // (a char) on EVERY platform — CFBoolean on Darwin, corelibs
+            // elsewhere. CFGetTypeID doesn't exist off-Darwin (wasm/Linux),
+            // so the objCType is the portable discriminator.
+            if String(cString: number.objCType) == "c" { return number.boolValue ? "true" : "false" }
             return Value.string(from: number.doubleValue)
         }
         if let string = object as? String { return string }
