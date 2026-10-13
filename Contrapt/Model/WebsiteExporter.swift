@@ -135,7 +135,17 @@ extension WebsiteExporter {
       .field.rectangle { border: 1px solid var(--border); }
       .field.shadow { border: 1px solid var(--border); box-shadow: 3px 3px 0 rgba(0,0,0,.5); }
       .button { display: flex; align-items: center; justify-content: center;
-        gap: 4px; text-align: center; }
+        gap: 4px; text-align: center; cursor: pointer;
+        -webkit-user-select: none; user-select: none; }
+      /* Checkbox/radio: a glyph box before the title; hilite fills it
+         (checked) instead of inverse-video. */
+      .button .toggle { width: .8em; height: .8em; border: 1.5px solid currentColor;
+        flex: none; position: relative; box-sizing: border-box; }
+      .button.radio .toggle { border-radius: 50%; }
+      .button.checkbox.hilite, .button.radio.hilite { background: transparent; color: var(--ink); }
+      .button.hilite .toggle::after { content: ''; position: absolute; inset: 2px;
+        background: currentColor; }
+      .button.radio .toggle::after { border-radius: 50%; }
       .button.rectangle, .button.shadow { border: 1px solid var(--border); }
       .button.roundRect { border: 1px solid var(--border); border-radius: 8px; }
       .button.opaque { background: var(--surface); }
@@ -482,6 +492,16 @@ extension WebsiteExporter {
           if (b.borderColor) d.style.borderColor = b.borderColor;
           if (b.textColor && !b.hilite) d.style.color = b.textColor;
           styleText(d, b.format);
+          // Button titles center whatever the text format says (as the app
+          // renders them); checkbox/radio lay out left with a glyph box.
+          const isToggle = b.style === 'checkbox' || b.style === 'radio';
+          d.style.justifyContent = isToggle ? 'flex-start' : 'center';
+          d.style.textAlign = isToggle ? 'left' : 'center';
+          if (isToggle) {
+            const box = document.createElement('span');
+            box.className = 'toggle';
+            d.appendChild(box);
+          }
           if (b.iconAsset) {
             const im = document.createElement('img');
             im.className = 'icon'; im.src = 'assets/' + b.iconAsset;
@@ -493,7 +513,8 @@ extension WebsiteExporter {
             d.appendChild(missingIconBox());
           }
           if (b.showName !== false && b.title) {
-            const t = document.createElement('span'); t.textContent = b.title;
+            const t = document.createElement('span'); t.className = 'title';
+            t.textContent = b.title;
             d.appendChild(t);
           }
         } else if (p.type === 'label') {
@@ -727,7 +748,8 @@ extension WebsiteExporter {
             }
           } else if (rp.kind === 'button') {
             el.classList.toggle('hilite', !!rp.hilite);
-            const span = el.querySelector('span');
+            // .title specifically — a checkbox's first span is its glyph box.
+            const span = el.querySelector('span.title');
             if (span) span.textContent = rp.text || '';
           }
         });
