@@ -458,24 +458,79 @@ final class WebHost: HyperTalkHost {
         return part.scriptID
     }
 
-    /// A clicked checkbox/radio flips its hilite — HyperCard's checked state,
-    /// applied before mouseUp dispatches (mirrors the app's CardView). Other
-    /// styles and non-buttons are untouched.
+    /// Click-state semantics, applied before mouseUp dispatches (mirroring
+    /// the app's CardView): a button in a FAMILY (autoHilite) hilites and
+    /// clears its same-layer family siblings — HyperCard's radio group; a
+    /// family-less checkbox/radio flips its checked state. Card and
+    /// background families are distinct namespaces.
     func toggleHiliteIfToggleStyle(partScriptID id: Int) {
         let card = stack.cards[currentIndex]
         if let index = card.parts.firstIndex(where: { $0.scriptID == id }),
-           case .button(var button) = card.parts[index].kind,
-           button.style == .checkbox || button.style == .radio {
-            button.hilite.toggle()
-            stack.cards[currentIndex].parts[index].kind = .button(button)
+           case .button(let button) = card.parts[index].kind {
+            applyClickHilite(to: &stack.cards[currentIndex].parts, at: index, button: button)
             return
         }
         guard let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
               let index = stack.backgrounds[backgroundIndex].parts.firstIndex(where: { $0.scriptID == id }),
-              case .button(var button) = stack.backgrounds[backgroundIndex].parts[index].kind,
-              button.style == .checkbox || button.style == .radio else { return }
-        button.hilite.toggle()
-        stack.backgrounds[backgroundIndex].parts[index].kind = .button(button)
+              case .button(let button) = stack.backgrounds[backgroundIndex].parts[index].kind else { return }
+        applyClickHilite(to: &stack.backgrounds[backgroundIndex].parts, at: index, button: button)
+    }
+
+    private func applyClickHilite(to parts: inout [Part], at index: Int, button: ButtonPart) {
+        if button.family > 0, button.autoHilite {
+            for i in parts.indices {
+                guard case .button(var sibling) = parts[i].kind, sibling.family == button.family else { continue }
+                sibling.hilite = (i == index)
+                parts[i].kind = .button(sibling)
+            }
+        } else if button.style == .checkbox || button.style == .radio {
+            var flipped = button
+            flipped.hilite.toggle()
+            parts[index].kind = .button(flipped)
+        }
+    }
+
+
+    /// `the selectedButton of family N` — the hilited member on the layer
+    /// (bare/card-qualified = the card layer; bkgnd-qualified = background),
+    /// as "card button <n>" / "bkgnd button <n>" by button number. Card and
+    /// background families are distinct namespaces (HyperCard Help's rule).
+    func selectedButtonOfFamily(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> String {
+        guard family > 0, let layer = familyLayer(domain: domain, onCard: onCard) else { return "" }
+        var buttonNumber = 0
+        for part in layer.parts {
+            guard case .button(let button) = part.kind else { continue }
+            buttonNumber += 1
+            if button.family == family, button.hilite {
+                return "\(layer.isBackground ? "bkgnd" : "card") button \(buttonNumber)"
+            }
+        }
+        return ""
+    }
+
+    func familyExists(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> Bool {
+        guard family > 0, let layer = familyLayer(domain: domain, onCard: onCard) else { return false }
+        return layer.parts.contains { part in
+            if case .button(let button) = part.kind { return button.family == family }
+            return false
+        }
+    }
+
+    private func familyLayer(domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> (parts: [Part], isBackground: Bool)? {
+        let index: Int
+        if let onCard {
+            guard let resolved = try? resolveCardIndex(onCard) else { return nil }
+            index = resolved
+        } else {
+            index = cardIndex
+        }
+        guard stack.cards.indices.contains(index) else { return nil }
+        let card = stack.cards[index]
+        if domain == .background {
+            guard let background = stack.backgrounds.first(where: { $0.id == card.backgroundID }) else { return nil }
+            return (background.parts, true)
+        }
+        return (card.parts, false)
     }
 
     func resolveCardIndex(_ destination: GoDestination) throws -> Int {

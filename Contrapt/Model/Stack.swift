@@ -492,6 +492,10 @@ nonisolated struct ButtonPart: Hashable {
     var fillColor: String? = nil
     var borderColor: String? = nil
     var textColor: String? = nil
+    /// HyperCard button family (1–15; 0 = none): clicking an autoHilite
+    /// member hilites it and clears the others on the same layer — the
+    /// radio-group mechanism. Card and background families are distinct.
+    var family: Int = 0
 
     init(title: String, showName: Bool = true, autoHilite: Bool = true,
          style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat(),
@@ -515,7 +519,7 @@ nonisolated struct ButtonPart: Hashable {
 
 /// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol, iconMissing, iconID, fillColor, borderColor, textColor }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol, iconMissing, iconID, fillColor, borderColor, textColor, family }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -532,6 +536,7 @@ extension ButtonPart: Codable {
         fillColor = try container.decodeIfPresent(String.self, forKey: .fillColor)
         borderColor = try container.decodeIfPresent(String.self, forKey: .borderColor)
         textColor = try container.decodeIfPresent(String.self, forKey: .textColor)
+        family = try container.decodeIfPresent(Int.self, forKey: .family) ?? 0
     }
 }
 

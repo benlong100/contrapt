@@ -682,6 +682,11 @@ final class Runtime {
                 _ = try await evaluate(valueExpression, line: statement.line)
                 return .normal
             }
+            if case .family = objectExpression {
+                // Nothing about a family is settable; accept and ignore, as
+                // the old absent-object behavior did.
+                return .normal
+            }
             if case .window(let nameExpression) = objectExpression {
                 // Window properties go to the host — `set the rect of card
                 // window` crops the card viewport (the Hacker Crackdown's
@@ -2046,6 +2051,16 @@ final class Runtime {
                                          domain: resolved.domain, range: resolved.range)
             }
         case .property(let property, let objectExpression):
+            if case .family(let numberExpression, let domain, let cardRef) = objectExpression {
+                // `the selectedButton of family N [of <card>]` — the hilited
+                // member, as "card button <n>" / "bkgnd button <n>"; empty
+                // when none (or on hosts without a card model). Other family
+                // properties read empty, as the old absent-object did.
+                guard property == "selectedbutton" else { return "" }
+                let number = try Value.number(from: try await evaluate(numberExpression, line: line), line: line)
+                let destination = try await resolveCardRef(cardRef, line: line)
+                return host.selectedButtonOfFamily(Int(number), domain: domain, onCard: destination)
+            }
             if case .messageBox = objectExpression {
                 // Contrapt doesn't model the message box's properties; its
                 // visibility reads false (hidden until a `put` shows it).
@@ -2332,6 +2347,14 @@ final class Runtime {
                 var exists = false
                 if let menuIdx = menuIndex(named: name, in: menus),
                    let _ = try await menuItemIndex(selector, in: menus[menuIdx], line: line) { exists = true }
+                return (negated ? !exists : exists) ? "true" : "false"
+            }
+            if case .family(let numberExpression, let domain, let cardRef) = objectExpression {
+                // `there is a family 3` — true when its selectedButton read
+                // could ever answer: any same-layer button carries the number.
+                let number = try Value.number(from: try await evaluate(numberExpression, line: line), line: line)
+                let destination = try await resolveCardRef(cardRef, line: line)
+                let exists = host.familyExists(Int(number), domain: domain, onCard: destination)
                 return (negated ? !exists : exists) ? "true" : "false"
             }
             if case .window(let nameExpression) = objectExpression {
@@ -2680,6 +2703,10 @@ final class Runtime {
 
     private func resolveObject(_ object: ObjectExpr, line: Int) async throws -> HyperTalkObject {
         switch object {
+        case .family:
+            // Reached only if a family is used somewhere other than a property
+            // get/set or existence test (all short-circuit) — not addressable.
+            throw ScriptError(line: line, message: "A button family isn't an object — read the selectedButton of family N.")
         case .part(let kind, let domain, let nameExpression, let card):
             return .part(kind: kind, domain: domain,
                          reference: reference(from: try await evaluate(nameExpression, line: line)),

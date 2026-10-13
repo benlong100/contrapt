@@ -1254,6 +1254,49 @@ final class DocumentScriptHost: HyperTalkHost {
         }
     }
 
+
+    /// `the selectedButton of family N` — the hilited member on the layer
+    /// (bare/card-qualified = the card layer; bkgnd-qualified = background),
+    /// as "card button <n>" / "bkgnd button <n>" by button number. Card and
+    /// background families are distinct namespaces (HyperCard Help's rule).
+    func selectedButtonOfFamily(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> String {
+        guard family > 0, let layer = familyLayer(domain: domain, onCard: onCard) else { return "" }
+        var buttonNumber = 0
+        for part in layer.parts {
+            guard case .button(let button) = part.kind else { continue }
+            buttonNumber += 1
+            if button.family == family, button.hilite {
+                return "\(layer.isBackground ? "bkgnd" : "card") button \(buttonNumber)"
+            }
+        }
+        return ""
+    }
+
+    func familyExists(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> Bool {
+        guard family > 0, let layer = familyLayer(domain: domain, onCard: onCard) else { return false }
+        return layer.parts.contains { part in
+            if case .button(let button) = part.kind { return button.family == family }
+            return false
+        }
+    }
+
+    private func familyLayer(domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> (parts: [Part], isBackground: Bool)? {
+        let index: Int
+        if let onCard {
+            guard let resolved = try? resolveCardIndex(onCard) else { return nil }
+            index = resolved
+        } else {
+            index = cardIndex
+        }
+        guard stack.cards.indices.contains(index) else { return nil }
+        let card = stack.cards[index]
+        if domain == .background {
+            guard let background = stack.backgrounds.first(where: { $0.id == card.backgroundID }) else { return nil }
+            return (background.parts, true)
+        }
+        return (card.parts, false)
+    }
+
     /// `import picture from url … [into image <ref>]` — fetch the bytes
     /// (behind the same per-host consent as the url container), store them
     /// as a document asset, and point the image part at it. Nil target = a
@@ -2415,6 +2458,9 @@ final class DocumentScriptHost: HyperTalkHost {
         case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.autoHilite ? "true" : "false"
+        case "family":
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return String(properties.family)
         case "style":
             switch part.kind {
             case .button(let properties): return properties.style.rawValue
@@ -2547,6 +2593,13 @@ final class DocumentScriptHost: HyperTalkHost {
         case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.autoHilite = try boolean(value, for: property)
+            part.kind = .button(properties)
+        case "family":
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            guard let family = Int(value.trimmingCharacters(in: .whitespaces)), (0...15).contains(family) else {
+                throw HostError("The family of a button is a number from 0 to 15.")
+            }
+            properties.family = family
             part.kind = .button(properties)
         case "style":
             switch part.kind {

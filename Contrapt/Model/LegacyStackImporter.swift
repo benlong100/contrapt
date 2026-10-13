@@ -476,6 +476,7 @@ enum LegacyStackImporter {
             // the view shows a label/placeholder rather than nothing.
             button.iconMissing = raw.iconID != 0 && iconAsset == nil
             button.iconID = raw.iconID
+            button.family = raw.family
             kind = .button(button)
         case .field:
             var field = FieldPart(text: "", placeholder: "", isMultiline: true, format: format)
@@ -669,6 +670,9 @@ private extension LegacyStackImporter {
         /// Field "Wide Margins" (+0x0E, 0x20 — a button's autoHilite bit).
         var wideMargins: Bool
         var iconID: Int
+        /// Button family (low nibble of the +0x0E flag byte; 0 = none) — the
+        /// radio-group mechanism (card and background families are distinct).
+        var family: Int
         var visible: Bool
         var textAlign: Int
         var fontID: Int
@@ -1126,6 +1130,7 @@ private extension LegacyStackImporter {
                            multipleLines: (d[o + 0x0E] & 0x10) != 0,
                            wideMargins: (d[o + 0x0E] & 0x20) != 0,
                            iconID: i16(o + 0x12),
+                           family: Int(d[o + 0x0E] & 0x0F),
                            visible: (d[o + 5] & 0x80) == 0,
                            textAlign: i16(o + 0x14), fontID: i16(o + 0x16),
                            textSize: i16(o + 0x18), textStyleBits: Int(d[o + 0x1A]),

@@ -130,6 +130,9 @@ extension WebHost {
         case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.autoHilite ? "true" : "false"
+        case "family":
+            guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return String(p.family)
         case "style":
             switch part.kind {
             case .button(let p): return p.style.rawValue
@@ -242,6 +245,12 @@ extension WebHost {
         case "autohilite", "autohilight", "autohighlight", "autohighlite":
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             p.autoHilite = try boolean(value, for: property); part.kind = .button(p)
+        case "family":
+            guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            guard let family = Int(value.trimmingCharacters(in: .whitespaces)), (0...15).contains(family) else {
+                throw HostError("The family of a button is a number from 0 to 15.")
+            }
+            p.family = family; part.kind = .button(p)
         case "style":
             switch part.kind {
             case .button(var p):

@@ -534,6 +534,10 @@ indirect enum ObjectExpr {
     /// "X"`, `set the loc of window "AddColor" to …`) import and run: the
     /// property reads empty and setting it is a no-op.
     case window(Expr)
+    /// `family <n> [of <card>]`, optionally layer-qualified (`bkgnd family
+    /// 9`) — HyperCard's button radio groups. Read via `the selectedButton
+    /// of family …`; sets are accepted no-ops (nothing settable).
+    case family(number: Expr, domain: HyperTalkObject.PartDomain, card: CardRef?)
     /// `last cd btn`, `middle field`, `any button` — a part by a positional
     /// keyword (`first`…`tenth` are exact and parse to `.part` with a numeric
     /// index instead). Resolved against the live count when evaluated.

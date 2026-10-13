@@ -122,6 +122,8 @@ struct ButtonPart: Codable, Hashable {
     var fillColor: String?
     var borderColor: String?
     var textColor: String?
+    /// HyperCard button family (1–15; 0 = none) — the radio-group mechanism.
+    var family: Int = 0
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -136,6 +138,7 @@ struct ButtonPart: Codable, Hashable {
         fillColor = try c.decodeIfPresent(String.self, forKey: .fillColor)
         borderColor = try c.decodeIfPresent(String.self, forKey: .borderColor)
         textColor = try c.decodeIfPresent(String.self, forKey: .textColor)
+        family = try c.decodeIfPresent(Int.self, forKey: .family) ?? 0
     }
 }
 

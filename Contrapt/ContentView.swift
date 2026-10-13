@@ -228,6 +228,30 @@ struct ContentView: View {
         )
     }
 
+    /// HyperCard button families: clicking an autoHilite member leaves it
+    /// hilited (CardView set it) and clears every OTHER same-family button on
+    /// the same layer. Card and background families are distinct.
+    private func clearFamilySiblings(of part: Part) {
+        guard case .button(let button) = part.kind, button.family > 0, button.autoHilite else { return }
+        func clear(_ parts: inout [Part]) {
+            for index in parts.indices where parts[index].id != part.id {
+                guard case .button(var sibling) = parts[index].kind,
+                      sibling.family == button.family else { continue }
+                sibling.hilite = false
+                parts[index].kind = .button(sibling)
+            }
+        }
+        let cardIndex = currentCardIndex
+        guard document.stack.cards.indices.contains(cardIndex) else { return }
+        if document.stack.cards[cardIndex].parts.contains(where: { $0.id == part.id }) {
+            clear(&document.stack.cards[cardIndex].parts)
+        } else if let backgroundIndex = document.stack.backgrounds.firstIndex(where: {
+            $0.id == document.stack.cards[cardIndex].backgroundID
+        }) {
+            clear(&document.stack.backgrounds[backgroundIndex].parts)
+        }
+    }
+
     /// The Flash XCMD: invert the card `times` times via the overlay. Each
     /// pulse is a brief on/off, serialized in one task.
     private func flashScreen(times: Int) {
@@ -1583,6 +1607,10 @@ struct ContentView: View {
     }
 
     private func sendMouseMessage(_ message: String, to part: Part?) {
+        // HyperCard button families: the clicked member hilited in CardView;
+        // its same-layer family siblings clear here, before the mouseUp
+        // handler runs (so scripts read the settled state).
+        if message == "mouseUp", let part { clearFamilySiblings(of: part) }
         // A click on a locked field records `the clickLine`/`the clickText`
         // before its mouseUp runs. The gesture computed the raw hit; the
         // layer qualifier (card vs bkgnd) is decided here.

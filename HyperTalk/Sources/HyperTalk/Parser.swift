@@ -2672,19 +2672,23 @@ struct Parser {
                 ? .stringLiteral("") : try parsePrimary()
             return .file(path)
         }
-        // Button families (HyperCard's radio-button grouping) aren't modeled, so
-        // `family N` resolves to an absent object — `the selectedButton of
-        // family 1` reads empty — letting stacks that use families import and
-        // run. Reuses the window case's absent-object behavior.
-        if peekIdentifier() == "family" {
-            advance()
-            _ = consumeWord("id")
-            let name: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
-                ? .stringLiteral("") : try parsePrimary()
-            // `selectedButton of family 1 of first card` — a family scoped to a
-            // card. Still unmodeled; consume and ignore the owning card.
-            if consumeWord("of") { _ = try? parseObjectExpr() }
-            return .window(name)
+        // Button families (HyperCard's radio groups) — `the selectedButton of
+        // family 1 [of card 1]`, optionally layer-qualified (`bkgnd family
+        // 9`; card and background families are distinct namespaces).
+        if peekIdentifier() == "family"
+            || ((peekIdentifier().map { Self.cardWords.contains($0) || Self.backgroundWords.contains($0) } ?? false)
+                && peekIdentifier(1) == "family") {
+            var familyDomain = HyperTalkObject.PartDomain.any
+            if let w = peekIdentifier(), Self.cardWords.contains(w), peekIdentifier(1) == "family" {
+                advance(); familyDomain = .card
+            } else if let w = peekIdentifier(), Self.backgroundWords.contains(w), peekIdentifier(1) == "family" {
+                advance(); familyDomain = .background
+            }
+            advance() // family
+            let number: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
+                ? .numberLiteral(0) : try parsePrimary()
+            let cardScope = parsePartScopeIfPresent()
+            return .family(number: number, domain: familyDomain, card: cardScope)
         }
 
         // A leading ordinal before `menuItem` — `last menuItem of menu 3`,

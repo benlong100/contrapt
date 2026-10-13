@@ -330,6 +330,20 @@ Phase A — the substrate (do first):
      from `window.__STACK_DATA__`; just rebuild WebEngine.zip. *Optional multi-user / a shared cross-
      stack area deferred (the roadmap's "then optional multi-user").*
 
+**Button families — DONE 2026-10-13** (evidence-first: corpus scan found
+6 stacks with family buttons incl. Apple's What is HyperCard?, New
+Features — which reads `selectedButton of family 1 of card 1` — and
+HyperCard Help, whose prose pins the rules). Model `family` 0–15 on both
+ButtonParts; imported from the part flag byte's low nibble (+0x0E);
+clicking an autoHilite member hilites it and clears same-layer,
+same-family siblings (card/bkgnd namespaces distinct; family-less
+toggles keep flipping); `the family of button` get/set; `the
+selectedButton of [bkgnd] family N [of <card>]` → "card button <n>";
+`there is a family N`; Family picker in the button inspector. Hooks
+selectedButtonOfFamily/familyExists; app split: CardView hilites the
+clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
+sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
+
 Phase A+ — web gathering, the idiom layer (language, fast lane; 2026-10-12):
 Phase A shipped the protocol layer; the web a *gatherer* meets is HTML, feeds,
 images, and tables, not clean JSON. Golden-age HyperCard was for gathering/

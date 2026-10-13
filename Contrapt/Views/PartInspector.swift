@@ -190,6 +190,12 @@ struct PartInspector: View {
                         Toggle("Auto Hilite", isOn: buttonAutoHilite)
                     }
                 }
+                // HyperCard's Button Info "Family" pop-up: same-numbered
+                // autoHilite buttons on a layer form a radio group.
+                Picker("Family", selection: buttonFamily) {
+                    Text("None").tag(0)
+                    ForEach(1...15, id: \.self) { Text("\($0)").tag($0) }
+                }
                 fontAndSizeRow
                 // Custom colors — scriptable as the fillColor / borderColor
                 // of the button. Unset keeps the themed default look.
@@ -508,6 +514,20 @@ struct PartInspector: View {
             set: {
                 guard case .button(var properties) = part.kind else { return }
                 properties.showName = $0
+                part.kind = .button(properties)
+            }
+        )
+    }
+
+    private var buttonFamily: Binding<Int> {
+        Binding(
+            get: {
+                guard case .button(let properties) = part.kind else { return 0 }
+                return properties.family
+            },
+            set: {
+                guard case .button(var properties) = part.kind else { return }
+                properties.family = $0
                 part.kind = .button(properties)
             }
         )

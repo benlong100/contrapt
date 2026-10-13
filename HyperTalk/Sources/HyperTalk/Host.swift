@@ -419,6 +419,14 @@ public protocol HyperTalkHost: AnyObject {
     /// `delete background <ref>` — remove a background no card uses (throws
     /// when cards still reference it). Default: throws.
     func deleteBackground(_ reference: HyperTalkObject.Reference) throws
+    /// `the selectedButton of family N [of <card>]` — the hilited member of
+    /// a button family on the card layer (or background layer when the
+    /// family was bkgnd-qualified), as "card button <n>" / "bkgnd button
+    /// <n>"; empty when none. Default: empty (no card model).
+    func selectedButtonOfFamily(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> String
+    /// `there is a family N` — whether any same-layer button carries the
+    /// family number. Default: false.
+    func familyExists(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> Bool
     /// `make a card` — append a card at the end of the stack using the given
     /// background (nil = the current card's), WITHOUT navigating to it.
     /// Returns the new card's 1-based number. Default: throws (a host without
@@ -628,6 +636,8 @@ public extension HyperTalkHost {
     func makeCard(background: HyperTalkObject.Reference?) throws -> Int {
         throw HostError("Cards can't be made here.")
     }
+    func selectedButtonOfFamily(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> String { "" }
+    func familyExists(_ family: Int, domain: HyperTalkObject.PartDomain, onCard: GoDestination?) -> Bool { false }
     func scaffoldBackgroundFields(keys: [String], background: HyperTalkObject.Reference?) throws {}
     func scheduleSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) throws {
         throw HostError("Timed sends aren't available here.")

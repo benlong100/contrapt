@@ -1174,7 +1174,14 @@ struct PartView: View {
             // The Button's action is HyperCard's mouseUp: it fires on
             // release inside. Toggle styles flip their hilite as well.
             Button {
-                if properties.style.isToggle { toggleHilite() }
+                if properties.family > 0, properties.autoHilite {
+                    // A family member hilites on click (its same-layer
+                    // siblings clear in the mouse dispatch) — HyperCard's
+                    // radio-group behavior, any style.
+                    setHilite(true)
+                } else if properties.style.isToggle {
+                    toggleHilite()
+                }
                 onTap()
             } label: {
                 buttonLabel(properties)
@@ -1570,6 +1577,12 @@ struct PartView: View {
     private func toggleHilite() {
         guard case .button(var properties) = part.kind else { return }
         properties.hilite.toggle()
+        part.kind = .button(properties)
+    }
+
+    private func setHilite(_ on: Bool) {
+        guard case .button(var properties) = part.kind else { return }
+        properties.hilite = on
         part.kind = .button(properties)
     }
 
