@@ -5,8 +5,10 @@ import PackageDescription
 let package = Package(
     name: "HyperTalk",
     // A platform floor where Swift concurrency (async/await, used since the
-    // interpreter suspends for `answer`/`ask`) is natively available.
-    platforms: [.iOS(.v15), .macOS(.v12)],
+    // interpreter suspends for `answer`/`ask`) AND stdlib Regex (the web
+    // readers — Foundation's NSRegularExpression drags ICU into the wasm
+    // engine, doubling it) are natively available. The app targets far newer.
+    platforms: [.iOS(.v16), .macOS(.v13)],
     products: [
         .library(name: "HyperTalk", targets: ["HyperTalk"]),
         // The headless runtime the exported website hosts (later compiled to

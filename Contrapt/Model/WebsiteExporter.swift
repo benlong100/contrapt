@@ -49,6 +49,7 @@ enum WebsiteExporter {
             + "window.__HAS_ENGINE__ = " + (engineFiles.isEmpty ? "false" : "true") + ";\n"
         entries["stack-data.js"] = Data(dataJS.utf8)
         entries["index.html"] = Data(indexHTML.utf8)
+        entries[".htaccess"] = Data(htaccess.utf8)
         entries["player.js"] = Data(playerJS.utf8)
         entries["boot.js"] = Data(bootJS.utf8)
         for name in stack.referencedAssetNames() {
@@ -167,6 +168,17 @@ enum WebsiteExporter {
 // MARK: - Static player template
 
 extension WebsiteExporter {
+    /// Apache hosts (Dreamhost and kin) honor a per-folder .htaccess: type
+    /// .wasm correctly and compress it on the way out — the engine transfers
+    /// at ~17 MB gzipped instead of 45 MB raw. Hosts without mod_deflate
+    /// simply ignore the filter and serve as before.
+    static let htaccess = """
+    AddType application/wasm .wasm
+    <IfModule mod_deflate.c>
+      AddOutputFilterByType DEFLATE application/wasm application/javascript text/javascript text/html text/css application/json
+    </IfModule>
+    """
+
     static let indexHTML = """
     <!DOCTYPE html>
     <html lang="en">
@@ -296,6 +308,7 @@ extension WebsiteExporter {
         try {
           // The PackageToJS bundle: its index.js instantiates the wasm module,
           // whose main() installs window.ContraptEngine synchronously.
+          const t0 = performance.now();
           const engineModule = await import('./engine/index.js');
           const init = engineModule.init ?? engineModule.default;
           // Fetch and compile the wasm ourselves instead of letting the loader
@@ -327,8 +340,14 @@ extension WebsiteExporter {
             bytes = new Uint8Array(await response.arrayBuffer());
           }
           window.__contraptEngineProgress?.(1); // downloading done; compiling
+          const t1 = performance.now();
           const module = await WebAssembly.compile(bytes);
+          const t2 = performance.now();
           await init({ module });
+          const t3 = performance.now();
+          console.info('Contrapt engine: ' + (bytes.length / 1048576).toFixed(1) + ' MB, download '
+            + Math.round(t1 - t0) + ' ms, compile ' + Math.round(t2 - t1) + ' ms, boot '
+            + Math.round(t3 - t2) + ' ms');
           window.__contraptEngineArrived?.();
         } catch (e) {
           console.warn('Contrapt engine failed to load; static preview only.', e);

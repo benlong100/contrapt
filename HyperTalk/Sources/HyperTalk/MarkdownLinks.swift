@@ -39,16 +39,13 @@ nonisolated public enum MarkdownLinks {
     // MARK: - Spans
 
     /// Every [label](target) in `source`, as character-offset ranges.
+    /// (Stdlib Regex, NOT NSRegularExpression — Foundation's regex drags the
+    /// ICU data blob into the wasm engine, doubling its size.)
     static func spans(in source: String) -> [(full: Range<Int>, label: String, target: String)] {
-        guard let regex = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)") else { return [] }
-        let nsRange = NSRange(source.startIndex..., in: source)
-        return regex.matches(in: source, range: nsRange).compactMap { match in
-            guard let full = Range(match.range, in: source),
-                  let label = Range(match.range(at: 1), in: source),
-                  let target = Range(match.range(at: 2), in: source) else { return nil }
-            let lo = source.distance(from: source.startIndex, to: full.lowerBound)
-            let hi = source.distance(from: source.startIndex, to: full.upperBound)
-            return (full: lo..<hi, label: String(source[label]), target: String(source[target]))
+        source.matches(of: #/\[([^\]]+)\]\(([^)]+)\)/#).map { match in
+            let lo = source.distance(from: source.startIndex, to: match.range.lowerBound)
+            let hi = source.distance(from: source.startIndex, to: match.range.upperBound)
+            return (full: lo..<hi, label: String(match.output.1), target: String(match.output.2))
         }
     }
 

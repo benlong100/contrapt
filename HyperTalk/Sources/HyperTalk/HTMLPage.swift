@@ -5,8 +5,9 @@
 //  Readers behind `the title of url "…"`, `the text of url "…"`, and
 //  `the links of url "…"` (Contrapt web gathering). A deliberately small
 //  HTML reader, not a browser: enough to pull the title, the readable
-//  text, and the link targets out of real-world pages. Pure Foundation,
-//  shared by the app and the web export.
+//  text, and the links out of real-world pages. Pure Foundation — and
+//  stdlib Regex throughout, NOT NSRegularExpression: Foundation's regex
+//  drags the ICU data blob into the wasm engine, doubling its size.
 //
 
 import Foundation
@@ -16,9 +17,9 @@ nonisolated enum HTMLPage {
     /// The `<title>` tag's text — entities decoded, whitespace collapsed.
     /// Empty when the page has no title.
     static func title(of html: String) -> String {
-        guard let match = firstMatch("(?is)<title\\b[^>]*>(.*?)</title>", in: html, group: 1) else { return "" }
-        return decodeEntities(match)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        guard let match = html.firstMatch(of: #/(?is)<title\b[^>]*>(.*?)</title>/#) else { return "" }
+        return decodeEntities(String(match.output.1))
+            .replacing(#/\s+/#, with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -28,16 +29,18 @@ nonisolated enum HTMLPage {
         var work = html
         // Comments and the invisible machinery first, so their contents
         // never leak into the text.
-        work = remove("(?s)<!--.*?-->", from: work)
+        work = work.replacing(#/(?s)<!--.*?-->/#, with: "")
         for container in ["script", "style", "head", "noscript", "template", "svg"] {
-            work = remove("(?is)<\(container)\\b[^>]*>.*?</\(container)>", from: work)
+            if let regex = try? Regex("(?is)<\(container)\\b[^>]*>.*?</\(container)>") {
+                work = work.replacing(regex, with: "")
+            }
         }
         // Block-level boundaries read as line breaks, so paragraphs and
         // list items stay separate once the tags are gone.
-        work = work.replacingOccurrences(
-            of: "(?i)</?(p|div|br|li|ul|ol|tr|td|th|table|h[1-6]|section|article|header|footer|blockquote|pre|figure|figcaption|dl|dt|dd|hr|nav|aside|main|form|option|select)\\b[^>]*>",
-            with: "\n", options: .regularExpression)
-        work = remove("(?s)<[^>]+>", from: work)
+        work = work.replacing(
+            #/(?i)</?(?:p|div|br|li|ul|ol|tr|td|th|table|h[1-6]|section|article|header|footer|blockquote|pre|figure|figcaption|dl|dt|dd|hr|nav|aside|main|form|option|select)\b[^>]*>/#,
+            with: "\n")
+        work = work.replacing(#/(?s)<[^>]+>/#, with: "")
         work = decodeEntities(work)
         // Tidy: collapse runs of spaces, trim each line, drop runs of
         // blank lines to a single separator.
@@ -58,24 +61,18 @@ nonisolated enum HTMLPage {
     /// The page's link targets in order — `<a href>` values resolved against
     /// `base`, http(s) only, duplicates dropped after the first.
     static func links(of html: String, base: String) -> [String] {
-        let pattern = "(?is)<a\\b[^>]*?\\bhref\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s>]+))"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let anchor = #/(?is)<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/#
         let baseURL = URL(string: base)
         var seen = Set<String>()
         var found: [String] = []
-        let range = NSRange(html.startIndex..., in: html)
-        regex.enumerateMatches(in: html, range: range) { match, _, _ in
-            guard let match else { return }
-            var href = ""
-            for group in [2, 3, 4] {
-                if let r = Range(match.range(at: group), in: html) { href = String(html[r]); break }
-            }
-            href = decodeEntities(href).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !href.isEmpty, !href.hasPrefix("#") else { return }
+        for match in html.matches(of: anchor) {
+            let raw = match.output.1 ?? match.output.2 ?? match.output.3 ?? ""
+            let href = decodeEntities(String(raw)).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !href.isEmpty, !href.hasPrefix("#") else { continue }
             let lowered = href.lowercased()
-            guard !lowered.hasPrefix("javascript:"), !lowered.hasPrefix("mailto:"), !lowered.hasPrefix("data:") else { return }
+            guard !lowered.hasPrefix("javascript:"), !lowered.hasPrefix("mailto:"), !lowered.hasPrefix("data:") else { continue }
             let resolved = URL(string: href, relativeTo: baseURL)?.absoluteString ?? href
-            guard resolved.lowercased().hasPrefix("http") else { return }
+            guard resolved.lowercased().hasPrefix("http") else { continue }
             if seen.insert(resolved).inserted { found.append(resolved) }
         }
         return found
@@ -83,19 +80,8 @@ nonisolated enum HTMLPage {
 
     // MARK: - Helpers
 
-    private static func firstMatch(_ pattern: String, in text: String, group: Int) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let range = Range(match.range(at: group), in: text) else { return nil }
-        return String(text[range])
-    }
-
-    private static func remove(_ pattern: String, from text: String) -> String {
-        text.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
-    }
-
-    private static func collapseSpaces(_ text: String) -> String {
-        text.replacingOccurrences(of: "[ \\t\\r\u{00A0}]+", with: " ", options: .regularExpression)
+    static func collapseSpaces(_ text: String) -> String {
+        text.replacing(#/[ \t\r\u{00A0}]+/#, with: " ")
     }
 
     /// The HTML entities seen in practice — the common named set plus
