@@ -260,8 +260,15 @@ extension WebsiteExporter {
       .button.radio .toggle { border-radius: 50%; }
       .button.checkbox.hilite, .button.radio.hilite { background: transparent; color: var(--ink); }
       /* A hilited TRANSPARENT button inverts the art beneath it (real
-         HyperCard's pixel flip), not a black slab. */
-      .button.transparent.hilite { background: #fff; color: #fff; mix-blend-mode: difference; }
+         HyperCard's pixel flip), not a black slab. backdrop-filter inverts
+         only the pixels behind the button's box — clipped to the frame,
+         title left legible on top — the web analog of the app's clipped
+         inverted-art draw. (mix-blend-mode would also invert the title.) */
+      .button.transparent.hilite {
+        background: transparent;
+        -webkit-backdrop-filter: invert(1);
+        backdrop-filter: invert(1);
+      }
       .button.hilite .toggle::after { content: ''; position: absolute; inset: 2px;
         background: currentColor; }
       .button.radio .toggle::after { border-radius: 50%; }
