@@ -113,6 +113,42 @@ end mouseUp</code></pre>
   </figure>
 </section>
 
+<!-- ======================= HyperCard, kept going ======================= -->
+<section class="feature">
+  <div class="feature-text">
+    <h3><span class="hand">☞</span> Pick up where it left off</h3>
+    <p>
+      The tools that came after HyperCard asked, <em>“what would a serious
+      programming system look like?”</em> Contrapt asks a different question:
+      <strong>what if HyperCard had simply kept going</strong> — if Apple had
+      never set it down?
+    </p>
+    <p>
+      So HyperTalk grew the way it might have. It learned to read the live web,
+      to hold structured data and JSON, to remember things between runs, to turn
+      a feed straight into a deck of cards — and, the modern turn, to
+      <code>ask</code> an AI a question and use the answer. Every addition still
+      reads like the plain English HyperCard always spoke. The gentle slope is
+      intact: a nine-year-old can still make something real on the first
+      afternoon.
+    </p>
+    <p class="pull">
+      Not HyperCard under glass — HyperCard still being written.
+    </p>
+  </div>
+  <div class="talk-script">
+    <pre><code>on mouseUp
+  put FeedItems(url "https://example.com/news.xml") into stories
+  make a card for each element of stories using background "Story"
+end mouseUp</code></pre>
+    <p class="talk-caption">
+      Three lines turn a live news feed into a browsable stack of cards —
+      a kind of program HyperTalk couldn't have written in 1987, in a sentence
+      it could have.
+    </p>
+  </div>
+</section>
+
 <section class="feature demo">
   <div class="feature-text">
     <h3><span class="hand">☞</span> Publish to the web</h3>
