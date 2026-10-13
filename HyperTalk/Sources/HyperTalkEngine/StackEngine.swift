@@ -148,10 +148,20 @@ public final class StackEngine {
     public func cardState(at index: Int) -> CardState {
         let card = host.stack.cards[index]
         let background = host.stack.backgrounds.first { $0.id == card.backgroundID }
-        // Stamp the script selection onto its field's render part.
-        func stamped(_ parts: [Part]) -> [RenderPart] {
+        // Stamp the script selection onto its field's render part. Background
+        // fields show THIS card's text: a non-sharedText field stores its
+        // per-card content in Card.backgroundFieldContent, not on the shared
+        // part — without this merge the page renders those fields empty the
+        // moment the engine's state arrives (the shared part's text is "").
+        func stamped(_ parts: [Part], backgroundLayer: Bool = false) -> [RenderPart] {
             parts.map { part in
-                var rendered = Self.render(part)
+                var effective = part
+                if backgroundLayer, case .field(var field) = part.kind, !field.sharedText {
+                    let content = card.backgroundFieldContent[part.id.uuidString]
+                    field.text = content?.text ?? ""
+                    effective.kind = .field(field)
+                }
+                var rendered = Self.render(effective)
                 if let selection = host.selection, selection.scriptID == part.scriptID {
                     rendered.selStart = selection.range.lowerBound
                     rendered.selEnd = selection.range.upperBound
@@ -163,7 +173,7 @@ public final class StackEngine {
             cardIndex: index,
             cardScriptID: card.scriptID,
             cardName: card.name,
-            backgroundParts: stamped(background?.parts ?? []),
+            backgroundParts: stamped(background?.parts ?? [], backgroundLayer: true),
             cardParts: stamped(card.parts),
             cardShowPicture: card.showPicture,
             backgroundShowPicture: background?.showPicture ?? true,
