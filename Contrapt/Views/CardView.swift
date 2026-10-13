@@ -909,6 +909,16 @@ private struct CardButtonLabel<Label: View>: View {
             .overlay(border)
             .compositingGroup()
             .shadow(color: style == .shadow ? .black.opacity(0.45) : .clear, radius: 0, x: 3, y: 3)
+            // A hilited TRANSPARENT button inverts the pixels beneath, as real
+            // HyperCard does: a white fill under .difference, placed outside
+            // the compositing group so it blends with the card art (inside,
+            // it blends with nothing and reads plain white). The label above
+            // stays surface-colored — white title over inverted art.
+            .background {
+                if inverted && style == .transparent {
+                    Rectangle().fill(.white).blendMode(.difference)
+                }
+            }
             .contentShape(Rectangle())
     }
 
@@ -919,12 +929,10 @@ private struct CardButtonLabel<Label: View>: View {
     private var background: some View {
         if inverted {
             if style == .transparent {
-                // A transparent button over artwork inverts the PIXELS beneath
-                // (real HyperCard's hilite), not a black slab: white under a
-                // .difference blend flips whatever lies below. Solid styles
-                // keep the direct ink fill — the earlier all-styles
-                // .difference attempt escaped thin buttons' clips (see note).
-                shape.fill(.white).blendMode(.difference)
+                // The inverting fill lives OUTSIDE the compositing group (see
+                // body) — inside it, .difference blends against the group's
+                // own transparent backdrop and renders plain white.
+                Color.clear
             } else {
                 // Hilite stays a true inverse-video flip, custom fill or not.
                 shape.fill(theme.ink)
