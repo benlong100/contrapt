@@ -366,12 +366,15 @@ items, measured against this stack (and the Basilisk oracle for truth):
  4. Document the honest residue in the How to Import stack: layouts
     tuned to exact 1-bit glyph pixels need a human pass after import.
 
-**Web-parity follow-ups still open:** state-driven player renderer
-(runtime-created parts/cards — make a card, scaffolds, bare import
-picture); verify transparent-hilite inversion on the web by eye (CSS
+**Web-parity follow-ups:** state-driven player renderer — DONE 2026-10-13
+(commit 2f983ae): the player builds the current card from engine state
+(EngineModel.Part now encodes; CardState carries full parts + bg overlay;
+paint from static maps by id), so script-created cards/parts/scaffolds
+show on the web; navigation rebuilds, same-card events reconcile-add.
+Still open: verify transparent-hilite inversion on the web by eye (CSS
 mix-blend-mode difference — unverified since the app needed the
-direct-draw approach); symbol icons render black on web vs accent-
-tinted in the app.
+direct-draw approach); symbol icons render black on web vs accent-tinted
+in the app.
 
 Phase A+ — web gathering, the idiom layer (language, fast lane; 2026-10-12):
 Phase A shipped the protocol layer; the web a *gatherer* meets is HTML, feeds,
