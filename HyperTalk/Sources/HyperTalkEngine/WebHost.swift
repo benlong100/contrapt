@@ -404,6 +404,33 @@ final class WebHost: HyperTalkHost {
         }
     }
 
+    /// Timed send: resolve the target NOW to stable scriptIDs (they survive
+    /// navigation and renames) and hand the page a timer effect. A background
+    /// or stack target travels the scheduling card's path when it fires (the
+    /// message bubbles card → background → stack).
+    func scheduleSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) throws {
+        var partScriptID: Int?
+        var cardScriptID = stack.cards[cardIndex].scriptID
+        switch target {
+        case .part(let kind, let domain, let reference, let onCard):
+            let location = try locatePart(kind: kind, domain: domain, reference: reference, onCard: onCard)
+            switch location {
+            case .card(let ci, let pi):
+                partScriptID = stack.cards[ci].parts[pi].scriptID
+                cardScriptID = stack.cards[ci].scriptID
+            case .background(let bi, let pi):
+                partScriptID = stack.backgrounds[bi].parts[pi].scriptID
+            }
+        case .card(let destination):
+            cardScriptID = stack.cards[try resolveCardIndex(destination)].scriptID
+        default:
+            break // thisCard / thisBackground / thisStack — the current card's path
+        }
+        recorded.append(.scheduleSend(message: message, arguments: arguments,
+                                      partScriptID: partScriptID, cardScriptID: cardScriptID,
+                                      afterSeconds: afterSeconds))
+    }
+
     func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }

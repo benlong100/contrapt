@@ -137,6 +137,16 @@ func installEngine() {
             text: arguments.count > 1 ? (arguments[1].string ?? "") : ""
         ))
     })
+    // A `send … in <time>` timer firing (the page's setTimeout):
+    // (message, argumentsJSON, partScriptID (-1 = none), cardScriptID).
+    api.deliverScheduled = retained(JSClosure.async { arguments in
+        .string(await engine.deliverScheduledJSON(
+            message: arguments.first?.string ?? "",
+            argumentsJSON: arguments.count > 1 ? (arguments[1].string ?? "[]") : "[]",
+            partScriptID: arguments.count > 2 ? Int(arguments[2].number ?? -1) : -1,
+            cardScriptID: arguments.count > 3 ? Int(arguments[3].number ?? -1) : -1
+        ))
+    })
     global.ContraptEngine = .object(api)
 
     // Tell the page the engine is live (boot.js may await this).

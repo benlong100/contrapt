@@ -109,6 +109,20 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   `make a card for each element of FeedItems(url "…") using background
   "Story"` is a one-line news stack.
 
+- **Timed send (`send <msg> [to <object>] in <time>`)** — *shipped (web
+  delivery rides the next wasm rebuild)*. LiveCode's idiom, credited: the
+  dispatch happens later — `send "refresh" to this card in 2 minutes` makes
+  an information stack ambient (a dashboard that keeps itself fresh by
+  rescheduling in its own handler). Units: seconds (the bare default),
+  ticks, minutes (`wait` now accepts minutes too). The message, its
+  arguments, the target, and the delay all evaluate at SCHEDULE time (the
+  sender's context won't exist later); targets resolve to stable ids.
+  **Lifetime rule:** pending sends survive navigation within the stack and
+  are cancelled when the stack closes; a target deleted before the timer
+  fires is dropped silently. App: the document view owns the timers (so
+  closing the window cancels). Web: the page owns setTimeout — closing the
+  tab IS the stack closing — firing into the engine's `deliverScheduled`.
+
 - **Persistent stack data (`stackData`)** — *shipped (web transport needs a
   wasm rebuild)*. A per-stack key-value store that survives between runs,
   modeled as an associative array so it reuses all the array machinery:

@@ -46,6 +46,13 @@ final class MockHost: HyperTalkHost {
 
     // MARK: Persistent store (for stackData tests)
 
+    /// Every scheduled send (`send … in <time>`), in order — the resolved
+    /// message, baked arguments, target, and delay in seconds.
+    var scheduledSends: [(message: String, arguments: [String], target: HyperTalkObject, afterSeconds: Double)] = []
+    func scheduleSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) throws {
+        scheduledSends.append((message, arguments, target, afterSeconds))
+    }
+
     /// The stack's persistent store (`stackData`). Retained on the instance so a
     /// value written in one run is readable from the next, as a real backing
     /// store would survive between runs.

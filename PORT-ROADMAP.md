@@ -374,8 +374,17 @@ idiom, don't grow a new syntax class. In order:
    change). See EXTENSIONS.md.
 6. **Field hyperlinks** — `set the link of word 4 of field 1 to card id 12`
    (or a URL); rides the styleRun machinery, maps to `<a>` in web export.
-7. **Timed send** — `send "refresh" to this card in 2 minutes` (LiveCode
-   prior art — credit it).
+7. **Timed send — DONE 2026-10-12** (LiveCode prior art, credited):
+   `send <msg> [to <object>] in <N> [seconds|ticks|minutes]` (bare N =
+   seconds; `wait` gained minutes). Everything evaluates at schedule time;
+   Ben's lifetime ruling: survive navigation, die on stack close, vanished
+   targets dropped silently. Host hook `scheduleSend(...)` (default
+   throws); app = ContentView-owned Tasks + onDisappear cancel +
+   scriptLayers(for:) delivery; web = `.scheduleSend` HostEffect →
+   player setTimeout → `deliverScheduled` (EngineJSON + wasm entry bound
+   in WasmPlayer/main.swift — needs the pending wasm rebuild). 10 tests
+   (5 TimedSendTests + 5 TimedSendWebTests incl. cross-card delivery);
+   suite 758; sweep 48 (parseSend restructure verified against corpus).
 Ruled out: AI verbs in the language (the co-author is the on-ramp, per
 PHILOSOPHY.md); receiving/webhooks/serving (breaks run-everywhere + sandbox).
 

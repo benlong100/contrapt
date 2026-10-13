@@ -424,6 +424,13 @@ public protocol HyperTalkHost: AnyObject {
     /// Returns the new card's 1-based number. Default: throws (a host without
     /// a card model can't make cards).
     func makeCard(background: HyperTalkObject.Reference?) throws -> Int
+    /// `send <msg> to <object> in <time>` — a timed send. The message,
+    /// arguments, and target are already resolved; the host owns the clock
+    /// and dispatches along the target's path when the delay elapses.
+    /// Pending sends survive navigation within the stack and are cancelled
+    /// when the stack closes; a target gone by fire time is dropped
+    /// silently. Default: throws (no clock here).
+    func scheduleSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) throws
     /// `make a card for each element` scaffolding: when the target background
     /// has NO fields yet, create one background field per key (stacked, a
     /// "text" key gets the tall multiline slot) so a merge into a blank
@@ -615,6 +622,9 @@ public extension HyperTalkHost {
         throw HostError("Cards can't be made here.")
     }
     func scaffoldBackgroundFields(keys: [String], background: HyperTalkObject.Reference?) throws {}
+    func scheduleSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) throws {
+        throw HostError("Timed sends aren't available here.")
+    }
     func clearPicture(background: Bool, card: GoDestination?) throws {
         throw HostError("Pictures can't be deleted here.")
     }

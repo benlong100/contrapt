@@ -731,6 +731,17 @@ extension WebsiteExporter {
             // a reload (the stack file itself is never modified).
             try { localStorage.setItem(stackDataKey, e.encoded || ''); } catch (err) {}
           }
+          else if (e.type === 'scheduleSend') {
+            // `send … in <time>`: the page owns the timer, so pending sends
+            // die with the page — exactly the stack-close rule. An engine
+            // built before deliverScheduled just drops the send.
+            setTimeout(() => {
+              if (engine && engine.deliverScheduled)
+                handle(engine.deliverScheduled(e.message, JSON.stringify(e.arguments || []),
+                                               e.partScriptID == null ? -1 : e.partScriptID,
+                                               e.cardScriptID));
+            }, Math.max(0, (e.afterSeconds || 0) * 1000));
+          }
           // 'navigate' is reflected by the returned state's cardIndex below.
         });
       }

@@ -271,6 +271,11 @@ final class DocumentScriptHost: HyperTalkHost {
     /// allow=true, always=false). Suspends the script until the user answers,
     /// like `answer`.
     private let onNetworkConsent: (String) async -> (allow: Bool, always: Bool)
+    /// `send … in <time>` — hands the resolved (message, arguments, target,
+    /// seconds) to the document view, which owns the pending timers (this
+    /// host is per-dispatch and won't outlive the script). Nil = no clock
+    /// here (tests, print rendering), and the command errors.
+    private let onScheduleSend: ((String, [String], HyperTalkObject, Double) -> Void)?
 
     init(
         stack: Binding<Stack>,
@@ -294,6 +299,7 @@ final class DocumentScriptHost: HyperTalkHost {
         onFlash: @escaping (Int) -> Void = { _ in },
         isAuthoring: @escaping () -> Bool = { false },
         onNetworkConsent: @escaping (String) async -> (allow: Bool, always: Bool) = { _ in (false, false) },
+        onScheduleSend: ((String, [String], HyperTalkObject, Double) -> Void)? = nil,
         cardWindowViewport: Binding<CGSize?> = .constant(nil),
         menuBar: Binding<[HyperTalkMenu]> = .constant([])
     ) {
@@ -318,8 +324,18 @@ final class DocumentScriptHost: HyperTalkHost {
         self.onFlash = onFlash
         self.isAuthoring = isAuthoring
         self.onNetworkConsent = onNetworkConsent
+        self.onScheduleSend = onScheduleSend
         self.cardWindowViewport = cardWindowViewport
         self.menuBar = menuBar
+    }
+
+    /// `send <msg> to <object> in <time>` — the document view owns the timer;
+    /// pending sends survive navigation and die when the stack closes.
+    func scheduleSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) throws {
+        guard let onScheduleSend else {
+            throw HostError("Timed sends aren't available here.")
+        }
+        onScheduleSend(message, arguments, target, afterSeconds)
     }
 
     /// The scripted menu bar (`create menu` …) — stored in the document view's

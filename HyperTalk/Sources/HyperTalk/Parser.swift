@@ -479,6 +479,8 @@ struct Parser {
                     unit = .seconds
                 } else if consumeWord("ticks") || consumeWord("tick") {
                     unit = .ticks
+                } else if consumeWord("minutes") || consumeWord("minute") || consumeWord("mins") || consumeWord("min") {
+                    unit = .minutes // Contrapt addition, matching timed send
                 }
                 kind = .duration(amount, unit)
             }
@@ -554,20 +556,33 @@ struct Parser {
             // `send <message> [to <object>]` — dispatch a message. With no `to`,
             // it goes to the current card (`send openCard`, `send "calc" && x`),
             // travelling the normal card→background→stack path from there.
+            // A trailing `in <amount> [unit]` schedules it instead (timed send).
             let message = try parseExpression()
-            guard consumeWord("to") else {
-                try expectNewline()
-                return Stmt(kind: .sendMessage(message, to: .thisCard), line: line)
+            var object: ObjectExpr = .thisCard
+            if consumeWord("to") {
+                // `send <expr> to program <app> [with/without reply]` — an
+                // AppleEvent to another application. Contrapt can't reach other
+                // apps, so the whole line is accepted and no-op'd.
+                if consumeWord("program") {
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                    try expectNewline()
+                    return Stmt(kind: .noOp, line: line)
+                }
+                object = try parseObjectExpr()
             }
-            // `send <expr> to program <app> [with/without reply]` — an AppleEvent
-            // to another application. Contrapt can't reach other apps, so the
-            // whole line is accepted and no-op'd.
-            if consumeWord("program") {
-                while current.kind != .newline, current.kind != .endOfScript { advance() }
+            if consumeWord("in") {
+                let amount = try parseExpression()
+                var unit: WaitUnit = .seconds // the readable default for a delay
+                if consumeWord("seconds") || consumeWord("second") || consumeWord("secs") || consumeWord("sec") {
+                    unit = .seconds
+                } else if consumeWord("ticks") || consumeWord("tick") {
+                    unit = .ticks
+                } else if consumeWord("minutes") || consumeWord("minute") || consumeWord("mins") || consumeWord("min") {
+                    unit = .minutes
+                }
                 try expectNewline()
-                return Stmt(kind: .noOp, line: line)
+                return Stmt(kind: .sendMessageLater(message, to: object, delay: amount, unit: unit), line: line)
             }
-            let object = try parseObjectExpr()
             try expectNewline()
             return Stmt(kind: .sendMessage(message, to: object), line: line)
         case "request", "reply":

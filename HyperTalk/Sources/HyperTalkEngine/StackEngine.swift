@@ -96,6 +96,38 @@ public final class StackEngine {
         return host.takeEffects()
     }
 
+    /// A timed send firing: deliver `message` to the part (located anywhere
+    /// in the stack) or, with no part, along the given card's path. A target
+    /// that no longer exists is dropped silently — the send dies with it.
+    @discardableResult
+    public func deliverScheduled(message: String, arguments: [String], partScriptID: Int?, cardScriptID: Int) async throws -> [HostEffect] {
+        if let partScriptID {
+            // The part may live on any card's layer or any background.
+            for (cardIndex, card) in host.stack.cards.enumerated() {
+                if let part = card.parts.first(where: { $0.scriptID == partScriptID }) {
+                    let path = scriptPath(part: part, domain: .card, cardIndex: cardIndex)
+                    _ = try await HyperTalk.send(message, arguments: arguments, along: path, host: host)
+                    return host.takeEffects()
+                }
+            }
+            for background in host.stack.backgrounds {
+                guard let part = background.parts.first(where: { $0.scriptID == partScriptID }),
+                      let cardIndex = host.stack.cards.firstIndex(where: { $0.backgroundID == background.id })
+                else { continue }
+                let path = scriptPath(part: part, domain: .background, cardIndex: cardIndex)
+                _ = try await HyperTalk.send(message, arguments: arguments, along: path, host: host)
+                return host.takeEffects()
+            }
+            return []
+        }
+        guard let cardIndex = host.stack.cards.firstIndex(where: { $0.scriptID == cardScriptID }) else {
+            return []
+        }
+        let path = scriptPath(part: nil, cardIndex: cardIndex)
+        _ = try await HyperTalk.send(message, arguments: arguments, along: path, host: host)
+        return host.takeEffects()
+    }
+
     /// Run one message-box line; returns its printed value (for a bare
     /// expression) or nil.
     public func runMessage(_ line: String) async throws -> String? {

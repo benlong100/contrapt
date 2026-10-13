@@ -770,7 +770,7 @@ final class Runtime {
             switch kind {
             case .duration(let expression, let unit):
                 let amount = try Value.number(from: try await evaluate(expression, line: statement.line), line: statement.line)
-                let seconds = unit == .seconds ? amount : amount / 60.0
+                let seconds = Self.seconds(amount, unit)
                 if seconds > 0 { await host.wait(seconds: seconds) }
             case .untilTrue(let condition):
                 while try !Value.bool(from: try await evaluate(condition, line: statement.line), line: statement.line) {
@@ -1263,27 +1263,8 @@ final class Runtime {
             let text = try await evaluate(messageExpression, line: statement.line)
                 .trimmingCharacters(in: .whitespaces)
             let target = try await resolveObject(objectExpression, line: statement.line)
-            let (command, rawArguments) = Self.splitMessage(text)
+            let (command, arguments) = try await evaluateMessageParts(text, line: statement.line)
             guard !command.isEmpty else { return .normal }
-            // Arguments inside the message string are expressions, evaluated
-            // in the sender's context — `send "greet 2+3" to …` passes 5, and
-            // a variable the sender holds passes its value. A bare word with
-            // no value is an unquoted literal: it passes verbatim (not through
-            // the parser, which would lowercase it — "Bill" stays "Bill").
-            var arguments: [String] = []
-            for raw in rawArguments {
-                guard let expression = try? Parser.parseSoleExpression(raw) else {
-                    arguments.append(raw)
-                    continue
-                }
-                if case .variable(let name) = expression, variableValue(name) == nil {
-                    arguments.append(raw)
-                } else if let value = try? await evaluate(expression, line: statement.line) {
-                    arguments.append(value)
-                } else {
-                    arguments.append(raw)
-                }
-            }
             let handled: Bool
             if let fromLayer = path.firstIndex(where: { $0.object == target }) {
                 // The target is on the running path (this card/background/
@@ -1304,6 +1285,23 @@ final class Runtime {
             }
             if !handled, !isSilentlyIgnorable(command) {
                 throw ScriptError(line: statement.line, message: "Can't understand '\(command)'.")
+            }
+            return .normal
+
+        case .sendMessageLater(let messageExpression, let objectExpression, let delayExpression, let unit):
+            // Timed send: the message, its arguments, the target, and the
+            // delay all evaluate NOW (the sender's context won't exist later);
+            // the host owns the clock and the later dispatch. Pending sends
+            // survive navigation within the stack and die when it closes.
+            let text = try await evaluate(messageExpression, line: statement.line)
+                .trimmingCharacters(in: .whitespaces)
+            let target = try await resolveObject(objectExpression, line: statement.line)
+            let (command, arguments) = try await evaluateMessageParts(text, line: statement.line)
+            guard !command.isEmpty else { return .normal }
+            let amount = try Value.number(from: try await evaluate(delayExpression, line: statement.line), line: statement.line)
+            try hostCall(line: statement.line) {
+                try host.scheduleSend(command, arguments: arguments, to: target,
+                                      afterSeconds: max(0, Self.seconds(amount, unit)))
             }
             return .normal
 
@@ -1867,6 +1865,39 @@ final class Runtime {
             }
             return try await destination(for: .current, line: line)
         }
+    }
+
+    /// A duration in the given unit, as seconds.
+    static func seconds(_ amount: Double, _ unit: WaitUnit) -> Double {
+        switch unit {
+        case .seconds: return amount
+        case .ticks: return amount / 60.0
+        case .minutes: return amount * 60.0
+        }
+    }
+
+    /// Splits a `send` message string and evaluates its arguments in the
+    /// sender's context — `send "greet 2+3" to …` passes 5, and a variable
+    /// the sender holds passes its value. A bare word with no value is an
+    /// unquoted literal: it passes verbatim (not through the parser, which
+    /// would lowercase it — "Bill" stays "Bill").
+    private func evaluateMessageParts(_ text: String, line: Int) async throws -> (command: String, arguments: [String]) {
+        let (command, rawArguments) = Self.splitMessage(text)
+        var arguments: [String] = []
+        for raw in rawArguments {
+            guard let expression = try? Parser.parseSoleExpression(raw) else {
+                arguments.append(raw)
+                continue
+            }
+            if case .variable(let name) = expression, variableValue(name) == nil {
+                arguments.append(raw)
+            } else if let value = try? await evaluate(expression, line: line) {
+                arguments.append(value)
+            } else {
+                arguments.append(raw)
+            }
+        }
+        return (command, arguments)
     }
 
     /// Splits a `send` message string into a command name and its

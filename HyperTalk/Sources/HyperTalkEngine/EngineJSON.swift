@@ -18,6 +18,7 @@ import Foundation
 extension HostEffect: Encodable {
     private enum CodingKeys: String, CodingKey {
         case type, cardIndex, effects, text, scriptID, start, end, name, card, encoded
+        case message, arguments, partScriptID, cardScriptID, afterSeconds
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -51,6 +52,13 @@ extension HostEffect: Encodable {
         case .persist(let encoded):
             try c.encode("persist", forKey: .type)
             try c.encode(encoded, forKey: .encoded)
+        case .scheduleSend(let message, let arguments, let partScriptID, let cardScriptID, let afterSeconds):
+            try c.encode("scheduleSend", forKey: .type)
+            try c.encode(message, forKey: .message)
+            try c.encode(arguments, forKey: .arguments)
+            try c.encodeIfPresent(partScriptID, forKey: .partScriptID)
+            try c.encode(cardScriptID, forKey: .cardScriptID)
+            try c.encode(afterSeconds, forKey: .afterSeconds)
         }
     }
 }
@@ -115,6 +123,18 @@ extension StackEngine {
     /// `{ effects, state }` (or `{ error }`); unhandled messages are fine.
     public func sendToPartJSON(_ message: String, partScriptID: Int) async -> String {
         await eventJSON { try await self.send(message, toPartWithScriptID: partScriptID) }
+    }
+
+    /// A `send … in <time>` timer firing: deliver the message to its target
+    /// (part scriptID, or the carrying card's path when partScriptID < 0).
+    /// Arguments arrive as a JSON array string. `{ effects, state }`.
+    public func deliverScheduledJSON(message: String, argumentsJSON: String, partScriptID: Int, cardScriptID: Int) async -> String {
+        let arguments = (try? JSONDecoder().decode([String].self, from: Data(argumentsJSON.utf8))) ?? []
+        return await eventJSON {
+            try await self.deliverScheduled(message: message, arguments: arguments,
+                                            partScriptID: partScriptID >= 0 ? partScriptID : nil,
+                                            cardScriptID: cardScriptID)
+        }
     }
 
     /// The visitor edited a field: record its text. `{ effects, state }` —

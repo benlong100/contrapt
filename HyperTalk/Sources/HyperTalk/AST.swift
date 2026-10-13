@@ -140,6 +140,11 @@ indirect enum StmtKind {
     /// `send <message> to <object>` — dispatch a message starting at a
     /// specific object's layer (then down the path from there).
     case sendMessage(Expr, to: ObjectExpr)
+    /// `send <message> [to <object>] in <amount> [seconds|ticks|minutes]` —
+    /// a timed send (LiveCode's idiom): the message and its arguments are
+    /// evaluated NOW, the dispatch happens later. Pending sends survive
+    /// navigation within the stack and die when the stack closes.
+    case sendMessageLater(Expr, to: ObjectExpr, delay: Expr, unit: WaitUnit)
     /// `add`/`subtract`/`multiply`/`divide` — arithmetic commands that update a
     /// container in place (`add 1 to x`, `subtract 5 from field "n"`).
     case arithmetic(BinaryOp, amount: Expr, container: Container)
@@ -329,7 +334,7 @@ indirect enum WaitKind {
 }
 
 enum WaitUnit {
-    case seconds, ticks // a tick is 1/60 second
+    case seconds, ticks, minutes // a tick is 1/60 second
 }
 
 indirect enum GoTarget {

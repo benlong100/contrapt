@@ -35,6 +35,12 @@ public enum HostEffect: Equatable, Sendable {
     /// A write to the stack's persistent store (`stackData`) — the page flushes
     /// `encoded` to localStorage, keyed by the stack, so it survives reloads.
     case persist(encoded: String)
+    /// `send <msg> to <object> in <time>` — the page sets a timer and, when
+    /// it fires, calls the engine's `deliverScheduled` with these values. A
+    /// part target carries its scriptID; otherwise the message travels the
+    /// carrying card's path. Page timers die with the page, which is exactly
+    /// the rule: pending sends die when the stack closes.
+    case scheduleSend(message: String, arguments: [String], partScriptID: Int?, cardScriptID: Int, afterSeconds: Double)
 }
 
 /// How the host answers the interactive, suspending commands. The JS bridge

@@ -109,6 +109,9 @@ struct ContentView: View {
     /// The card area's size (what CardView's GeometryReader fills), recorded
     /// so Export Bitmaps can match the displayed Fill Window scale.
     @State private var cardAreaSize: CGSize = .zero
+    /// Pending `send … in <time>` timers. Owned by the view so they survive
+    /// navigation within the stack and are cancelled when the stack closes.
+    @State private var pendingSends: [UUID: Task<Void, Never>] = [:]
     /// The scale the card is currently displayed at (Fill Window math —
     /// CardView computes the same); 1 when unmeasured.
     private var displayedCardScale: Double {
@@ -829,6 +832,12 @@ struct ContentView: View {
                 return replacement
             }
         ))
+        // The stack closing cancels its pending `send … in <time>` timers —
+        // the ruling: pending sends survive navigation, die with the stack.
+        .onDisappear {
+            for task in pendingSends.values { task.cancel() }
+            pendingSends.removeAll()
+        }
         // Full-screen (presentation) mode: hide the app chrome and let the
         // padding color own the space around the card.
         .toolbar(isPresentingFullScreen ? .hidden : .automatic)
@@ -1291,11 +1300,31 @@ struct ContentView: View {
                     }
                 }
             },
+            // `send … in <time>` — this view owns the pending timers, so they
+            // survive navigation within the stack and die when it closes.
+            onScheduleSend: { message, arguments, target, seconds in
+                scheduleTimedSend(message, arguments: arguments, to: target, afterSeconds: seconds)
+            },
             // `set the rect of card window` — the big-card-small-window crop.
             cardWindowViewport: $cardWindowViewport,
             // `create menu` … — the scripted menu bar strip.
             menuBar: $stackMenus
         )
+    }
+
+    /// A pending `send … in <time>`: sleep, then dispatch along the target's
+    /// path with a fresh host (hosts are per-dispatch). A target gone by fire
+    /// time is dropped silently; stack close cancels via onDisappear.
+    private func scheduleTimedSend(_ message: String, arguments: [String], to target: HyperTalkObject, afterSeconds: Double) {
+        let id = UUID()
+        pendingSends[id] = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, afterSeconds) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            pendingSends[id] = nil
+            let host = makeHost()
+            guard let path = host.scriptLayers(for: target) else { return }
+            _ = try? await HyperTalk.send(message, arguments: arguments, along: path, host: host)
+        }
     }
 
     /// Resolves `go stack "<name>"` through the Stack Library and opens it;
