@@ -554,7 +554,10 @@ extension WebsiteExporter {
           const runs = perCard ? (perCard.styleRuns || []) : (f.styleRuns || []);
           // Styled runs render as spans in LOCKED fields (editable fields stay
           // plain text so contentEditable editing isn't fighting markup).
-          if (f.wideMargins) d.style.padding = '18px';
+          // Wide Margins insets text HORIZONTALLY (matching the app); a
+          // flat 18px all-round shoved a short field's one line onto its
+          // bottom edge. Vertical padding stays the base .field value.
+          if (f.wideMargins) { d.style.paddingLeft = '18px'; d.style.paddingRight = '18px'; }
           if (f.kind === 'rich') { d.classList.add('rich'); richFields[p.scriptID] = true; renderMarkdown(d, text); }
           else if (runs.length && f.lockText) setRunStyledText(d, text, runs, f.format);
           else d.textContent = text;
