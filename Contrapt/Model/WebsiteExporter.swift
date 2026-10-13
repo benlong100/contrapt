@@ -17,6 +17,11 @@
 //
 
 import Foundation
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 enum WebsiteExporter {
     struct ExportError: LocalizedError { let message: String; var errorDescription: String? { message } }
@@ -50,7 +55,63 @@ enum WebsiteExporter {
             guard let data = assets[name] else { continue }
             entries["assets/\(name)"] = data
         }
+        // SF-symbol button icons don't exist on the web — pre-render each
+        // referenced symbol to a PNG beside the other assets, so the player
+        // shows the same glyph the app does.
+        for (name, data) in symbolIconAssets(for: stack) {
+            entries["assets/\(name)"] = data
+        }
         return entries
+    }
+
+    /// PNG renderings of every SF-symbol button icon the stack uses, keyed
+    /// by the asset name the player requests (`symbol-<name>.png`). Symbols
+    /// a bitmap icon already overrides are skipped — the player shows the
+    /// bitmap then.
+    private static func symbolIconAssets(for stack: Stack) -> [String: Data] {
+        var out: [String: Data] = [:]
+        let parts = stack.cards.flatMap(\.parts) + stack.backgrounds.flatMap(\.parts)
+        let names = Set(parts.compactMap { part -> String? in
+            guard case .button(let button) = part.kind, button.iconAsset == nil,
+                  let symbol = button.iconSymbol, !symbol.isEmpty else { return nil }
+            return symbol
+        })
+        for name in names {
+            guard let data = symbolPNG(name) else { continue }
+            out["symbol-\(name).png"] = data
+        }
+        return out
+    }
+
+    /// One SF symbol rendered as a black glyph on transparent at 2x of a
+    /// 64-point box — crisp at button sizes, small on disk.
+    private static func symbolPNG(_ name: String) -> Data? {
+        #if os(macOS)
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 64, weight: .regular)) else { return nil }
+        let size = symbol.size
+        guard size.width > 0, size.height > 0,
+              let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                            pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+                                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        bitmap.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+        // A symbol is a template image: drawn plainly it renders black.
+        symbol.draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap.representation(using: .png, properties: [:])
+        #else
+        let configuration = UIImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+        guard let symbol = UIImage(systemName: name, withConfiguration: configuration)?
+            .withTintColor(.black, renderingMode: .alwaysOriginal) else { return nil }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 2
+        return UIGraphicsImageRenderer(size: symbol.size, format: format).pngData { _ in
+            symbol.draw(at: .zero)
+        }
+        #endif
     }
 
     /// The compiled Wasm engine's files (the PackageToJS bundle), read from
@@ -151,7 +212,9 @@ extension WebsiteExporter {
       .button.opaque { background: var(--surface); }
       .button.shadow { box-shadow: 3px 3px 0 rgba(0,0,0,.5); }
       .button.hilite { background: var(--ink); color: var(--surface); }
-      .button .icon { image-rendering: pixelated; }
+      .button.has-icon { flex-direction: column; gap: 1px; }
+      .button .icon { image-rendering: pixelated; flex: 1 1 0; min-height: 0;
+        max-width: 100%; object-fit: contain; }
       .button .icon-missing { width: 24px; height: 24px; border: 1px dashed #999;
         border-radius: 4px; flex: none; }
       .part.disabled { opacity: .4; pointer-events: none; }
@@ -502,12 +565,17 @@ extension WebsiteExporter {
             box.className = 'toggle';
             d.appendChild(box);
           }
-          if (b.iconAsset) {
+          // An icon stacks above the title and scales to fit, as the app
+          // lays buttons out (CardView's VStack).
+          const iconName = b.iconAsset || (b.iconSymbol ? 'symbol-' + b.iconSymbol + '.png' : null);
+          if (iconName) {
+            d.classList.add('has-icon');
             const im = document.createElement('img');
-            im.className = 'icon'; im.src = 'assets/' + b.iconAsset;
+            im.className = 'icon'; im.src = 'assets/' + iconName;
             // A missing asset file degrades to the same placeholder as a
-            // missing icon resource.
-            im.onerror = () => { im.replaceWith(missingIconBox()); };
+            // missing icon resource (a symbol PNG from an older export just
+            // leaves the title).
+            im.onerror = () => { b.iconSymbol ? im.remove() : im.replaceWith(missingIconBox()); };
             d.appendChild(im);
           } else if (b.iconMissing) {
             d.appendChild(missingIconBox());
