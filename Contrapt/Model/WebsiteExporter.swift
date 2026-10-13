@@ -762,6 +762,9 @@ extension WebsiteExporter {
       // and scripts don't run.
       let engine = window.ContraptEngine;
       let engineActive = false;
+      // The engine's LIVE card count — scripts make and delete cards, so
+      // navigation must wrap by this once the engine is running.
+      let engineCardCount = 0;
 
       function beep() {
         try {
@@ -776,6 +779,14 @@ extension WebsiteExporter {
       // engine's CardState onto the statically-rendered card.
       function applyState(state) {
         if (!state) return;
+        if (state.cardCount) engineCardCount = state.cardCount;
+        // A part the engine no longer has was deleted by a script — hide its
+        // element. (Per-part visibility below re-shows the live ones;
+        // runtime-CREATED parts still need the state renderer — roadmap.)
+        const live = new Set((state.backgroundParts || []).concat(state.cardParts || []).map(rp => rp.scriptID));
+        Object.keys(partEls).forEach(id => {
+          if (!live.has(Number(id))) partEls[id].style.display = 'none';
+        });
         (state.backgroundParts || []).concat(state.cardParts || []).forEach(rp => {
           const el = partEls[rp.scriptID];
           if (!el) return;
@@ -932,7 +943,8 @@ extension WebsiteExporter {
       }
 
       function go(n) {
-        const wrapped = (n + stack.cards.length) % stack.cards.length;
+        const total = (engineActive && engineCardCount) ? engineCardCount : stack.cards.length;
+        const wrapped = (n + total) % total;
         if (engine) { handle(engine.openCard(wrapped)); } else { idx = wrapped; render(); }
       }
       document.getElementById('prev').onclick = () => go(idx - 1);

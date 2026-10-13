@@ -169,6 +169,8 @@ private let mergeJSON = """
     #expect(engine.cardCount == 4)
     #expect(try await engine.runMessage("field \"Title\" of card 3") == "HyperCard Returns")
     #expect(try await engine.runMessage("field \"Notes\" of card 4") == "the real engine in a page")
+    // The page navigates by the LIVE count (scripts make/delete cards).
+    #expect(engine.currentCardState().cardCount == 4)
 }
 
 @Test func putArrayIntoThisCardFillsItsFields() async throws {

@@ -32,7 +32,8 @@ private let toggleJSON = """
                       "hilite": false, "showName": true, "style": "checkbox", "title": "Agree" } },
         { "id": "44444444-4444-4444-4444-444444444442", "name": "Go", "scriptID": 41,
           "visible": true, "type": "button",
-          "frame": { "x": 10, "y": 50, "width": 140, "height": 28 }, "script": "",
+          "frame": { "x": 10, "y": 50, "width": 140, "height": 28 },
+          "script": "on mouseUp\\nif the hilite of button \\"Agree\\" is true then\\nput \\"agreed\\" into msg\\nelse\\nput \\"not yet\\" into msg\\nend if\\nend mouseUp",
           "button": { "autoHilite": true, "format": { "align": "center", "fontDesign": "standard",
                       "isBold": false, "isItalic": false, "isUnderline": false, "size": 17 },
                       "hilite": false, "showName": true, "style": "roundRect", "title": "Go" } }
@@ -50,6 +51,19 @@ private let toggleJSON = """
     // A second click unchecks.
     _ = try await engine.dispatchMouseUp(partScriptID: 40)
     #expect(engine.currentCardState().cardParts.first { $0.scriptID == 40 }?.hilite == false)
+}
+
+@Test func processButtonBranchesOnWhichCheckboxIsChecked() async throws {
+    // Ben's exact web scenario: a named checkbox, and a button whose script
+    // branches on `the hilite of button "Agree"` (the Go script in the JSON).
+    let engine = try StackEngine(stackJSON: toggleJSON)
+    // Unchecked: the else branch.
+    var effects = try await engine.dispatchMouseUp(partScriptID: 41)
+    #expect(effects.contains(.message("not yet")))
+    // Check the box, click again: the then branch.
+    _ = try await engine.dispatchMouseUp(partScriptID: 40)
+    effects = try await engine.dispatchMouseUp(partScriptID: 41)
+    #expect(effects.contains(.message("agreed")))
 }
 
 @Test func pushButtonsDoNotLatchHilite() async throws {

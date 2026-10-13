@@ -159,7 +159,7 @@ public final class StackEngine {
                 return rendered
             }
         }
-        return CardState(
+        var state = CardState(
             cardIndex: index,
             cardScriptID: card.scriptID,
             cardName: card.name,
@@ -175,6 +175,8 @@ public final class StackEngine {
             viewportHeight: host.cardWindowViewport?.height,
             theme: host.stack.theme
         )
+        state.cardCount = host.stack.cards.count
+        return state
     }
 
     /// Convenience for tests/JS: a field's current text on the current card.
@@ -257,6 +259,9 @@ public final class StackEngine {
 
 public struct CardState: Codable, Equatable, Sendable {
     public let cardIndex: Int
+    /// The engine's LIVE card count — scripts make and delete cards, so the
+    /// page must navigate by this, not the exported stack's length.
+    public var cardCount: Int = 0
     public let cardScriptID: Int
     public let cardName: String
     public let backgroundParts: [RenderPart]
