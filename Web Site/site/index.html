@@ -158,6 +158,14 @@ end mouseUp</code></pre>
       No server code, no accounts, no tracking; host it on any web space you
       already have.
     </p>
+    <p>
+      One honest note if your stack gathers from the live web: a browser only
+      lets a page read from sites that permit cross-origin requests, and most
+      feeds don't — so <code>url</code> and <code>FeedItems</code> that work in
+      the app can be blocked once published. The fix is a few-line
+      same-origin proxy on your own host; a ready-to-edit
+      <a href="feed-proxy.php">feed-proxy.php</a> ships with every export.
+    </p>
     <p class="demo-note">
       Below is not a video. It's Apple's original 1987 HyperCard Tour,
       imported into Contrapt and exported to this site — <strong>click it</strong>.

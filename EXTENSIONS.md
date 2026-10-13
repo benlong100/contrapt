@@ -47,7 +47,12 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   **subject to the server's CORS policy** (a page can't proxy around it) and
   governed by the browser's own permission model rather than an in-page prompt;
   the `fetch` bridge is wired in the player and the engine's EngineInteraction —
-  the exported runtime picks it up on the next wasm rebuild.
+  the exported runtime picks it up on the next wasm rebuild. Because most feeds
+  and APIs don't send CORS headers, a published stack that gathers from the web
+  usually needs a **same-origin proxy**: every export now ships a ready-to-edit
+  `feed-proxy.php` (inert until the author allow-lists URLs), and the blocked-
+  fetch error message and the "Gathering on the Web" help card both point at it.
+  Works directly in the app (not a browser); the limit is the browser's.
 
 - **Web-page readers (`the title/text/links of url "…"`)** — *shipped*. The
   idiom layer above the raw `url` container: the web a gatherer meets is HTML,

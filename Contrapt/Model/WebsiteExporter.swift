@@ -52,6 +52,10 @@ enum WebsiteExporter {
         entries[".htaccess"] = Data(htaccess.utf8)
         entries["player.js"] = Data(playerJS.utf8)
         entries["boot.js"] = Data(bootJS.utf8)
+        // A same-origin proxy template for stacks that gather from the web:
+        // the browser blocks cross-origin feeds/APIs, so authors route through
+        // this on their own host. Inert until edited (empty allowlist).
+        entries["feed-proxy.php"] = Data(feedProxyPHP.utf8)
         for name in stack.referencedAssetNames() {
             guard let data = assets[name] else { continue }
             entries["assets/\(name)"] = data
@@ -178,6 +182,44 @@ extension WebsiteExporter {
       AddOutputFilterByType DEFLATE application/wasm application/javascript text/javascript text/html text/css application/json
     </IfModule>
     """
+
+    /// A same-origin proxy template, emitted into every export as
+    /// `feed-proxy.php`. The browser blocks cross-origin feeds/APIs, so a
+    /// published stack routes its `url`/`FeedItems` reads through this on the
+    /// author's own host. Ships inert (empty allowlist) so it can never be an
+    /// open relay; the author adds the URLs their stack needs.
+    static let feedProxyPHP = ##"""
+    <?php
+    // feed-proxy.php — a same-origin proxy for a Contrapt stack published to
+    // the web. A browser only lets a page read from sites that permit
+    // cross-origin requests (CORS); most feeds don't — so `url "…"` /
+    // `FeedItems(url "…")` that work in the Contrapt app get blocked once
+    // exported. The page CAN read from its own domain, so fetch through here:
+    //
+    //   put FeedItems(url "https://YOURSITE/feed-proxy.php?url=https://host/feed") into stories
+    //
+    // Only the allow-listed URLs are fetchable, so this is never an open relay.
+    $allowed = [
+      // 'https://example.com/feed.xml',
+    ];
+    $url = isset($_GET['url']) ? $_GET['url'] : '';
+    if (!in_array($url, $allowed, true)) {
+      http_response_code(403);
+      header('Content-Type: text/plain; charset=utf-8');
+      echo "Add this URL to \$allowed in feed-proxy.php to fetch it.";
+      exit;
+    }
+    $ctx = stream_context_create(['http' => ['timeout' => 15, 'header' => "User-Agent: Contrapt-Feed-Proxy\r\n"]]);
+    $body = @file_get_contents($url, false, $ctx);
+    if ($body === false) { http_response_code(502); echo "Couldn't reach $url."; exit; }
+    $type = 'application/xml; charset=utf-8';
+    foreach ($http_response_header ?? [] as $h) {
+      if (stripos($h, 'Content-Type:') === 0) { $type = trim(substr($h, 13)); break; }
+    }
+    header('Content-Type: ' . $type);
+    header('Access-Control-Allow-Origin: *');
+    echo $body;
+    """##
 
     static let indexHTML = """
     <!DOCTYPE html>
@@ -1235,7 +1277,11 @@ extension WebsiteExporter {
           } catch (e) {
             const message = (e && e.name === 'AbortError')
               ? 'The request timed out.'
-              : 'Couldn’t reach ' + url + ' (the server may not allow cross-origin requests).';
+              : 'Couldn’t reach ' + url + '. A web browser can only load from sites that '
+                + 'allow cross-origin requests (CORS), and most feeds don’t. '
+                + 'Route it through a small same-origin proxy on your own site — '
+                + 'see “Publishing to the Web” in the Contrapt guide. (This works '
+                + 'directly in the Contrapt app; the limit is the browser’s.)';
             return { body: '', status: 0, headers: {}, error: message };
           } finally {
             if (timer) clearTimeout(timer);
