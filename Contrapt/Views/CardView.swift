@@ -918,8 +918,17 @@ private struct CardButtonLabel<Label: View>: View {
     @ViewBuilder
     private var background: some View {
         if inverted {
-            // Hilite stays a true inverse-video flip, custom fill or not.
-            shape.fill(theme.ink)
+            if style == .transparent {
+                // A transparent button over artwork inverts the PIXELS beneath
+                // (real HyperCard's hilite), not a black slab: white under a
+                // .difference blend flips whatever lies below. Solid styles
+                // keep the direct ink fill — the earlier all-styles
+                // .difference attempt escaped thin buttons' clips (see note).
+                shape.fill(.white).blendMode(.difference)
+            } else {
+                // Hilite stays a true inverse-video flip, custom fill or not.
+                shape.fill(theme.ink)
+            }
         } else if let fillColor {
             // A custom fill paints any style with a background; transparent
             // and the toggle glyphs stay unfilled.

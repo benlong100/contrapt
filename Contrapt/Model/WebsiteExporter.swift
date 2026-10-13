@@ -217,6 +217,9 @@ extension WebsiteExporter {
         flex: none; position: relative; box-sizing: border-box; }
       .button.radio .toggle { border-radius: 50%; }
       .button.checkbox.hilite, .button.radio.hilite { background: transparent; color: var(--ink); }
+      /* A hilited TRANSPARENT button inverts the art beneath it (real
+         HyperCard's pixel flip), not a black slab. */
+      .button.transparent.hilite { background: #fff; color: #fff; mix-blend-mode: difference; }
       .button.hilite .toggle::after { content: ''; position: absolute; inset: 2px;
         background: currentColor; }
       .button.radio .toggle::after { border-radius: 50%; }
