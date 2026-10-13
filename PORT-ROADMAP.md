@@ -344,6 +344,35 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
+**Text-metrics fidelity — TODO (2026-10-13, from the What is HyperCard?
+side-by-sides).** HyperCard has NO text wrap-around; authors ended text
+above their art by metrics. Ours runs ~12 card-px taller on that stack's
+Stacks card, so the paragraph collides with the artwork, and horizontal
+wraps drift ("organize information, show" breaks a word earlier). Work
+items, measured against this stack (and the Basilisk oracle for truth):
+ 1. Width calibration for the serif mapping (fontID 16 / Benguiat-era
+    face): tune proportionalFontScale so this stack's line breaks match
+    HyperCard's. Audit other classic faces the corpus uses.
+ 2. Vertical audit: find the ~12px — blank-line gap, first-baseline
+    nudge (lockedNudge), or textHeight adherence — so a field's text
+    block ENDS where HyperCard's did.
+ 3. Centered/right-aligned text must ignore TRAILING whitespace when
+    measuring the line (QuickDraw TextEdit behavior) — the Stacks card's
+    "Tag" field is 'text:' + 53 spaces, centered; modern centering
+    pushes the words out of the clip (field looks empty). Authors
+    space-padded alignment routinely; this will bite other stacks.
+    (Pending Ben's `put bg field "Tag"` probe to rule out an import
+    drop, but the renderer fix is right regardless.)
+ 4. Document the honest residue in the How to Import stack: layouts
+    tuned to exact 1-bit glyph pixels need a human pass after import.
+
+**Web-parity follow-ups still open:** state-driven player renderer
+(runtime-created parts/cards — make a card, scaffolds, bare import
+picture); verify transparent-hilite inversion on the web by eye (CSS
+mix-blend-mode difference — unverified since the app needed the
+direct-draw approach); symbol icons render black on web vs accent-
+tinted in the app.
+
 Phase A+ — web gathering, the idiom layer (language, fast lane; 2026-10-12):
 Phase A shipped the protocol layer; the web a *gatherer* meets is HTML, feeds,
 images, and tables, not clean JSON. Golden-age HyperCard was for gathering/
