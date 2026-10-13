@@ -793,6 +793,35 @@ struct Parser {
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
+        case "make" where peekIdentifier(1) == "card" || peekIdentifier(1) == "cards"
+            || (peekIdentifier(1) == "a" && peekIdentifier(2) == "card"):
+            // `make a card [using background <ref>]` — scripted card creation;
+            // `make a card for each element of <array> [using background <ref>]`
+            // — one card per element, fields filled by key name (Contrapt web
+            // gathering: data → cards). Any other `make …` stays a plain
+            // message send, so custom `make` handlers keep working.
+            advance() // make
+            _ = consumeWord("a")
+            _ = consumeWord("card") || consumeWord("cards")
+            var data: Expr? = nil
+            if peekIdentifier() == "for", peekIdentifier(1) == "each", peekIdentifier(2) == "element" {
+                advance(); advance(); advance() // for each element
+                guard consumeWord("of") || consumeWord("in") else {
+                    throw ScriptError(line: line, message: "Expected 'of <array>' after 'for each element'.")
+                }
+                data = try parseExpression()
+            }
+            var background: Expr? = nil
+            var backgroundIsID = false
+            if consumeWord("using") {
+                guard consumeBackgroundWord() else {
+                    throw ScriptError(line: line, message: "Expected 'background' after 'using', like: make a card using background \"Entry\".")
+                }
+                backgroundIsID = consumeWord("id")
+                background = try parsePrimary()
+            }
+            try expectNewline()
+            return Stmt(kind: .makeCards(data: data, background: background, backgroundIsID: backgroundIsID), line: line)
         case "choose":
             // `choose <name> tool` — a real statement: the button/field tools
             // arm click-to-select for `doMenu "Clear Button"/"Clear Field"`,
@@ -2789,6 +2818,11 @@ struct Parser {
         "foundtext": .text, "foundchunk": .chunk, "foundline": .line, "foundfield": .field,
     ]
 
+    /// `the <aspect> of url "…"` — web-page readers (Contrapt web gathering).
+    static let pageProperties: [String: PageProperty] = [
+        "title": .title, "text": .text, "links": .links,
+    ]
+
     /// `the clickLine` / `the clickText` — where the last locked-field click
     /// landed (HyperCard 2.2's list-navigation idiom).
     static let clickFields: [String: ClickField] = [
@@ -3342,6 +3376,17 @@ struct Parser {
                peekIdentifier(2) == "elements", peekIdentifier(3) == "of" {
                 advance(); advance(); advance(); advance() // number of elements of
                 return .elementCount(try parsePrimary())
+            }
+            // `the title/text/links of url <expr>` — web-page readers
+            // (Contrapt web gathering): fetch the page, read one aspect.
+            // Keyed on the `url` keyword so `the title of btn 1` and
+            // `the text of theObj` keep their object-property meaning.
+            if let word = peekIdentifier(), let page = Self.pageProperties[word],
+               peekIdentifier(1) == "of", peekIdentifier(2) == "url" {
+                advance() // title/text/links
+                advance() // of
+                advance() // url
+                return .pageProperty(page, try parsePrimary())
             }
             // `the number of words of X` → chunk count (but not
             // `the number of this card`, which is a card property).

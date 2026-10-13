@@ -112,6 +112,10 @@ indirect enum StmtKind {
     /// `delete background 2` / `delete bkgnd "X"` / `delete bkgnd id 7` —
     /// remove an empty background (one no card uses).
     case deleteBackground(reference: Expr, isID: Bool)
+    /// `make a card [using background <ref>]` — scripted card creation (one
+    /// card, `it` = its number); with `for each element of <array>`, one card
+    /// per element, fields filled by key name (`it` = how many were made).
+    case makeCards(data: Expr?, background: Expr?, backgroundIsID: Bool)
     /// `delete [the] [card|bkgnd] picture [of <card>]` — remove the paint
     /// layer (HyperCard: select all + clear picture).
     case deletePicture(background: Bool, card: CardRef?)
@@ -405,6 +409,10 @@ indirect enum Expr {
     case arrayKeys(Expr)
     /// `the number of elements of <array>` — how many top-level elements.
     case elementCount(Expr)
+    /// `the title/text/links of url "…"` — fetch the page and read one aspect
+    /// of it (Contrapt web gathering). The expression is the URL; links are
+    /// resolved against it.
+    case pageProperty(PageProperty, Expr)
     /// A chunk of text: `word 2 of X`, `char 1 to 5 of X`, `the last line of X`.
     case chunk(ChunkKind, ChunkSelector, Expr)
     /// `the number of words of X` — how many chunks of a kind are in X.
@@ -451,6 +459,13 @@ indirect enum Expr {
 /// The units a chunk expression addresses.
 enum ChunkKind {
     case character, word, item, line
+}
+
+/// Which aspect of a fetched web page `the … of url "…"` reads.
+enum PageProperty {
+    case title   // the <title> tag's text
+    case text    // the readable text, tags and chrome stripped
+    case links   // the href targets, one per line, resolved absolute
 }
 
 /// Which unit(s) a chunk selects.

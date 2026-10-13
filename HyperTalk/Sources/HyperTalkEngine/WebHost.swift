@@ -353,6 +353,57 @@ final class WebHost: HyperTalkHost {
         recorded.append(.navigate(cardIndex: currentIndex, effects: []))
     }
 
+    /// `make a card [using background <ref>]` — append a card at the end of
+    /// the stack (nil background = the current card's), without navigating.
+    func makeCard(background: HyperTalkObject.Reference?) throws -> Int {
+        var targetBackground = stack.cards[cardIndex].backgroundID
+        if let background {
+            guard let found = backgroundID(for: background) else {
+                throw HostError("There is no such background to make the card with.")
+            }
+            targetBackground = found
+        }
+        var card = Card(id: UUID(), name: "", backgroundID: targetBackground, script: "", parts: [])
+        card.scriptID = stack.claimScriptID()
+        stack.cards.append(card)
+        return stack.cards.count
+    }
+
+    /// Merge scaffolding: a background with NO fields yet gets one per key —
+    /// stacked single-line fields, with a "text" key given the tall multiline
+    /// slot. A designed background (any field present) is left untouched.
+    /// A missing background is left for makeCard to report.
+    func scaffoldBackgroundFields(keys: [String], background: HyperTalkObject.Reference?) throws {
+        let targetBackground = background.flatMap { backgroundID(for: $0) }
+            ?? (background == nil ? stack.cards[cardIndex].backgroundID : nil)
+        guard let targetBackground,
+              let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == targetBackground }),
+              !keys.isEmpty,
+              !stack.backgrounds[backgroundIndex].parts.contains(where: {
+                  if case .field = $0.kind { return true } else { return false }
+              }) else { return }
+        // The layout: margins all around, a short row per key, and the
+        // remaining height to a key named "text" (the feed/article body).
+        let margin = 20.0, rowHeight = 32.0, gap = 10.0
+        let width = stack.cardSize.width - margin * 2
+        let shortRows = Double(keys.filter { $0.lowercased() != "text" }.count)
+        let tallHeight = max(100, stack.cardSize.height - margin * 2 - shortRows * (rowHeight + gap))
+        var y = margin
+        for key in keys {
+            let isBody = key.lowercased() == "text"
+            guard var field = try? JSONDecoder().decode(
+                FieldPart.self, from: Data("{\"text\":\"\"}".utf8)) else { return }
+            field.isMultiline = isBody
+            var part = Part(id: UUID(), name: key,
+                            frame: PartFrame(x: margin, y: y, width: width,
+                                             height: isBody ? tallHeight : rowHeight),
+                            script: "", kind: .field(field))
+            part.scriptID = stack.claimScriptID()
+            stack.backgrounds[backgroundIndex].parts.append(part)
+            y += (isBody ? tallHeight : rowHeight) + gap
+        }
+    }
+
     func resolveCardIndex(_ destination: GoDestination) throws -> Int {
         let count = stack.cards.count
         guard count > 0 else { throw HostError("This stack has no cards.") }

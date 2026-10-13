@@ -419,6 +419,17 @@ public protocol HyperTalkHost: AnyObject {
     /// `delete background <ref>` — remove a background no card uses (throws
     /// when cards still reference it). Default: throws.
     func deleteBackground(_ reference: HyperTalkObject.Reference) throws
+    /// `make a card` — append a card at the end of the stack using the given
+    /// background (nil = the current card's), WITHOUT navigating to it.
+    /// Returns the new card's 1-based number. Default: throws (a host without
+    /// a card model can't make cards).
+    func makeCard(background: HyperTalkObject.Reference?) throws -> Int
+    /// `make a card for each element` scaffolding: when the target background
+    /// has NO fields yet, create one background field per key (stacked, a
+    /// "text" key gets the tall multiline slot) so a merge into a blank
+    /// template just works. A background that already has fields is left
+    /// exactly as designed. Default: does nothing.
+    func scaffoldBackgroundFields(keys: [String], background: HyperTalkObject.Reference?) throws
     /// `delete [the] [card|bkgnd] picture [of <card>]` — remove the paint
     /// layer. Default: throws.
     func clearPicture(background: Bool, card: GoDestination?) throws
@@ -600,6 +611,10 @@ public extension HyperTalkHost {
     func deleteBackground(_ reference: HyperTalkObject.Reference) throws {
         throw HostError("Backgrounds can't be deleted here.")
     }
+    func makeCard(background: HyperTalkObject.Reference?) throws -> Int {
+        throw HostError("Cards can't be made here.")
+    }
+    func scaffoldBackgroundFields(keys: [String], background: HyperTalkObject.Reference?) throws {}
     func clearPicture(background: Bool, card: GoDestination?) throws {
         throw HostError("Pictures can't be deleted here.")
     }

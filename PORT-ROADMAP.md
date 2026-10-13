@@ -332,6 +332,49 @@ Phase A — the substrate (do first):
      player and rebuild WebEngine.zip. *Optional multi-user / a shared cross-
      stack area deferred (the roadmap's "then optional multi-user").*
 
+Phase A+ — web gathering, the idiom layer (language, fast lane; 2026-10-12):
+Phase A shipped the protocol layer; the web a *gatherer* meets is HTML, feeds,
+images, and tables, not clean JSON. Golden-age HyperCard was for gathering/
+referencing/presenting a domain (the bulk source was a CD-ROM; now it's the
+web). Every item must pass PHILOSOPHY.md's restraint bar: extend an existing
+idiom, don't grow a new syntax class. In order:
+1. **Page readers** — DONE 2026-10-12: `the title of url "…"`, `the text of
+   url "…"` (readable text), `the links of url "…"` (absolute, one per line).
+   Keyed on `url` so object `title`/`text` properties keep their meaning; pure
+   `HTMLPage` extractor in the package. 10 PageReaderTests; suite 721; sweep
+   unchanged (48). See EXTENSIONS.md.
+2. **`import picture from url "…"`** — the visual counterpart (app + web).
+3. **Cards-from-data merge — DONE 2026-10-12:** `make a card [using
+   background <ref>]` (scripted creation, appends at end, no navigation,
+   `it` = card number) and `make a card for each element of <array> [using
+   background <ref>]` (one card per element, fields filled by key name,
+   `it` = count). New host hook `makeCard(background:)` (WebHost +
+   DocumentScriptHost; reuses `setFieldText(onCard:)` for the fill).
+   `make` is only a command before `[a] card`, so custom `make` handlers
+   still work. 9 MakeCardTests incl. the end-to-end thesis demo
+   (JSONDecode(url …) → make a card for each element → deck); suite 730;
+   sweep unchanged (48). See EXTENSIONS.md. **Scaffolding added
+   2026-10-12** (Ben hit blank cards live): a field-less target background
+   gets one bg field per data key via host hook
+   `scaffoldBackgroundFields(keys:background:)` (no-op default; WebHost +
+   DocumentScriptHost); designed backgrounds untouched. +2 tests; suite
+   742; sweep 48.
+4. **Feeds — DONE 2026-10-12:** `FeedItems(url "…")` (function-level, like
+   JSONDecode) — RSS 2.0 + Atom → elements with title/link/date/text keys,
+   the exact shape #3 fills fields from. Pure `WebFeed` reader in the
+   package. 6 FeedTests.
+5. **CSV — DONE 2026-10-12:** `CSVItems(url "…")` — header row names the
+   keys, one element per data row; quoted fields carry commas/newlines/""
+   (note: CRLF is ONE Swift Character — handled). Pure `CSVTable` reader.
+   5 CSVTests. Suite 740 after #4+#5; sweep unchanged (48, no grammar
+   change). See EXTENSIONS.md.
+6. **Field hyperlinks** — `set the link of word 4 of field 1 to card id 12`
+   (or a URL); rides the styleRun machinery, maps to `<a>` in web export.
+7. **Timed send** — `send "refresh" to this card in 2 minutes` (LiveCode
+   prior art — credit it).
+Ruled out: AI verbs in the language (the co-author is the on-ramp, per
+PHILOSOPHY.md); receiving/webhooks/serving (breaks run-everywhere + sandbox).
+
 Phase B — the experience (app-side, build-gated):
 4. **Reskin / theming + responsive layout + accessibility** — leans on the
    import strength; modernizes old stacks and makes new ones web-respectable

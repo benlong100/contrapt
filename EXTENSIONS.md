@@ -49,6 +49,54 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   the `fetch` bridge is wired in the player and the engine's EngineInteraction —
   the exported runtime picks it up on the next wasm rebuild.
 
+- **Web-page readers (`the title/text/links of url "…"`)** — *shipped*. The
+  idiom layer above the raw `url` container: the web a gatherer meets is HTML,
+  not JSON. `the title of url "…"` reads the page's title; `the text of url
+  "…"` its readable text (scripts/styles/head chrome stripped, entities
+  decoded, block elements as line breaks); `the links of url "…"` its link
+  targets, one per line, resolved absolute against the fetched address (so
+  `line 2 of the links of url …` chunk-composes). Each read fetches through
+  the same GET as the `url` container (same consent prompt and CORS reality;
+  errors → `the result`). Parsing is keyed on the `url` keyword, so `the
+  title of button 1` and property-of-indirect-object idioms keep their
+  meaning. The extractor (`HTMLPage`) is a small pure-Swift reader in the
+  package — not a browser — shared by the app and the web export. No new
+  syntax class: property-of-object, pointed at a page.
+
+- **Scripted card creation + data→cards merge (`make a card`)** — *shipped*.
+  `make a card [using background "Entry"]` appends a card at the end of the
+  stack (current card's background when unspecified), without navigating;
+  `it` gets the new card's number. The merge form — `make a card for each
+  element of <array> [using background <ref>]` — creates one card per
+  element and fills each card's fields by key name (an element's key
+  "Title" lands in field "Title"; keys with no matching field are ignored,
+  scalar elements make empty cards); `it` gets the count. This is the verb
+  that turns gathered data into a *stack*: `JSONDecode(url …)` → `make a
+  card for each element` → a browsable deck, three readable lines. Built
+  from existing vocabulary (`for each element of`, `using`, backgrounds);
+  `make` only becomes a command before `[a] card`, so custom `make`
+  handlers still dispatch. HyperCard itself had no scripted New Card
+  (menu only) — this is the forward-looking completion of `delete card`.
+  **Blank-template scaffolding:** merging into a background that has NO
+  fields yet creates one background field per data key (named by the key,
+  stacked; a `text` key gets the tall multiline slot) and then fills them —
+  so `make a card for each element of FeedItems(url "…")` works with zero
+  setup. A background that already has any field is never touched: the
+  author's design wins, and unmatched keys are ignored as before.
+
+- **Feed and table readers (`FeedItems(…)`, `CSVItems(…)`)** — *shipped*.
+  Function-level (like `JSONDecode` — no new grammar), returning the same
+  array shape `make a card for each element` fills fields from.
+  `FeedItems(url "…")` parses RSS 2.0 and Atom into items with the keys
+  `title`/`link`/`date`/`text` (CDATA unwrapped, the body read like `the
+  text of url` — HTML stripped, entities decoded; Atom link prefers
+  `rel="alternate"`). `CSVItems(url "…")` parses comma-separated tables:
+  the header row names the keys (blank → "column N", duplicates suffixed),
+  each data row is one element; quoted fields carry commas, newlines, and
+  `""` quotes. A feed is practically a background waiting for cards:
+  `make a card for each element of FeedItems(url "…") using background
+  "Story"` is a one-line news stack.
+
 - **Persistent stack data (`stackData`)** — *shipped (web transport needs a
   wasm rebuild)*. A per-stack key-value store that survives between runs,
   modeled as an associative array so it reuses all the array machinery:

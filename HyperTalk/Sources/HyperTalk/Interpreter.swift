@@ -842,6 +842,53 @@ final class Runtime {
             try hostCall(line: statement.line) { try host.deleteBackground(ref) }
             return .normal
 
+        case .makeCards(let dataExpression, let backgroundExpression, let backgroundIsID):
+            // `make a card [using background <ref>]` — scripted creation,
+            // appended at the end of the stack, no navigation. With `for each
+            // element of <array>`: one card per element, each element's keys
+            // fill same-named fields (keys with no matching field are ignored,
+            // so extra data is harmless). `it` = the new card's number, or how
+            // many cards were made.
+            var background: HyperTalkObject.Reference? = nil
+            if let backgroundExpression {
+                let value = try await evaluate(backgroundExpression, line: statement.line)
+                background = backgroundIsID ? .id(value) : reference(from: value)
+            }
+            if let dataExpression {
+                let data = try await evaluate(dataExpression, line: statement.line)
+                guard let elements = HyperTalkArray.decode(data) else {
+                    throw ScriptError(line: statement.line, message: "'make a card for each element' needs an array (decode JSON first, or build one with a[1], a[2], …).")
+                }
+                // A blank template shouldn't mean blank cards: offer the data's
+                // keys (in first-appearance order) so a background with no
+                // fields yet gets one per key. A designed background is left
+                // alone — there the fill matches by name and skips the rest.
+                var keys: [String] = []
+                for element in elements {
+                    for (key, _) in HyperTalkArray.decode(element.value) ?? [] where
+                        !keys.contains(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) {
+                        keys.append(key)
+                    }
+                }
+                if !keys.isEmpty {
+                    try hostCall(line: statement.line) {
+                        try host.scaffoldBackgroundFields(keys: keys, background: background)
+                    }
+                }
+                for element in elements {
+                    let number = try hostCall(line: statement.line) { try host.makeCard(background: background) }
+                    guard let fields = HyperTalkArray.decode(element.value) else { continue }
+                    for (key, value) in fields {
+                        try? host.setFieldText(.named(key), domain: .any, onCard: .number(number), to: Self.displayValue(value))
+                    }
+                }
+                setVariable("it", to: String(elements.count))
+            } else {
+                let number = try hostCall(line: statement.line) { try host.makeCard(background: background) }
+                setVariable("it", to: String(number))
+            }
+            return .normal
+
         case .deletePicture(let background, let cardRef):
             // `delete [the] card picture` — remove the paint layer.
             let destination = try await resolveCardRef(cardRef, line: statement.line)
@@ -2038,6 +2085,17 @@ final class Runtime {
             let array = try await evaluate(arrayExpression, line: line)
             return HyperTalkArray.keys(of: array).joined(separator: "\n")
 
+        case .pageProperty(let aspect, let addressExpression):
+            // `the title/text/links of url "…"` — fetch the page (same GET as
+            // the url container; errors → `the result`) and read one aspect.
+            let address = try await evaluate(addressExpression, line: line)
+            let body = await performHTTP(method: "GET", url: address, body: nil)
+            switch aspect {
+            case .title: return HTMLPage.title(of: body)
+            case .text: return HTMLPage.text(of: body)
+            case .links: return HTMLPage.links(of: body, base: address).joined(separator: "\n")
+            }
+
         case .elementCount(let arrayExpression):
             let array = try await evaluate(arrayExpression, line: line)
             return String(HyperTalkArray.count(of: array))
@@ -2365,6 +2423,15 @@ final class Runtime {
             // (e.g. "pretty") indents: `JSONEncode(data, "pretty")`.
             let pretty = arguments.count > 1 && arguments[1].lowercased().hasPrefix("p")
             return HyperTalkArray.toJSON(arguments.first ?? "", pretty: pretty)
+        case "feeditems":
+            // Parse an RSS/Atom feed into an array of items (title/link/date/
+            // text per element) — `put FeedItems(url "…") into stories`, made
+            // for `make a card for each element of stories`.
+            return WebFeed.items(arguments.first ?? "")
+        case "csvitems":
+            // Parse a CSV table the same way: the header row names the keys,
+            // each data row becomes one element — `CSVItems(url "…")`.
+            return CSVTable.items(arguments.first ?? "")
         case "length":
             guard arguments.count == 1 else {
                 throw ScriptError(line: line, message: "length expects one value, like length(field \"Name\").")
