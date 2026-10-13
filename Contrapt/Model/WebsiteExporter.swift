@@ -191,7 +191,7 @@ extension WebsiteExporter {
       .part { position: absolute; box-sizing: border-box; overflow: hidden;
         color: var(--ink); line-height: 1.15; }
       .field { white-space: pre-wrap; padding: 4px 3px 3px 3px; }
-      .field.rich { padding: 12px; line-height: 1.45; }
+      .field.rich { padding: 12px; line-height: 1.45; overflow-y: auto; }
       .field a { color: var(--accent, #0969da); text-decoration: underline; cursor: pointer; }
       .field.opaque, .field.rectangle, .field.shadow { background: var(--surface); }
       .field.rectangle { border: 1px solid var(--border); }
@@ -399,6 +399,7 @@ extension WebsiteExporter {
       function renderMarkdown(el, text) {
         el.textContent = '';
         el.dataset.md = text || '';
+        let started = false;
         String(text || '').split('\\n').forEach(line => {
           const row = document.createElement('div');
           let body = line;
@@ -412,8 +413,13 @@ extension WebsiteExporter {
           } else if (/^[-*]\\s+/.test(line)) {
             body = '• ' + line.replace(/^[-*]\\s+/, '');
           }
-          if (body === '') row.appendChild(document.createElement('br'));
-          else mdInline(row, body);
+          if (body === '') {
+            if (!started) return; // leading blanks render as nothing
+            row.appendChild(document.createElement('br'));
+          } else {
+            started = true;
+            mdInline(row, body);
+          }
           el.appendChild(row);
         });
       }
