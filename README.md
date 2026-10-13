@@ -57,7 +57,9 @@ of course, a contraption.
 
 Scripts reach the app through one small protocol (`HyperTalkHost`); the
 interpreter is the sandbox. Design decisions and their reasons live in
-[DECISIONS.md](DECISIONS.md).
+[DECISIONS.md](DECISIONS.md); what Contrapt is and isn't trying to be —
+and how it differs from projects like LiveCode — lives in
+[PHILOSOPHY.md](PHILOSOPHY.md).
 
 ## Building
 
