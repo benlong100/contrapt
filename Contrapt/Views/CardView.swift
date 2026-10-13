@@ -129,12 +129,55 @@ struct CardView: View {
                 if stack.cards[cardIndex].showPicture {
                     paintLayer(assetName: stack.cards[cardIndex].paintImageAsset, multiplyOverColor: hasColor)
                 }
+                // Hilited TRANSPARENT buttons invert the art beneath them, as
+                // real HyperCard flips the pixels (not a black slab). Drawn
+                // here — above the paint, below the parts — because live
+                // blend modes get flattened by intermediate layers.
+                transparentHiliteInversions(hasColor: hasColor)
                 partViews(for: $stack.cards[cardIndex].parts)
                 guideLines
             }
             if peekButtons { peekOverlay(frames: peekFrames(buttons: true), color: .blue) }
             if peekFields { peekOverlay(frames: peekFrames(buttons: false), color: .green) }
         }
+    }
+
+    /// The inverted-art rectangles for every hilited transparent button on
+    /// either layer: the card's paint stack, color-inverted, clipped to the
+    /// button's frame. Direct drawing — no blend-mode reliance.
+    @ViewBuilder
+    private func transparentHiliteInversions(hasColor: Bool) -> some View {
+        let cardParts = stack.cards.indices.contains(cardIndex) ? stack.cards[cardIndex].parts : []
+        let bgParts = backgroundIndex.map { stack.backgrounds[$0].parts } ?? []
+        let hilitedFrames = (bgParts + cardParts).compactMap { part -> PartFrame? in
+            guard part.isVisible, case .button(let button) = part.kind,
+                  button.style == .transparent, button.hilite else { return nil }
+            return part.frame
+        }
+        ForEach(hilitedFrames.indices, id: \.self) { index in
+            invertedArt(at: hilitedFrames[index], hasColor: hasColor)
+        }
+    }
+
+    /// The card's art (surface + both paint layers), inverted and clipped to
+    /// `frame`, positioned over it.
+    private func invertedArt(at frame: PartFrame, hasColor: Bool) -> some View {
+        ZStack(alignment: .topLeading) {
+            theme.surface
+            if let backgroundIndex, stack.backgrounds[backgroundIndex].showPicture {
+                paintLayer(assetName: stack.backgrounds[backgroundIndex].paintImageAsset, multiplyOverColor: hasColor)
+            }
+            if stack.cards.indices.contains(cardIndex), stack.cards[cardIndex].showPicture {
+                paintLayer(assetName: stack.cards[cardIndex].paintImageAsset, multiplyOverColor: hasColor)
+            }
+        }
+        .frame(width: stack.cardSize.width, height: stack.cardSize.height, alignment: .topLeading)
+        .offset(x: -frame.x, y: -frame.y)
+        .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+        .clipped()
+        .colorInvert()
+        .offset(x: frame.x, y: frame.y)
+        .allowsHitTesting(false)
     }
 
     /// Background parts as seen from the current card: a non-sharedText
@@ -909,16 +952,6 @@ private struct CardButtonLabel<Label: View>: View {
             .overlay(border)
             .compositingGroup()
             .shadow(color: style == .shadow ? .black.opacity(0.45) : .clear, radius: 0, x: 3, y: 3)
-            // A hilited TRANSPARENT button inverts the pixels beneath, as real
-            // HyperCard does: a white fill under .difference, placed outside
-            // the compositing group so it blends with the card art (inside,
-            // it blends with nothing and reads plain white). The label above
-            // stays surface-colored — white title over inverted art.
-            .background {
-                if inverted && style == .transparent {
-                    Rectangle().fill(.white).blendMode(.difference)
-                }
-            }
             .contentShape(Rectangle())
     }
 
@@ -929,9 +962,10 @@ private struct CardButtonLabel<Label: View>: View {
     private var background: some View {
         if inverted {
             if style == .transparent {
-                // The inverting fill lives OUTSIDE the compositing group (see
-                // body) — inside it, .difference blends against the group's
-                // own transparent backdrop and renders plain white.
+                // The inverted artwork is drawn by the card canvas beneath
+                // this button (transparentHiliteInversions) — live blend
+                // modes get flattened by intermediate layers, so the button
+                // itself paints nothing here.
                 Color.clear
             } else {
                 // Hilite stays a true inverse-video flip, custom fill or not.
