@@ -77,6 +77,10 @@ indirect enum StmtKind {
     /// `ask <prompt> [with <default>]` — a modal text prompt; the entered
     /// text (empty if cancelled) lands in `it`.
     case ask(Expr, initialAnswer: Expr?)
+    /// `ask <prompt> with ai` — send the prompt to the host's AI provider;
+    /// the reply lands in `it`, any error (no key, offline, unavailable) in
+    /// `the result`. A runtime gathering source, like `url`/`FeedItems`.
+    case askAI(Expr)
     /// `answer file <prompt> [of type <filter>]` — a file-open dialog. Contrapt
     /// can't present one mid-script, so it simulates a cancel (empty `it`, the
     /// result "Cancel"), which stacks treat as "no file chosen".

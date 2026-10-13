@@ -53,6 +53,15 @@ final class MockHost: HyperTalkHost {
         scheduledSends.append((message, arguments, target, afterSeconds))
     }
 
+    /// Canned AI reply + optional error for `ask … with ai`; records prompts.
+    var aiReply = ""
+    var aiError: String? = nil
+    var aiPrompts: [String] = []
+    func aiRespond(prompt: String) async -> (reply: String, error: String?) {
+        aiPrompts.append(prompt)
+        return (aiReply, aiError)
+    }
+
     /// The stack's persistent store (`stackData`). Retained on the instance so a
     /// value written in one run is readable from the next, as a real backing
     /// store would survive between runs.

@@ -1395,6 +1395,16 @@ final class Runtime {
             lastResult = answer == nil ? "Cancel" : ""
             return .normal
 
+        case .askAI(let promptExpression):
+            // `ask <prompt> with ai` — the reply lands in `it`, any error in
+            // `the result` (mirrors `ask` for the reply, the url container for
+            // errors). The host owns the provider/key and any consent prompt.
+            let prompt = try await evaluate(promptExpression, line: statement.line)
+            let (reply, error) = await host.aiRespond(prompt: prompt)
+            setVariable("it", to: reply)
+            lastResult = error ?? ""
+            return .normal
+
         case .setGlobalProperty(let property, let valueExpression):
             let value = try await evaluate(valueExpression, line: statement.line)
             switch property {

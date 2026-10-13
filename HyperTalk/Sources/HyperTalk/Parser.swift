@@ -442,7 +442,18 @@ struct Parser {
             _ = consumeWord("file") || consumeWord("password")
             let prompt = try parseExpression()
             var initialAnswer: Expr?
-            if consumeWord("with") { initialAnswer = try parseExpression() }
+            if consumeWord("with") {
+                // `ask <prompt> with ai` — the AI gathering form (reply in
+                // `it`, errors in `the result`). A bare trailing `ai` is the
+                // signal; otherwise `with <expr>` is the default answer.
+                let beforeWith = index
+                if consumeWord("ai"), current.kind == .newline || current.kind == .endOfScript {
+                    try expectNewline()
+                    return Stmt(kind: .askAI(prompt), line: line)
+                }
+                index = beforeWith
+                initialAnswer = try parseExpression()
+            }
             try expectNewline()
             return Stmt(kind: .ask(prompt, initialAnswer: initialAnswer), line: line)
         case "visual":

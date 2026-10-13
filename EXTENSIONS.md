@@ -142,6 +142,23 @@ Status tags: **shipped** · **partial** · **planned** (tracked in the roadmap).
   and cards don't display there yet — importing into an existing part is
   the web-safe form; see PORT-ROADMAP.
 
+- **AI from a script (`ask <prompt> with ai`)** — *shipped (app; web
+  reports unavailable by design)*. The modern gathering source: a button
+  can send a prompt to a model and drop the answer wherever it likes. It
+  extends HyperCard's own `ask` (which already lands the user's reply in
+  `it`) — `ask "Summarize:" && field "Body" with ai` puts the model's
+  reply in `it` and any error (no key, offline, declined) in `the
+  result`, so `if the result is empty then …` guards it the HyperTalk
+  way. App: reuses the AI co-author's cloud key (Anthropic, from
+  Settings/Keychain) behind the SAME per-host network-consent prompt as
+  the `url` container — a browsed stack asks before spending the key; the
+  stack you're editing is trusted. No key set → `the result` says so.
+  **Web export: unavailable** — the call returns empty with `the result`
+  = "AI isn't available here", because an API key can't be embedded in a
+  public page safely (same host-provides-the-capability rule as the rest
+  of write-once-run-everywhere). Only a bare trailing `ai` triggers it;
+  `ask … with <expr>` stays the ordinary default-answer dialog.
+
 - **Timed send (`send <msg> [to <object>] in <time>`)** — *shipped (web
   delivery rides the next wasm rebuild)*. LiveCode's idiom, credited: the
   dispatch happens later — `send "refresh" to this card in 2 minutes` makes

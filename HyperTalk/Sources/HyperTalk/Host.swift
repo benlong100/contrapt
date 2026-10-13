@@ -354,6 +354,11 @@ public protocol HyperTalkHost: AnyObject {
     /// `ask <prompt> with <default>` — a modal text prompt. Returns the text
     /// entered, or nil if the user cancels.
     func ask(_ prompt: String, initialAnswer: String) async -> String?
+    /// `ask <prompt> with ai` — send `prompt` to the host's AI provider and
+    /// return (reply, error). The app uses the cloud co-author key behind the
+    /// network-consent prompt; hosts without a provider (tests, the web
+    /// export) return an error. Default: unavailable.
+    func aiRespond(prompt: String) async -> (reply: String, error: String?)
     /// `answer file <prompt> [of type <type>]` — a file-open dialog. `type` is
     /// the classic four-char Mac file type the stack asked for (e.g. "STAK"),
     /// advisory only. Returns the chosen file's path, or nil if the user
@@ -621,6 +626,9 @@ public extension HyperTalkHost {
     func adjacentBackgroundCardNumber(forward: Bool) -> Int? { nil }
     func httpRequest(method: String, url: String, body: String?, headers: [String: String], timeout: Double) async -> (body: String, status: Int, headers: [String: String], error: String?) {
         ("", 0, [:], "Networking isn't available here.")
+    }
+    func aiRespond(prompt: String) async -> (reply: String, error: String?) {
+        ("", "AI isn't available here.")
     }
     func persistentData() -> String { "" }
     func setPersistentData(_ encoded: String) {}

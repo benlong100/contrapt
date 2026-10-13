@@ -449,8 +449,16 @@ idiom, don't grow a new syntax class. In order:
    in WasmPlayer/main.swift — needs the pending wasm rebuild). 10 tests
    (5 TimedSendTests + 5 TimedSendWebTests incl. cross-card delivery);
    suite 758; sweep 48 (parseSend restructure verified against corpus).
-Ruled out: AI verbs in the language (the co-author is the on-ramp, per
-PHILOSOPHY.md); receiving/webhooks/serving (breaks run-everywhere + sandbox).
+**AI as a gathering source — DONE 2026-10-13** (reopened the earlier
+"ruled out" with Ben): `ask <prompt> with ai` — reply in `it`, errors in
+`the result`, extending HyperCard's own `ask`. The earlier objection was
+AI-as-a-shortcut-that-replaces-learning; framed as a RUNTIME DATA SOURCE
+(a sibling of url/FeedItems — "the bulk source was a CD-ROM, then the
+web, now a model") it fits the gathering arc. App reuses the co-author
+cloud key behind the url-container consent prompt; web export reports
+unavailable (no safe way to embed a key). Only a bare trailing `ai`
+triggers it. 5 AskAITests; suite 787; sweep 48. Still ruled out:
+receiving/webhooks/serving (breaks run-everywhere + sandbox).
 
 Phase B — the experience (app-side, build-gated):
 4. **Reskin / theming + responsive layout + accessibility** — leans on the

@@ -1998,6 +1998,29 @@ final class DocumentScriptHost: HyperTalkHost {
 
     // MARK: - Networking
 
+    /// `ask <prompt> with ai` — send the prompt to the cloud model (the same
+    /// key the AI co-author uses), gated by the per-host network-consent
+    /// prompt so a browsed stack can't silently spend the key. The reply goes
+    /// to `it`; any error (no key, offline, declined) to `the result`.
+    func aiRespond(prompt: String) async -> (reply: String, error: String?) {
+        let provider = CloudCoAuthor()
+        if let unavailable = provider.unavailableReason {
+            return ("", unavailable)   // e.g. no key set — add one in Settings
+        }
+        guard await isNetworkAllowed(host: "api.anthropic.com") else {
+            return ("", "\"\(stack.name)\" isn't allowed to use AI.")
+        }
+        let request = CoAuthorRequest(
+            instructions: "You are a helpful assistant answering from inside a HyperCard-style stack. "
+                + "Reply in plain text only — no Markdown, no code fences — suitable to drop straight into a card field. Be concise.",
+            prompt: prompt)
+        do {
+            return (try await provider.respond(to: request), nil)
+        } catch {
+            return ("", error.localizedDescription)
+        }
+    }
+
     /// `url`/`post`/`delete url` — a real HTTP request, gated by per-stack/per-
     /// host consent (see isNetworkAllowed). Carries the script's httpHeaders and
     /// httpTimeout; returns the body, status, response headers, and (on failure)
