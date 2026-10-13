@@ -371,10 +371,12 @@ items, measured against this stack (and the Basilisk oracle for truth):
 (EngineModel.Part now encodes; CardState carries full parts + bg overlay;
 paint from static maps by id), so script-created cards/parts/scaffolds
 show on the web; navigation rebuilds, same-card events reconcile-add.
-Still open: verify transparent-hilite inversion on the web by eye (CSS
-mix-blend-mode difference — unverified since the app needed the
-direct-draw approach); symbol icons render black on web vs accent-tinted
-in the app.
+Transparent-hilite inversion on the web — reworked 2026-10-13 (f5d7975):
+`backdrop-filter: invert(1)` (+ -webkit-) inverts only the pixels behind
+the button box, clipped to the frame, title legible — the web analog of
+the app's clipped inverted-art draw (replaced mix-blend-mode, which also
+inverted the title). Needs a final in-browser eye check. Still open:
+symbol icons render black on web vs accent-tinted in the app.
 
 Phase A+ — web gathering, the idiom layer (language, fast lane; 2026-10-12):
 Phase A shipped the protocol layer; the web a *gatherer* meets is HTML, feeds,
