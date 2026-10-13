@@ -106,6 +106,17 @@ struct ContentView: View {
     @State private var paintDrawingToEdit = PKDrawing()
     @State private var paintTarget: PaintTarget = .card
     #endif
+    /// The card area's size (what CardView's GeometryReader fills), recorded
+    /// so Export Bitmaps can match the displayed Fill Window scale.
+    @State private var cardAreaSize: CGSize = .zero
+    /// The scale the card is currently displayed at (Fill Window math —
+    /// CardView computes the same); 1 when unmeasured.
+    private var displayedCardScale: Double {
+        let size = document.stack.cardSize
+        guard cardAreaSize.width > 0, cardAreaSize.height > 0, size.width > 0, size.height > 0 else { return 1 }
+        return min(cardAreaSize.width / size.width, cardAreaSize.height / size.height)
+    }
+
     /// The button being linked, while the Link To panel floats over the card.
     @State private var linkingPartID: UUID?
     /// Where Link To started — the button's card — so applying the link
@@ -430,6 +441,9 @@ struct ContentView: View {
                             .transition(cardTransition?.transition ?? .identity)
                     }
                 }
+                // The card area CardView's GeometryReader fills — recorded so
+                // Export Bitmaps can match the displayed (Fill Window) scale.
+                .onGeometryChange(for: CGSize.self, of: { $0.size }) { cardAreaSize = $0 }
                 // The Flash XCMD: a white overlay pulsed with the difference
                 // blend inverts the card's colors, like HyperCard's screen
                 // flash. Non-hittable; opacity is driven by flashScreen().
@@ -802,7 +816,11 @@ struct ContentView: View {
         })
         .focusedSceneValue(\.stackBitmaps, StackBitmaps(
             export: { directory in
-                try BitmapExporter.export(stack: document.stack, assets: document.assets, into: directory)
+                // A Fill Window stack exports its bitmaps at the size the
+                // window shows them (never below stored size), so the art can
+                // be edited at seen-size; actual-size stacks export 1:1.
+                try BitmapExporter.export(stack: document.stack, assets: document.assets, into: directory,
+                                          pixelScale: document.stack.presentAtActualSize ? 1 : max(1, displayedCardScale))
             },
             replace: { directory in
                 let replacement = try BitmapExporter.replacements(for: document.stack, from: directory)

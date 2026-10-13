@@ -11,6 +11,9 @@
 //
 
 import Foundation
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 
 nonisolated enum BitmapExporter {
     struct BitmapError: LocalizedError { let message: String; var errorDescription: String? { message } }
@@ -21,27 +24,60 @@ nonisolated enum BitmapExporter {
     }
 
     /// The exported files as name → PNG bytes: one entry per card and
-    /// background that has a paint image.
-    static func entries(stack: Stack, assets: [String: Data]) -> [String: Data] {
+    /// background that has a paint image. `pixelScale` > 1 upscales each PNG
+    /// to the card's displayed size (Fill Window), nearest-neighbor so the
+    /// 1-bit pixels stay chunky and repaintable — edit the art at the size
+    /// people actually see, and Replace Bitmaps brings the high-res version
+    /// back (both renderers stretch the asset to the card, so it just gets
+    /// crisper).
+    static func entries(stack: Stack, assets: [String: Data], pixelScale: Double = 1) -> [String: Data] {
+        let target = pixelScale > 1.01
+            ? CGSize(width: stack.cardSize.width * pixelScale, height: stack.cardSize.height * pixelScale)
+            : nil
+        func prepared(_ data: Data) -> Data {
+            guard let target else { return data }
+            return upscaled(data, to: target)
+        }
         var entries: [String: Data] = [:]
         for (index, background) in stack.backgrounds.enumerated() {
             if let asset = background.paintImageAsset, let data = assets[asset] {
-                entries["background \(index + 1) id \(background.scriptID).png"] = data
+                entries["background \(index + 1) id \(background.scriptID).png"] = prepared(data)
             }
         }
         for (index, card) in stack.cards.enumerated() {
             if let asset = card.paintImageAsset, let data = assets[asset] {
-                entries["card \(index + 1) id \(card.scriptID).png"] = data
+                entries["card \(index + 1) id \(card.scriptID).png"] = prepared(data)
             }
         }
         return entries
     }
 
+    /// Nearest-neighbor upscale of a PNG to `size` (only ever up — a bitmap
+    /// already at or above the target passes through untouched).
+    private static func upscaled(_ data: Data, to size: CGSize) -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return data }
+        let width = Int(size.width.rounded()), height = Int(size.height.rounded())
+        guard width > image.width, height > 0,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: colorSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return data }
+        context.interpolationQuality = .none
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let scaled = context.makeImage() else { return data }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else { return data }
+        CGImageDestinationAddImage(destination, scaled, nil)
+        guard CGImageDestinationFinalize(destination) else { return data }
+        return output as Data
+    }
+
     /// Writes the stack's bitmaps into a "<Name> Bitmaps" folder inside
     /// `parentDirectory`, returning the created folder.
     @discardableResult
-    static func export(stack: Stack, assets: [String: Data], into parentDirectory: URL) throws -> URL {
-        let files = entries(stack: stack, assets: assets)
+    static func export(stack: Stack, assets: [String: Data], into parentDirectory: URL, pixelScale: Double = 1) throws -> URL {
+        let files = entries(stack: stack, assets: assets, pixelScale: pixelScale)
         guard !files.isEmpty else {
             throw BitmapError(message: "This stack has no card or background bitmaps to export.")
         }
