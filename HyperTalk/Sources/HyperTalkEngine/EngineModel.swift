@@ -113,6 +113,10 @@ struct ButtonPart: Codable, Hashable {
     var hilite: Bool
     var format: TextFormat
     var iconAsset: String?
+    /// An SF-symbol icon name (the authoring library). The player renders it as
+    /// `symbol-<name>.png`, tinted. Must round-trip or script-/state-rendered
+    /// buttons lose their symbol on the web.
+    var iconSymbol: String?
     /// The button wants an icon the import couldn't find — the player shows a
     /// placeholder instead of nothing.
     var iconMissing: Bool
@@ -134,6 +138,7 @@ struct ButtonPart: Codable, Hashable {
         hilite = try c.decodeIfPresent(Bool.self, forKey: .hilite) ?? false
         format = try c.decodeIfPresent(TextFormat.self, forKey: .format) ?? TextFormat()
         iconAsset = try c.decodeIfPresent(String.self, forKey: .iconAsset)
+        iconSymbol = try c.decodeIfPresent(String.self, forKey: .iconSymbol)
         iconMissing = try c.decodeIfPresent(Bool.self, forKey: .iconMissing) ?? false
         fillColor = try c.decodeIfPresent(String.self, forKey: .fillColor)
         borderColor = try c.decodeIfPresent(String.self, forKey: .borderColor)
