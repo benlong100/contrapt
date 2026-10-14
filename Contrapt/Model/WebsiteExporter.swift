@@ -674,7 +674,7 @@ extension WebsiteExporter {
           // The symbol glyph below fills `currentColor`, so this one color
           // drives both — mirroring CardView.
           if (b.textColor && !b.hilite) d.style.color = b.textColor;
-          else if (!b.iconAsset && b.iconSymbol && !b.hilite) d.style.color = 'var(--accent)';
+          else if (!b.iconAsset && b.iconSymbol && !b.hilite) d.style.color = 'var(--card-accent, var(--accent))';
           styleText(d, b.format);
           // Button titles center whatever the text format says (as the app
           // renders them); checkbox/radio lay out left with a glyph box.
@@ -739,6 +739,10 @@ extension WebsiteExporter {
         const bg = bgById[card.backgroundID];
         const layer = document.createElement('div');
         layer.className = 'layer';
+        // The card's accent (its highlightColor) scopes symbol-icon/label tint
+        // to this card — the app tints each card's authoring-library buttons
+        // with its own highlightColor, falling back to the theme accent.
+        if (card.highlightColor) layer.style.setProperty('--card-accent', card.highlightColor);
         if (bg) {
           const bp = paint(bg.paintImageAsset);
           if (bp) {
@@ -763,6 +767,10 @@ extension WebsiteExporter {
       function buildLayerFromState(state) {
         const layer = document.createElement('div');
         layer.className = 'layer';
+        // Per-card symbol/label tint: CardState doesn't carry highlightColor, so
+        // read it from the static stack by the card's stable scriptID.
+        const staticCard = (stack.cards || []).find(c => c.scriptID === state.cardScriptID);
+        if (staticCard && staticCard.highlightColor) layer.style.setProperty('--card-accent', staticCard.highlightColor);
         const bgPaintAsset = bgPaintById[state.backgroundID];
         if (bgPaintAsset) {
           const bp = paint(bgPaintAsset); bp.classList.add('bg-paint');
