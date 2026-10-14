@@ -259,12 +259,19 @@ extension WebsiteExporter {
         flex: none; position: relative; box-sizing: border-box; }
       .button.radio .toggle { border-radius: 50%; }
       .button.checkbox.hilite, .button.radio.hilite { background: transparent; color: var(--ink); }
-      /* A hilited TRANSPARENT button inverts the art beneath it (real
-         HyperCard's pixel flip), not a black slab. backdrop-filter inverts
-         only the pixels behind the button's box — clipped to the frame,
-         title left legible on top — the web analog of the app's clipped
-         inverted-art draw. (mix-blend-mode would also invert the title.) */
+      /* A hilited TRANSPARENT button shows inverse video — HyperCard's pixel
+         flip of whatever is behind it. These nav buttons draw their label into
+         the background PICTURE (showName is off), not as a title, so a plain
+         black fill would just hide the label; backdrop-filter inverts the real
+         pixels behind the button's box, clipped to the frame, flipping the
+         painted label black↔white. (This composites the button, but that is
+         harmless: clicks route by layer-tagged scriptID, not hit-testing of
+         this element — see renderPart's dataset.layer.) A button WITH a title
+         keeps it legible on top, uninverted. */
       .button.transparent.hilite {
+        /* Clear the opaque `.button.hilite` fill below — otherwise it paints
+           over the inverted backdrop and the button reads as a solid black
+           slab (the exact symptom). backdrop-filter needs to see through. */
         background: transparent;
         -webkit-backdrop-filter: invert(1);
         backdrop-filter: invert(1);
@@ -582,9 +589,13 @@ extension WebsiteExporter {
       // `overlay` is the owning card's backgroundFieldContent — a background
       // layer's non-sharedText field shows THIS card's text (the shared part
       // itself stores none).
-      function renderPart(p, overlay) {
+      function renderPart(p, overlay, layer) {
         const d = document.createElement('div');
         d.className = 'part';
+        // The layer this part lives on ("card"/"bkgnd"). scriptIDs are unique
+        // only within a layer, so the engine needs this to route a click to the
+        // right part when a card part and a background part share an id.
+        if (layer) d.dataset.layer = layer;
         if (p.scriptID != null) { d.dataset.scriptId = p.scriptID; partEls[p.scriptID] = d; }
         d.style.left = p.frame.x + 'px'; d.style.top = p.frame.y + 'px';
         d.style.width = p.frame.width + 'px'; d.style.height = p.frame.height + 'px';
@@ -707,7 +718,7 @@ extension WebsiteExporter {
             if (bg.showPicture === false) bp.style.display = 'none';
             layer.appendChild(bp);
           }
-          (bg.parts || []).forEach(p => layer.appendChild(renderPart(p, card.backgroundFieldContent || {})));
+          (bg.parts || []).forEach(p => layer.appendChild(renderPart(p, card.backgroundFieldContent || {}, 'bkgnd')));
         }
         const cp = paint(card.paintImageAsset);
         if (cp) {
@@ -715,7 +726,7 @@ extension WebsiteExporter {
           if (card.showPicture === false) cp.style.display = 'none';
           layer.appendChild(cp);
         }
-        (card.parts || []).forEach(p => layer.appendChild(renderPart(p)));
+        (card.parts || []).forEach(p => layer.appendChild(renderPart(p, undefined, 'card')));
         return layer;
       }
       // The state-driven layer: built from the engine's live card state, so
@@ -731,14 +742,14 @@ extension WebsiteExporter {
           layer.appendChild(bp);
         }
         (state.backgroundPartsFull || []).forEach(p =>
-          layer.appendChild(renderPart(p, state.backgroundFieldContent || {})));
+          layer.appendChild(renderPart(p, state.backgroundFieldContent || {}, 'bkgnd')));
         const cardPaintAsset = cardPaintByScriptID[state.cardScriptID];
         if (cardPaintAsset) {
           const cp = paint(cardPaintAsset); cp.classList.add('card-paint');
           if (state.cardShowPicture === false) cp.style.display = 'none';
           layer.appendChild(cp);
         }
-        (state.cardPartsFull || []).forEach(p => layer.appendChild(renderPart(p)));
+        (state.cardPartsFull || []).forEach(p => layer.appendChild(renderPart(p, undefined, 'card')));
         return layer;
       }
       // Swap in a freshly-built layer (static card or engine state), with the
@@ -1101,11 +1112,11 @@ extension WebsiteExporter {
         let added = false;
         (state.backgroundPartsFull || []).forEach(p => {
           if (partEls[p.scriptID]) return;
-          layer.appendChild(renderPart(p, state.backgroundFieldContent || {})); added = true;
+          layer.appendChild(renderPart(p, state.backgroundFieldContent || {}, 'bkgnd')); added = true;
         });
         (state.cardPartsFull || []).forEach(p => {
           if (partEls[p.scriptID]) return;
-          layer.appendChild(renderPart(p)); added = true;
+          layer.appendChild(renderPart(p, undefined, 'card')); added = true;
         });
         if (added && engineActive) enableFieldEditing();
       }
@@ -1182,7 +1193,7 @@ extension WebsiteExporter {
               }
             }
           }
-          handle(engine.mouseUp(Number(partEl.dataset.scriptId), line, word));
+          handle(engine.mouseUp(Number(partEl.dataset.scriptId), line, word, partEl.dataset.layer || null));
         });
         // Keyboard activation: a focused button (role="button", tabindex=0)
         // fires its mouseUp on Enter/Space, so the stack is operable without a
@@ -1193,7 +1204,7 @@ extension WebsiteExporter {
           if (!partEl || partEl.dataset.scriptId == null) return;
           if (partEl.classList.contains('disabled')) return;
           ev.preventDefault();
-          handle(engine.mouseUp(Number(partEl.dataset.scriptId), null, null));
+          handle(engine.mouseUp(Number(partEl.dataset.scriptId), null, null, partEl.dataset.layer || null));
         });
         handle(engine.start());
       }

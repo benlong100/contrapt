@@ -463,17 +463,26 @@ final class WebHost: HyperTalkHost {
     /// clears its same-layer family siblings — HyperCard's radio group; a
     /// family-less checkbox/radio flips its checked state. Card and
     /// background families are distinct namespaces.
-    func toggleHiliteIfToggleStyle(partScriptID id: Int) {
+    func toggleHiliteIfToggleStyle(partScriptID id: Int, preferLayer: String? = nil) {
         let card = stack.cards[currentIndex]
-        if let index = card.parts.firstIndex(where: { $0.scriptID == id }),
-           case .button(let button) = card.parts[index].kind {
+        // Flip the hilite in the layer the click actually hit — a card and a
+        // background button may share this scriptID (see dispatchMouseUp).
+        let preferBackground = (preferLayer == "bkgnd" || preferLayer == "background" || preferLayer == "bg")
+        func toggleCard() -> Bool {
+            guard let index = card.parts.firstIndex(where: { $0.scriptID == id }),
+                  case .button(let button) = card.parts[index].kind else { return false }
             applyClickHilite(to: &stack.cards[currentIndex].parts, at: index, button: button)
-            return
+            return true
         }
-        guard let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
-              let index = stack.backgrounds[backgroundIndex].parts.firstIndex(where: { $0.scriptID == id }),
-              case .button(let button) = stack.backgrounds[backgroundIndex].parts[index].kind else { return }
-        applyClickHilite(to: &stack.backgrounds[backgroundIndex].parts, at: index, button: button)
+        func toggleBackground() -> Bool {
+            guard let backgroundIndex = stack.backgrounds.firstIndex(where: { $0.id == card.backgroundID }),
+                  let index = stack.backgrounds[backgroundIndex].parts.firstIndex(where: { $0.scriptID == id }),
+                  case .button(let button) = stack.backgrounds[backgroundIndex].parts[index].kind else { return false }
+            applyClickHilite(to: &stack.backgrounds[backgroundIndex].parts, at: index, button: button)
+            return true
+        }
+        let ordered = preferBackground ? [toggleBackground, toggleCard] : [toggleCard, toggleBackground]
+        for toggle in ordered where toggle() { return }
     }
 
     private func applyClickHilite(to parts: inout [Part], at index: Int, button: ButtonPart) {

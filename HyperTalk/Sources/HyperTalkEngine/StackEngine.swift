@@ -47,32 +47,52 @@ public final class StackEngine {
     /// A button (or locked field/label) was clicked: send `mouseUp` along its
     /// message path. Returns the world effects the caller should now apply.
     @discardableResult
-    public func dispatchMouseUp(partScriptID: Int, clickLine: Int? = nil, clickText: String? = nil) async throws -> [HostEffect] {
-        // A field click carries which line/word it landed on — recorded as
+    public func dispatchMouseUp(partScriptID: Int, clickLine: Int? = nil, clickText: String? = nil,
+                                partLayer: String? = nil) async throws -> [HostEffect] {
+        // scriptIDs are unique only WITHIN a layer, so a card part and a
+        // background part can legitimately share one — e.g. a card-layer button
+        // drawn over a shared background nav button (HyperCard numbers card and
+        // background parts in separate id spaces). The browser click knows which
+        // layer it hit and passes `partLayer` ("card"/"bkgnd"); honour it so the
+        // right part's script runs instead of whichever layer is searched first.
+        // A field click also carries which line/word it landed on — recorded as
         // `the clickLine`/`the clickText` before the script runs (HyperCard's
         // list-field navigation idiom). Kept until the next field click.
-        if let clickLine {
-            let card = host.stack.cards[host.currentIndex]
-            let layer: String? = card.parts.contains { $0.scriptID == partScriptID } ? "card"
-                : host.stack.backgrounds.first { $0.id == card.backgroundID }?
-                    .parts.contains { $0.scriptID == partScriptID } == true ? "bkgnd" : nil
-            if let layer {
-                host.clickLine = "line \(clickLine) of \(layer) field id \(partScriptID)"
-                host.clickText = clickText ?? ""
-            }
+        if let clickLine, let layer = resolvedLayerWord(scriptID: partScriptID, prefer: partLayer) {
+            host.clickLine = "line \(clickLine) of \(layer) field id \(partScriptID)"
+            host.clickText = clickText ?? ""
         }
         // A checkbox/radio click flips its hilite (the checked state) before
         // the message dispatches — exactly the app's CardView order.
-        host.toggleHiliteIfToggleStyle(partScriptID: partScriptID)
-        return try await send("mouseUp", toPartWithScriptID: partScriptID)
+        host.toggleHiliteIfToggleStyle(partScriptID: partScriptID, preferLayer: partLayer)
+        return try await send("mouseUp", toPartWithScriptID: partScriptID, preferLayer: partLayer)
     }
 
     /// Send an arbitrary message to a part (e.g. `mouseDown`, `mouseUp`).
+    /// `preferLayer` disambiguates a scriptID shared by a card and a background
+    /// part (see `dispatchMouseUp`).
     @discardableResult
-    public func send(_ message: String, toPartWithScriptID id: Int, arguments: [String] = []) async throws -> [HostEffect] {
-        let path = try scriptPath(partScriptID: id)
+    public func send(_ message: String, toPartWithScriptID id: Int, arguments: [String] = [],
+                     preferLayer: String? = nil) async throws -> [HostEffect] {
+        let path = try scriptPath(partScriptID: id, preferLayer: preferLayer)
         _ = try await HyperTalk.send(message, arguments: arguments, along: path, host: host)
         return host.takeEffects()
+    }
+
+    /// True when `layer` names the background ("bkgnd"/"background"/"bg").
+    private func isBackgroundLayer(_ layer: String?) -> Bool {
+        switch layer { case "bkgnd", "background", "bg": return true; default: return false }
+    }
+
+    /// Which layer word ("card"/"bkgnd") a scriptID resolves to on the current
+    /// card, honouring `prefer` when the id exists on both layers.
+    private func resolvedLayerWord(scriptID id: Int, prefer: String?) -> String? {
+        let card = host.stack.cards[host.currentIndex]
+        let onCard = card.parts.contains { $0.scriptID == id }
+        let onBG = host.stack.backgrounds.first { $0.id == card.backgroundID }?
+            .parts.contains { $0.scriptID == id } == true
+        if isBackgroundLayer(prefer) { return onBG ? "bkgnd" : (onCard ? "card" : nil) }
+        return onCard ? "card" : (onBG ? "bkgnd" : nil)
     }
 
     /// Make `index` the current card and send it `openCard` (as the app does on
@@ -209,15 +229,22 @@ public final class StackEngine {
 
     /// The message path for a part identified by permanent scriptID on the
     /// current card — mirrors the app's `scriptPath(cardAt:part:)`.
-    private func scriptPath(partScriptID id: Int) throws -> [ScriptLayer] {
+    private func scriptPath(partScriptID id: Int, preferLayer: String? = nil) throws -> [ScriptLayer] {
         let card = host.stack.cards[host.currentIndex]
-        if let index = card.parts.firstIndex(where: { $0.scriptID == id }) {
-            return scriptPath(part: card.parts[index], domain: .card, cardIndex: host.currentIndex)
+        let background = host.stack.backgrounds.first(where: { $0.id == card.backgroundID })
+        func cardPath() -> [ScriptLayer]? {
+            card.parts.firstIndex(where: { $0.scriptID == id }).map {
+                scriptPath(part: card.parts[$0], domain: .card, cardIndex: host.currentIndex)
+            }
         }
-        if let background = host.stack.backgrounds.first(where: { $0.id == card.backgroundID }),
-           let index = background.parts.firstIndex(where: { $0.scriptID == id }) {
+        func backgroundPath() -> [ScriptLayer]? {
+            guard let background, let index = background.parts.firstIndex(where: { $0.scriptID == id }) else { return nil }
             return scriptPath(part: background.parts[index], domain: .background, cardIndex: host.currentIndex)
         }
+        // Honour the clicked layer first (a card and a background part may share
+        // this id); fall back to the other layer if the hint was absent or stale.
+        let ordered = isBackgroundLayer(preferLayer) ? [backgroundPath, cardPath] : [cardPath, backgroundPath]
+        for resolve in ordered { if let path = resolve() { return path } }
         throw EngineError("There is no part with id \(id) on the current card.")
     }
 
