@@ -600,7 +600,10 @@ extension WebsiteExporter {
         d.style.left = p.frame.x + 'px'; d.style.top = p.frame.y + 'px';
         d.style.width = p.frame.width + 'px'; d.style.height = p.frame.height + 'px';
         if (p.enabled === false) d.classList.add('disabled');
-        if (p.visible === false) { d.style.display = 'none'; return d; }
+        // A hidden part still builds its full typed content — just display:none —
+        // so `show`ing it later reveals a proper field/button (not an empty
+        // classless box), and the DOM isn't littered with bare typeless divs.
+        if (p.visible === false) d.style.display = 'none';
         // Accessible name — mirrors HyperTalk's Accessibility rules (part name
         // first), so a screen reader can announce each part.
         const accName = (p.name && p.name.trim()) || '';
