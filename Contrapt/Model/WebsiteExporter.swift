@@ -287,6 +287,15 @@ extension WebsiteExporter {
       .button.has-icon { flex-direction: column; gap: 1px; }
       .button .icon { image-rendering: pixelated; flex: 1 1 0; min-height: 0;
         max-width: 100%; object-fit: contain; }
+      /* An SF-symbol glyph (black-on-transparent PNG) tinted to the button's
+         color via a CSS mask — the app renders symbols as a tinted template,
+         while bitmap (1-bit) icons stay their own pixels. Longhand mask props
+         so they don't reset the inline mask-image. */
+      .button .icon.symbol { flex: 1 1 0; min-height: 0; width: 100%; max-width: 100%;
+        background: currentColor;
+        -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+        -webkit-mask-position: center; mask-position: center;
+        -webkit-mask-size: contain; mask-size: contain; }
       .button .icon-missing { width: 24px; height: 24px; border: 1px dashed #999;
         border-radius: 4px; flex: none; }
       .part.disabled { opacity: .4; pointer-events: none; }
@@ -659,7 +668,13 @@ extension WebsiteExporter {
           // inverse-video look (the .hilite class), so no inline fill then.
           if (b.fillColor && !b.hilite) d.style.background = b.fillColor;
           if (b.borderColor) d.style.borderColor = b.borderColor;
+          // An SF-symbol button tints its glyph AND title with the accent (the
+          // authoring library's clickable affordance); bitmap-icon and plain
+          // buttons stay ink. A custom textColor or inverse-video hilite wins.
+          // The symbol glyph below fills `currentColor`, so this one color
+          // drives both — mirroring CardView.
           if (b.textColor && !b.hilite) d.style.color = b.textColor;
+          else if (!b.iconAsset && b.iconSymbol && !b.hilite) d.style.color = 'var(--accent)';
           styleText(d, b.format);
           // Button titles center whatever the text format says (as the app
           // renders them); checkbox/radio lay out left with a glyph box.
@@ -673,16 +688,26 @@ extension WebsiteExporter {
           }
           // An icon stacks above the title and scales to fit, as the app
           // lays buttons out (CardView's VStack).
-          const iconName = b.iconAsset || (b.iconSymbol ? 'symbol-' + b.iconSymbol + '.png' : null);
+          const isSymbol = !b.iconAsset && !!b.iconSymbol;
+          const iconName = b.iconAsset || (isSymbol ? 'symbol-' + b.iconSymbol + '.png' : null);
           if (iconName) {
             d.classList.add('has-icon');
-            const im = document.createElement('img');
-            im.className = 'icon'; im.src = 'assets/' + iconName;
-            // A missing asset file degrades to the same placeholder as a
-            // missing icon resource (a symbol PNG from an older export just
-            // leaves the title).
-            im.onerror = () => { b.iconSymbol ? im.remove() : im.replaceWith(missingIconBox()); };
-            d.appendChild(im);
+            if (isSymbol) {
+              // Tinted SF-symbol glyph: mask the black-on-transparent PNG so it
+              // paints in the button's currentColor (the accent set above).
+              const sym = document.createElement('div');
+              sym.className = 'icon symbol';
+              sym.style.webkitMaskImage = "url('assets/" + iconName + "')";
+              sym.style.maskImage = "url('assets/" + iconName + "')";
+              d.appendChild(sym);
+            } else {
+              const im = document.createElement('img');
+              im.className = 'icon'; im.src = 'assets/' + iconName;
+              // A missing bitmap asset degrades to the dashed placeholder (the
+              // same as a missing icon resource).
+              im.onerror = () => { im.replaceWith(missingIconBox()); };
+              d.appendChild(im);
+            }
           } else if (b.iconMissing) {
             d.appendChild(missingIconBox());
           }
