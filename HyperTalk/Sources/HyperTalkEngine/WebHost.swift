@@ -614,6 +614,15 @@ final class WebHost: HyperTalkHost {
         }
     }
 
+    func pictureExists(background: Bool) -> Bool {
+        guard stack.cards.indices.contains(cardIndex) else { return false }
+        let card = stack.cards[cardIndex]
+        if background {
+            return stack.backgrounds.first { $0.id == card.backgroundID }?.hasPaint ?? false
+        }
+        return card.hasPaint
+    }
+
     func adjacentBackgroundCardNumber(forward: Bool) -> Int? {
         let cards = stack.cards
         guard !cards.isEmpty else { return nil }

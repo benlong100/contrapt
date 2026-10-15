@@ -2387,6 +2387,12 @@ final class Runtime {
                 let exists = host.fileExists(path)
                 return (negated ? !exists : exists) ? "true" : "false"
             }
+            if case .picture(let background) = objectExpression {
+                // `there is a[ no] [card|bkgnd] picture` — true when the
+                // current card's (or its background's) paint layer has artwork.
+                let exists = host.pictureExists(background: background)
+                return (negated ? !exists : exists) ? "true" : "false"
+            }
             let object = try await resolveObject(objectExpression, line: line)
             let present = host.exists(object)
             return (negated ? !present : present) ? "true" : "false"
@@ -2788,6 +2794,10 @@ final class Runtime {
             // A file is only meaningful in an existence test (short-circuited
             // above); it isn't a message-path object.
             throw ScriptError(line: line, message: "A file can't be used as a message target.")
+        case .picture:
+            // A paint layer is only meaningful in an existence test
+            // (short-circuited above); it isn't a message-path object.
+            throw ScriptError(line: line, message: "A picture can't be used as a message target.")
         }
     }
 

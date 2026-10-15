@@ -298,6 +298,10 @@ public protocol HyperTalkHost: AnyObject {
     /// false — a stack probing an external file that Contrapt doesn't have gets
     /// the correct "not present" answer instead of an error.
     func fileExists(_ path: String) -> Bool
+    /// Whether the current card's (or its background's) paint layer has
+    /// artwork — `there is a[ no] card picture` (Clip Art prunes blank cards
+    /// with it). Defaults to false (hosts without paint).
+    func pictureExists(background: Bool) -> Bool
     /// An HTTP request for the `url` container and the `post`/`delete url`
     /// verbs. `headers` are the request headers the script set via `set the
     /// httpHeaders`; `timeout` is `the httpTimeout` in seconds (0 = the host's
@@ -623,6 +627,7 @@ public extension HyperTalkHost {
         throw HostError("File not open.")
     }
     func fileExists(_ path: String) -> Bool { false }
+    func pictureExists(background: Bool) -> Bool { false }
     func adjacentBackgroundCardNumber(forward: Bool) -> Int? { nil }
     func httpRequest(method: String, url: String, body: String?, headers: [String: String], timeout: Double) async -> (body: String, status: Int, headers: [String: String], error: String?) {
         ("", 0, [:], "Networking isn't available here.")

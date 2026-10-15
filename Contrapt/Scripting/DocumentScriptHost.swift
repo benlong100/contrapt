@@ -1878,6 +1878,16 @@ final class DocumentScriptHost: HyperTalkHost {
         try String(file.characters).write(to: file.url, atomically: true, encoding: .utf8)
     }
 
+    func pictureExists(background: Bool) -> Bool {
+        guard stack.cards.indices.contains(cardIndex) else { return false }
+        let card = stack.cards[cardIndex]
+        if background {
+            guard let bg = stack.backgrounds.first(where: { $0.id == card.backgroundID }) else { return false }
+            return bg.paintImageAsset != nil || bg.paintDrawingAsset != nil
+        }
+        return card.paintImageAsset != nil || card.paintDrawingAsset != nil
+    }
+
     func fileExists(_ path: String) -> Bool {
         // `there is a file X` — true when the app's file store already holds it
         // (a file this stack created via `open/write file`). External files on

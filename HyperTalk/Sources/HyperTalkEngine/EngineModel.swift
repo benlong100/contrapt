@@ -318,6 +318,9 @@ struct Background: Codable, Hashable {
     var dontSearch: Bool = false
     /// `show/hide background picture` — whether the paint layer draws.
     var showPicture: Bool = true
+    /// Whether a paint layer EXISTS (the engine drops the asset itself) —
+    /// `there is a bkgnd picture`.
+    var hasPaint: Bool = false
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -329,9 +332,12 @@ struct Background: Codable, Hashable {
         cantDelete = try c.decodeIfPresent(Bool.self, forKey: .cantDelete) ?? false
         dontSearch = try c.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
         showPicture = try c.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
+        let paintImage = try c.decodeIfPresent(String.self, forKey: .paintImageAsset)
+        let paintDrawing = try c.decodeIfPresent(String.self, forKey: .paintDrawingAsset)
+        hasPaint = paintImage != nil || paintDrawing != nil
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, script, parts, scriptID, cantDelete, dontSearch, showPicture }
+    private enum CodingKeys: String, CodingKey { case id, name, script, parts, scriptID, cantDelete, dontSearch, showPicture, paintImageAsset, paintDrawingAsset }
     func encode(to encoder: Encoder) throws { throw EngineError("read-only") }
 
     init(id: UUID, name: String, script: String, parts: [Part]) {
@@ -352,6 +358,9 @@ struct Card: Codable, Hashable {
     var highlightColor: String? = nil
     /// `show/hide [card] picture` — whether the paint layer draws.
     var showPicture: Bool = true
+    /// Whether a paint layer EXISTS (the engine drops the asset itself) —
+    /// `there is a card picture` (Clip Art prunes blank cards with it).
+    var hasPaint: Bool = false
     /// This card's text for each non-sharedText background field (part UUID →
     /// content) — the HyperCard storage model, mirrored from the app.
     var backgroundFieldContent: [String: BackgroundFieldContent] = [:]
@@ -369,12 +378,15 @@ struct Card: Codable, Hashable {
         dontSearch = try c.decodeIfPresent(Bool.self, forKey: .dontSearch) ?? false
         highlightColor = try c.decodeIfPresent(String.self, forKey: .highlightColor)
         showPicture = try c.decodeIfPresent(Bool.self, forKey: .showPicture) ?? true
+        let paintImage = try c.decodeIfPresent(String.self, forKey: .paintImageAsset)
+        let paintDrawing = try c.decodeIfPresent(String.self, forKey: .paintDrawingAsset)
+        hasPaint = paintImage != nil || paintDrawing != nil
         backgroundFieldContent = try c.decodeIfPresent([String: BackgroundFieldContent].self, forKey: .backgroundFieldContent) ?? [:]
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, backgroundID, script, parts, scriptID, isMarked, cantDelete, dontSearch, highlightColor
-        case backgroundFieldContent, showPicture
+        case backgroundFieldContent, showPicture, paintImageAsset, paintDrawingAsset
     }
     func encode(to encoder: Encoder) throws { throw EngineError("read-only") }
 

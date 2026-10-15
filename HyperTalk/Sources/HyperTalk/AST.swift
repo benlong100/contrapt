@@ -560,6 +560,10 @@ indirect enum ObjectExpr {
     /// `there is a[ not] file theFile` (existence). Only meaningful in an
     /// existence test; the host answers whether the file is present.
     case file(Expr)
+    /// `[card|bkgnd] picture` — the paint layer as an object, used in
+    /// `there is a[ no] card picture` (Clip Art prunes blank cards with it).
+    /// Existence = the layer actually has artwork, not just visibility.
+    case picture(background: Bool)
 }
 
 /// A positional keyword that resolves against a live count: `last`, `middle`,

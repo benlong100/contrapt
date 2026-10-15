@@ -2683,6 +2683,21 @@ struct Parser {
                 ? .stringLiteral("") : try parsePrimary()
             return .file(path)
         }
+        // `[card|bkgnd] picture` — the paint layer as an object: `there is no
+        // card picture` (Clip Art prunes blank cards). A bare `picture` means
+        // the card's. Checked before the part handling so `card picture` isn't
+        // read as a card named "picture".
+        if let w = peekIdentifier(), w == "picture" || w == "pict" {
+            advance()
+            return .picture(background: false)
+        }
+        if let w = peekIdentifier(),
+           Self.cardWords.contains(w) || Self.backgroundWords.contains(w),
+           let next = peekIdentifier(1), next == "picture" || next == "pict" {
+            let isBackground = Self.backgroundWords.contains(w)
+            advance(); advance()
+            return .picture(background: isBackground)
+        }
         // Button families (HyperCard's radio groups) — `the selectedButton of
         // family 1 [of card 1]`, optionally layer-qualified (`bkgnd family
         // 9`; card and background families are distinct namespaces).
