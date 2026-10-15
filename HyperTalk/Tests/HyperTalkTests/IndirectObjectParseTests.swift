@@ -183,3 +183,14 @@ private func parses(_ line: String) -> Bool {
     #expect((try? Parser.parse("on grebe (old)\nput old\nend grebe")) != nil)   // Achievement of Arms
     #expect(parses("visual scrollAlong (that)"))                                 // Tarot Reader
 }
+
+@Test func batchTwoRoundThree() {
+    #expect(parses("sort bg button \"section\""))                              // Address Ace: contents sort
+    #expect(parses("doMenu \"Copy Card\" with OptionKey"))                     // PR
+    #expect(parses("put the number of the last marked card into q"))           // AOL Mail Reader
+    #expect(parses("put the contents of me into bg field mapItem of bg LocalMaps"))  // Apollo 11
+    #expect(parses("put there is a scriptingLanguage AppleScript into g"))     // Annuaire NET
+    #expect(parses("set cantmodify this stack to false"))                      // In the Raindrop
+    #expect(parses("if menuItem X of menu \"Application\" contains \"AOL\" then beep"))  // Tarot AOL
+    #expect(parses("put menuItem 2 of menu \"F\" into x"))
+}

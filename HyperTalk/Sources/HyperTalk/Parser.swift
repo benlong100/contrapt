@@ -1262,6 +1262,14 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .noOp, line: line)
             }
+            // `set cantmodify this stack to false` (In the Raindrop) — the
+            // `of` is missing but the object is unambiguous. Accept it.
+            if peekIdentifier() == "this",
+               let object = try? parseObjectExpr(), consumeWord("to") {
+                let value = try parseSetValue()
+                try expectNewline()
+                return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
+            }
             // Object-less property: `set the itemDelimiter to ";"`.
             guard consumeWord("to") else {
                 throw ScriptError(line: line, message: "Expected 'of <object> to …' or 'to …' after 'set the \(property)'.")
@@ -1831,7 +1839,10 @@ struct Parser {
                 advance(); advance(); advance(); _ = consumeWord("window")
             }
             if peekIdentifier() == "with" || peekIdentifier() == "without" {
-                advance(); _ = consumeWord("dialog")
+                // `with dialog`, `without dialog`, or a modifier key —
+                // `doMenu "Copy Card" with OptionKey` (PR). Consumed either way.
+                advance()
+                if !consumeWord("dialog"), peekIdentifier() != nil { advance() }
             }
         }
         if case .string = current.kind {
@@ -2092,7 +2103,9 @@ struct Parser {
         if let w = peekIdentifier(offset),
            Self.cardWords.contains(w) || Self.backgroundWords.contains(w) { offset += 1 }
         guard let w = peekIdentifier(offset) else { return false }
-        return w == "field" || w == "fld"
+        // Buttons too: `sort bg button "section"` (Address Ace) sorts the
+        // button's CONTENTS lines in place.
+        return w == "field" || w == "fld" || w == "button" || w == "btn"
     }
 
     /// Whether `sort` is followed by a bare container to sort in place
@@ -2770,6 +2783,19 @@ struct Parser {
         let saved = index
         advance() // of / in
         _ = consumeWord("the")
+        // `bg field X of bg LocalMaps` (Apollo 11) — a field of ANOTHER
+        // background resolves on that background's first card.
+        if let w = peekIdentifier(), Self.backgroundWords.contains(w),
+           let next = peekIdentifier(1), !["field", "fld", "button", "btn"].contains(next) {
+            advance() // background word
+            _ = consumeWord("id")
+            if current.kind == .newline || current.kind == .endOfScript {
+                index = saved
+                return nil
+            }
+            let name = try parsePrimary()
+            return .inBackground(.first, background: name)
+        }
         let ref: CardRef
         if consumeWord("next") { _ = consumeCardWord(); ref = .next }
         else if consumeWord("previous") || consumeWord("prev") { _ = consumeCardWord(); ref = .previous }
@@ -2887,7 +2913,8 @@ struct Parser {
         }
         // `marked card N` as an object — `the short name of marked card 2`.
         // `[the] first marked cd` (BookMaker's chapter loop) — an exact
-        // ordinal resolves to that marked-card number.
+        // ordinal resolves to that marked-card number; `last marked cd`
+        // (AOL Mail Reader) counts the marked cards at run time.
         do {
             let theOffset = peekIdentifier() == "the" ? 1 : 0
             if let w = peekIdentifier(theOffset), let n = Self.ordinals[w],
@@ -2896,6 +2923,13 @@ struct Parser {
                 if theOffset == 1 { advance() }
                 advance(); advance(); advance()
                 return .markedCard(.numberLiteral(Double(n)))
+            }
+            if peekIdentifier(theOffset) == "last",
+               peekIdentifier(theOffset + 1) == "marked",
+               let c = peekIdentifier(theOffset + 2), Self.cardWords.contains(c) {
+                if theOffset == 1 { advance() }
+                advance(); advance(); advance()
+                return .markedCard(.count(.markedCards))
             }
         }
         if peekIdentifier() == "marked", let c = peekIdentifier(1), Self.cardWords.contains(c) {
@@ -2977,6 +3011,22 @@ struct Parser {
             advance() // qualifier
             advance() // window
             return .window(.stringLiteral(w))
+        }
+        // `scriptingLanguage AppleScript` (HC 2.2 OSA — Annuaire's guard)
+        // is an absent object: existence false, properties empty — the stack
+        // correctly skips its AppleScript paths.
+        if peekIdentifier() == "scriptinglanguage" {
+            advance()
+            let name: Expr
+            if let w = peekIdentifier() {
+                advance()
+                name = .stringLiteral(w)
+            } else if current.kind == .newline || current.kind == .endOfScript {
+                name = .stringLiteral("")
+            } else {
+                name = try parsePrimary()
+            }
+            return .stackNamed(name)
         }
         // `file <path>` — `there is a file theFile`, `there is not a file
         // (thisFile)`. The path is any expression (literal, variable, or
@@ -3918,11 +3968,21 @@ struct Parser {
                     break
                 }
             }
-            // `menuItem N of menu "X"` read as a value — the item's text. Menus
-            // aren't modeled, so it reads empty (`get name of … menuItem …`,
-            // `last menuItem of menu 3 is "-"`). A leading ordinal is handled
-            // just below, where `word` is the ordinal.
+            // `menuItem <sel> of menu "X"` read as a value — the item's NAME
+            // from the modeled menu bar (`if menuItem X of menu "Application"
+            // contains "America Online"`, Tarot AOL). The selector is any
+            // additive expression (number, variable, p+1).
             if word == "menuitem" {
+                let saved = index
+                let savedSuppress = suppressBarePropertyOf
+                suppressBarePropertyOf = true
+                let selector = try? parseAdditive()
+                suppressBarePropertyOf = savedSuppress
+                if let selector, consumeWord("of") || consumeWord("in"), consumeWord("menu"),
+                   let menuName = try? parsePrimary() {
+                    return .property("name", .menuItem(.expr(selector), menu: menuName))
+                }
+                index = saved
                 if case .number = current.kind { advance() }
                 if consumeWord("of") || consumeWord("in") { _ = consumeWord("menu"); _ = try? parsePrimary() }
                 return .property("text", .menu(.stringLiteral("")))
