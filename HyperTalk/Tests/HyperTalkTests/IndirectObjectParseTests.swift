@@ -101,3 +101,38 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("if there is a menuitem p+1 of menu \"Go To\" then beep"))  // <- GoTo ->
     #expect(parses("if there is no application thePath then beep"))            // EmailLog
 }
+
+// MARK: - IA batch 1, round 2 (2026-10-15)
+
+@Test func askPasswordAndPrintWith() {
+    #expect(parses("Ask password clear \"What is the password?\""))         // EnDec
+    #expect(parses("print field \"Name\" with appName"))                    // Documents
+    #expect(parses("doMenu \"Home\" in a new window"))                      // 1997 Calendar
+}
+
+@Test func quotedWordStatementSendsMessage() {
+    // A lone quoted word dispatches as a message — Chicxulub's "flash"
+    // reaches the Flash shim; Meal Time's "SuperSearch" its handler.
+    #expect(parses("\"flash\""))
+    #expect(parses("\"SuperSearch\""))
+    // Multi-word or mid-line strings stay errors (author typos).
+    #expect(!parses("\"do something here\""))
+}
+
+@Test func markedOrdinalsAndIndirectSelectedButton() {
+    #expect(parses("if the id of this cd is the id of the first marked cd then beep"))   // BookMaker
+    #expect(parses("put the short name of the selectedButton of bg family 1 into x"))    // TimeClock
+    #expect(parses("get the script of \"Home\""))                                        // ColorPaint
+    #expect(parses("if the short number of this cd is 1 then pass opencard"))            // Fifty Filters
+}
+
+@Test func buttonContentsWithBareAndChunkNames() {
+    #expect(parses("put empty into bg btn koumoku"))
+    #expect(parses("put line 1 of cd fld \"iconIdList\" into btn item 2 of numList"))
+    #expect(parses("if cd btn i is k then put the id of cd btn i into ak"))
+}
+
+@Test func beepLeavesInlineElse() {
+    #expect(parses("if x then beep else play \"boing\""))   // 3C Timer
+    #expect(parses("put the number of cards of this bg & return into menu"))  // Billing: menu as variable
+}

@@ -309,6 +309,16 @@ struct Parser {
 
     private mutating func parseStatement(handlerName: String) throws -> Stmt {
         let line = current.line
+        // A lone quoted word as a statement sends it as a message — `"flash"`
+        // (Chicxulub) / `"SuperSearch"` (Meal Time); HyperCard dispatched the
+        // string's word, reaching handlers and XCMDs (our flash shim included).
+        if case .string(let quoted) = current.kind,
+           tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript,
+           !quoted.isEmpty, !quoted.contains(" ") {
+            advance()
+            try expectNewline()
+            return Stmt(kind: .send(quoted, []), line: line)
+        }
         guard let word = peekIdentifier() else {
             throw ScriptError(line: line, message: "Expected a command here, but found \(describe(current)).")
         }
@@ -388,7 +398,9 @@ struct Parser {
         case "beep":
             advance()
             var count: Expr?
-            if current.kind != .newline, current.kind != .endOfScript {
+            // `else` isn't a count — `if x then beep else play …` (3C Timer)
+            // leaves the else for the inline-if parse.
+            if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "else" {
                 count = try parseExpression()
             }
             try expectNewline()
@@ -462,6 +474,7 @@ struct Parser {
             // has no file/password dialog, so the default (or empty) comes
             // back in `it`, and the stack's own `if it is empty` guard copes.
             _ = consumeWord("file") || consumeWord("password")
+            _ = consumeWord("clear")   // `ask password clear` — unencrypted result (EnDec)
             let prompt = try parseExpression()
             var initialAnswer: Expr?
             if consumeWord("with") {
@@ -651,6 +664,10 @@ struct Parser {
                 || (["card", "cd", "background", "bkgnd", "bg"].contains(word)
                     && ["field", "fld"].contains(peekIdentifier(1) ?? "")) {
                 let object = try parseObjectExpr()
+                // `print field "Name" with appName` (Documents) — classic
+                // print-document-with-application; the app is consumed
+                // (Contrapt prints the field itself).
+                if consumeWord("with") { _ = try? parseExpression() }
                 try expectNewline()
                 return Stmt(kind: .printField(object), line: line)
             }
@@ -1296,7 +1313,8 @@ struct Parser {
 
         // `put … into menu "X" [with menuMessages …]` populates a custom
         // menu. (`put … into <sel> menuItem of menu N` renames one item.)
-        if peekIdentifier() == "menu" {
+        if peekIdentifier() == "menu",
+           !(tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript) {
             advance()
             let menuName = try parsePrimary()
             var messages: Expr? = nil
@@ -1758,6 +1776,11 @@ struct Parser {
         // dialog`) are consumed; Contrapt performs the action either way.
         func consumeMenuTrailers() {
             if consumeSymbol(",") { _ = try? parseExpression() }
+            // `doMenu "Home" in a new window` (1997 Calendar) — the window
+            // modifier is consumed; Contrapt performs the action in place.
+            if peekIdentifier() == "in", peekIdentifier(1) == "a", peekIdentifier(2) == "new" {
+                advance(); advance(); advance(); _ = consumeWord("window")
+            }
             if peekIdentifier() == "with" || peekIdentifier() == "without" {
                 advance(); _ = consumeWord("dialog")
             }
@@ -2517,12 +2540,23 @@ struct Parser {
             return nil
         }
         let isID = consumeWord("id")
-        // Only a literal/number/parenthesized name — a bare word here is more
-        // likely a variable named `btn` than a button reference.
+        // The name may be a literal, number, parenthesized expression, a bare
+        // variable (`bg btn koumoku`), or a chunk (`btn item 2 of numList`) —
+        // all observed in the wild. (Having consumed btn/button words above,
+        // a following identifier can't be anything but the name.)
+        let nameFollows: Bool
         switch current.kind {
-        case .string, .number, .symbol("("):
+        case .string, .number, .symbol("("): nameFollows = true
+        case .identifier(let w): nameFollows = !Self.expressionConnectors.contains(w)
+        default: nameFollows = false
+        }
+        switch nameFollows {
+        case true:
+            // Chunk names need their `of` (item 2 OF numList); plain names
+            // must NOT eat a property-of. Suppress only for non-chunk starts.
+            let isChunkName = Self.chunkKinds[peekIdentifier() ?? ""] != nil
             let savedSuppress = suppressBarePropertyOf
-            suppressBarePropertyOf = true
+            suppressBarePropertyOf = !isChunkName
             let name = try parsePrimary()
             suppressBarePropertyOf = savedSuppress
             let card = parsePartScopeIfPresent()
@@ -2530,7 +2564,7 @@ struct Parser {
                 ? .partByID(kind: "button", domain: domain, id: name, card: card)
                 : .part(kind: "button", domain: domain, name: name, card: card)
             return .property("contents", object)
-        default:
+        case false:
             index = saved
             return nil
         }
@@ -2794,10 +2828,51 @@ struct Parser {
             throw ScriptError(line: line, message: "Expected 'card', 'background', or 'stack' after 'this'.")
         }
         // `marked card N` as an object — `the short name of marked card 2`.
+        // `[the] first marked cd` (BookMaker's chapter loop) — an exact
+        // ordinal resolves to that marked-card number.
+        do {
+            let theOffset = peekIdentifier() == "the" ? 1 : 0
+            if let w = peekIdentifier(theOffset), let n = Self.ordinals[w],
+               peekIdentifier(theOffset + 1) == "marked",
+               let c = peekIdentifier(theOffset + 2), Self.cardWords.contains(c) {
+                if theOffset == 1 { advance() }
+                advance(); advance(); advance()
+                return .markedCard(.numberLiteral(Double(n)))
+            }
+        }
         if peekIdentifier() == "marked", let c = peekIdentifier(1), Self.cardWords.contains(c) {
             advance() // marked
             advance() // card
             return .markedCard(try parsePrimary())
+        }
+        // `[the] selectedButton of [bkgnd|card] family N` as an OBJECT — the
+        // hilited member's descriptor, re-resolved: `the short name of the
+        // selectedButton of bg family 1` (TimeClock).
+        do {
+            let theOffset = peekIdentifier() == "the" ? 1 : 0
+            if peekIdentifier(theOffset) == "selectedbutton" {
+                if theOffset == 1 { advance() }
+                advance() // selectedButton
+                if consumeWord("of") || consumeWord("in") {
+                    var familyDomain = HyperTalkObject.PartDomain.any
+                    if let w = peekIdentifier(), Self.cardWords.contains(w), peekIdentifier(1) == "family" {
+                        advance(); familyDomain = .card
+                    } else if let w = peekIdentifier(), Self.backgroundWords.contains(w), peekIdentifier(1) == "family" {
+                        advance(); familyDomain = .background
+                    }
+                    _ = consumeWord("family")
+                    let number = try parseAdditive()
+                    return .indirect(.property("selectedbutton",
+                                               .family(number: number, domain: familyDomain, card: parsePartScopeIfPresent())))
+                }
+            }
+        }
+        // A bare string literal as an object names a STACK — `get the script
+        // of "Home"` (ColorPaint); resolves like `stack "Home"` (absent in
+        // Contrapt, with name-echoing properties).
+        if case .string(let literal) = current.kind {
+            advance()
+            return .stackNamed(.stringLiteral(literal))
         }
         // A card relative to the current one, used as an object for a property
         // read: `the id of next card`, `the short name of prev card`. (`go next
@@ -3853,6 +3928,15 @@ struct Parser {
                 let long = word == "long"
                 let property = noun == "name" ? (long ? "longname" : "name") : (long ? "longid" : "id")
                 return .property(property, try parseObjectExpr())
+            }
+            // An adjective before any OTHER property is tolerated, as in
+            // HyperCard — `the short number of this cd` (Fifty Filters) reads
+            // the plain property.
+            if Self.nameAdjectives.contains(word),
+               let noun = peekIdentifier(), peekIdentifier(1) == "of" {
+                advance() // property word
+                advance() // of
+                return .property(noun.lowercased(), try parseObjectExpr())
             }
             // Bare `<function> of X` (no leading `the`) — `length of theText`,
             // `charToNum of last char of fld "X"`, `sqrt of n`. The argument is
