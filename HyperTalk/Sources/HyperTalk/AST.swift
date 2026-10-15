@@ -337,6 +337,9 @@ indirect enum Container {
     /// function result (`the textHeight of item 1 of theFields()`, Power
     /// Tools). Reading evaluates; writing is an error.
     case expressionValue(Expr)
+    /// `[the] selectedField` as a container — the whole field the selection
+    /// sits in (`put theNewText into the selectedField`, AFI Catalog).
+    case selectedField
     /// `[the] selectedLine` as a container — the selection's whole line
     /// (`put "Other…" into the selectedLine of me`, ArrayMaster). Resolved at
     /// run time by re-parsing the selection's line descriptor.

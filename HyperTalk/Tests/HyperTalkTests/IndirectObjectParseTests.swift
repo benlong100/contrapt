@@ -194,3 +194,13 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("if menuItem X of menu \"Application\" contains \"AOL\" then beep"))  // Tarot AOL
     #expect(parses("put menuItem 2 of menu \"F\" into x"))
 }
+
+@Test func batchTwoRoundFour() {
+    #expect(parses("put content into last cd btn"))                           // Codebits: ordinal button contents
+    #expect(parses("put \"You're here.\" in background field \"message\""))   // Adventstation: put-in
+    #expect(parses("put theNewText into the selectedfield"))                  // AFI Catalog
+    #expect(parses("put x into bg fld \"page\" of card laPremiere + i - 1"))  // Archivist: additive card owner
+    #expect(parses("hide fieldText \"Top Field\""))                           // Animals & Sound: XCMD noun
+    #expect(parses("set menuMessage of menuItem 1 of menu \"Apple\" to send mouseUp to bg btn \"Uss\""))  // HyperDark
+    #expect(parses("set the menuMsg of menuItem \"Save...\" of menu \"File\" to doMenu \"Save a Copy...\""))  // AOL Mail
+}

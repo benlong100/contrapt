@@ -1499,6 +1499,9 @@ final class Runtime {
         case .selectedLine:
             guard let resolved = selectedLineContainer() else { return "" }
             return try await containerValue(resolved, line: line)
+        case .selectedField:
+            guard let resolved = selectedFieldContainer() else { return "" }
+            return try await containerValue(resolved, line: line)
         case .buttonContents(let buttonRef):
             // A button's contents (HC 2.x) — read via the contents property.
             let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
@@ -1599,6 +1602,11 @@ final class Runtime {
             // `put X into the selectedLine of me` — replace the selection's
             // whole line; a no-op with nothing selected.
             guard let resolved = selectedLineContainer() else { return }
+            try await setContainer(resolved, to: value, line: line)
+        case .selectedField:
+            // `put X into the selectedField` — replace that field's whole
+            // text; a no-op with nothing selected.
+            guard let resolved = selectedFieldContainer() else { return }
             try await setContainer(resolved, to: value, line: line)
         case .buttonContents(let buttonRef):
             // `put x into btn "X"` — write the button's contents (HC 2.x).
@@ -1781,6 +1789,15 @@ final class Runtime {
         }
     }
 
+    /// The selection's whole FIELD as a container — re-parses the selection's
+    /// field descriptor; nil when nothing is selected.
+    private func selectedFieldContainer() -> Container? {
+        let descriptor = host.selectionValue(.field)
+        guard !descriptor.isEmpty, let container = Parser.parseSoleContainer(descriptor),
+              !isVariableContainer(container) else { return nil }
+        return container
+    }
+
     /// The selection's whole line as a container — re-parses the selection's
     /// line descriptor; nil when nothing is selected.
     private func selectedLineContainer() -> Container? {
@@ -1863,6 +1880,9 @@ final class Runtime {
         case .selectedLine:
             guard let resolved = selectedLineContainer() else { return nil }
             return try await fieldAndRange(of: resolved, line: line)
+        case .selectedField:
+            guard let resolved = selectedFieldContainer() else { return nil }
+            return try await fieldAndRange(of: resolved, line: line)
         case .buttonContents:
             // Button contents aren't a text-selectable field range (`select
             // line … of bkgnd btn` no-ops gracefully, like old paint selects).
@@ -1892,7 +1912,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine, .selectedField: return false
         }
     }
 

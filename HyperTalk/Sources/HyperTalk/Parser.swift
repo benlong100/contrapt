@@ -1237,6 +1237,17 @@ struct Parser {
                 let saved = index
                 if let object = try? parseObjectExpr(), peekIdentifier() == "to" {
                     advance() // to
+                    // A menuMessage value may be RAW COMMAND TEXT — `set
+                    // menuMessage of menuItem 1 of menu "Apple" to send
+                    // mouseUp to bg btn "Uss"` (HyperDark), `… to doMenu
+                    // "Save a Copy..."` (AOL Mail Reader). Capture the rest
+                    // of the line verbatim; a single quoted string stays its
+                    // contents.
+                    if ["menumessage", "menumsg", "menumessages", "menumsgs"].contains(property.lowercased()) {
+                        let value = captureRestOfLineAsText()
+                        try expectNewline()
+                        return Stmt(kind: .set(property: "menumessage", object: object, value: value), line: line)
+                    }
                     let value = try parseSetValue()
                     try expectNewline()
                     return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
@@ -1316,6 +1327,30 @@ struct Parser {
 
     /// A `set … to <value>` value, allowing a comma list for points and
     /// rects (`set rect of btn "X" to 10,20,110,60`), joined with commas.
+    /// The rest of the line re-serialized as literal text — for values that
+    /// are command text rather than expressions (menuMessage). A lone quoted
+    /// string stays its contents; otherwise identifiers/numbers join with
+    /// spaces and strings keep their quotes.
+    private mutating func captureRestOfLineAsText() -> Expr {
+        if case .string(let only) = current.kind,
+           tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+            advance()
+            return .stringLiteral(only)
+        }
+        var pieces: [String] = []
+        while current.kind != .newline, current.kind != .endOfScript {
+            switch current.kind {
+            case .identifier(let w): pieces.append(w)
+            case .number(let n): pieces.append(Value.string(from: n))
+            case .string(let t): pieces.append("\"\(t)\"")
+            case .symbol(let sym): pieces.append(String(sym))
+            default: break
+            }
+            advance()
+        }
+        return .stringLiteral(pieces.joined(separator: " "))
+    }
+
     private mutating func parseSetValue() throws -> Expr {
         var value = try parseExpression()
         while consumeSymbol(",") {
@@ -1340,6 +1375,12 @@ struct Parser {
         if consumeWord("into") { mode = .into }
         else if consumeWord("after") { mode = .after }
         else if consumeWord("before") { mode = .before }
+        else if peekIdentifier() == "in", peekIdentifier(1) != nil {
+            // `put "…" in background field "message"` (Adventstation) — `in`
+            // as a destination word. Only when a container plausibly follows.
+            advance()
+            mode = .into
+        }
 
         guard let mode else {
             try expectNewline()
@@ -1522,6 +1563,14 @@ struct Parser {
             if foundOffset == 1 { advance() } // the
             advance() // clickLine
             return .clickLine
+        }
+        // `[the] selectedField` as a container — the whole field the
+        // selection sits in (`put theNewText into the selectedfield`, AFI
+        // Catalog). Resolved from the selection's field descriptor.
+        if peekIdentifier(foundOffset) == "selectedfield" {
+            if foundOffset == 1 { advance() } // the
+            advance() // selectedField
+            return .selectedField
         }
         // `[the] selectedLine [of me]` as a container — the selection's whole
         // line: `put "Other…" into the selectedLine of me` (ArrayMaster). The
@@ -2065,6 +2114,13 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
         }
+        // `hide fieldText "Top Field"` (Animals & Sound) — an unknown noun
+        // with a quoted argument is some XCMD's companion; accept and ignore.
+        if peekIdentifier() != nil, !isPartReference(), case .string = tokens[index + 1].kind {
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        }
         // `show 10 cards` / `show (number of cards) cards` — the flip-through
         // animation (a count expression before `cards`). Contrapt doesn't
         // animate; accept and no-op. `show all cards` is caught by the list above.
@@ -2588,6 +2644,24 @@ struct Parser {
         let saved = index
         let buttonWords: Set<String> = ["button", "btn"]
         _ = consumeWord("the")
+        // `last cd btn` / `first bg button` — an ordinal-selected button
+        // (`put content into last cd btn`, Codebits Objects).
+        if let ordWord = peekIdentifier(),
+           Self.ordinalKeyword(ordWord) != nil || Self.ordinals[ordWord] != nil {
+            var offset = 1
+            var ordDomain = HyperTalkObject.PartDomain.any
+            if let w = peekIdentifier(offset), Self.cardWords.contains(w) { ordDomain = .card; offset += 1 }
+            else if let w = peekIdentifier(offset), Self.backgroundWords.contains(w) { ordDomain = .background; offset += 1 }
+            if let w = peekIdentifier(offset), buttonWords.contains(w) {
+                for _ in 0...offset { advance() }
+                if let n = Self.ordinals[ordWord] {
+                    return .property("contents", .part(kind: "button", domain: ordDomain,
+                                                       name: .numberLiteral(Double(n)), card: nil))
+                }
+                return .property("contents", .partByOrdinal(kind: "button", domain: ordDomain,
+                                                            ordinal: Self.ordinalKeyword(ordWord)!))
+            }
+        }
         var domain = HyperTalkObject.PartDomain.any
         if let w = peekIdentifier(), buttonWords.contains(w) {
             advance()
@@ -2602,6 +2676,9 @@ struct Parser {
             return nil
         }
         let isID = consumeWord("id")
+        // Bare `last cd btn` etc. (`put content into last cd btn`, Codebits):
+        // the ordinal came BEFORE the button words; the caller passes it via
+        // parseButtonOrdinalIfPresent below. Nothing to do here.
         // The name may be a literal, number, parenthesized expression, a bare
         // variable (`bg btn koumoku`), or a chunk (`btn item 2 of numList`) —
         // all observed in the wild. (Having consumed btn/button words above,
@@ -2821,7 +2898,8 @@ struct Parser {
             return nil
         }
         else if consumeCardWord() {
-            ref = consumeWord("id") ? .idExpression(try parsePrimary()) : .expression(try parsePrimary())
+            // Additive, so `of card laPremiere + x - 1` (Archivist) computes.
+            ref = consumeWord("id") ? .idExpression(try parseAdditive()) : .expression(try parseAdditive())
         } else {
             index = saved // not a card owner (e.g. `field "x" of the target`)
             return nil
