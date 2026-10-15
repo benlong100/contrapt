@@ -540,20 +540,21 @@ enum LegacyStackImporter {
     /// - Sans (Geneva, Chicago, Helvetica…): SF renders wider than the
     ///   bitmaps — 0.85 matches Home/DateBook line breaks.
     /// - Serifs (Palatino, New York…): rendered as real Palatino (see
-    ///   TextFormat.font / FieldClickHitTest.platformFont). Palatino itself is
-    ///   calibrated 1.04 against REAL HyperCard in Basilisk (2026-10-15):
-    ///   modern Palatino runs slightly narrower than the classic bitmap, and
-    ///   1.04 reproduces all 8 soft-wrap breaks of What is HyperCard?'s
-    ///   Stacks card (Palatino 14/356px) exactly, while the Tour's card 1
-    ///   (Palatino 18/476px) is break-stable from 1.0 through 1.06 — no
-    ///   regression. Other serif ids stay 1:1 until measured the same way.
-    ///   (The system serif, New York, runs wider still: at any single scale
-    ///   it either overflows prose fields or under-fills hard-wrapped ones.)
+    ///   TextFormat.font / FieldClickHitTest.platformFont), whose metrics
+    ///   match the classic bitmaps at the original point size — 1:1, VERIFIED
+    ///   against real HyperCard in Basilisk (2026-10-15): at 1.0 both the
+    ///   Tour's card 1 (Palatino 18, 476px, plain margins) and What is
+    ///   HyperCard?'s Stacks card (Palatino 14, 356px, wide margins at the
+    ///   calibrated 10px/side — see CardView) reproduce HC's soft-wrap breaks
+    ///   exactly. A brief 1.04 here was compensating for the then-oversized
+    ///   18px wide-margin inset; with the inset fixed, 1.0 is right. (The
+    ///   system serif, New York, runs wider: at any single scale it either
+    ///   overflows prose fields or under-fills hard-wrapped ones.)
     /// - Mono (Monaco, Courier): grid metrics already match, 1:1.
     private static let classicFontMap: [Int: (design: FontDesign, scale: Double)] = [
         2:  (.serif, 1.0),       // New York
         14: (.serif, 1.0),       // Bookman
-        16: (.serif, 1.04),      // Palatino (oracle-calibrated — see above)
+        16: (.serif, 1.0),       // Palatino
         20: (.serif, 1.0),       // Times
         34: (.serif, 1.0),       // New Century Schoolbook
         4:  (.monospaced, 1.0),  // Monaco

@@ -351,15 +351,17 @@ HyperCard? ("cheque book… organise", the GarysHyperCardPage copy) against
 Basilisk showing the US edition ("checkbook… organize") — different
 words, different wraps. At matching text, real HC and Contrapt both set
 the Stacks-card Body in 11 lines; only intra-line breaks differed.
- 1. Serif width — DONE: Palatino (fontID 16) calibrated to scale 1.04
-    against real HC in Basilisk. 1.04 reproduces all 8 Stacks-card
-    soft-wrap breaks exactly (Palatino 14, 356px field), and the Tour's
-    card 1 (Palatino 18, 476px) is break-stable from 1.0 through 1.06 —
-    no regression. Modern Palatino runs slightly NARROWER than the
-    classic bitmap (opposite of the old 1:1 guess). Other serif ids
-    stay 1:1 until measured the same way (method: NSLayoutManager
-    harness replicating LockedFieldLabel vs a Basilisk screenshot).
-    NEEDS RE-IMPORT to apply.
+ 1. Serif width — DONE, and the root cause was the WIDE-MARGINS INSET,
+    not the font: the Stacks-card Body has wideMargins set, and the
+    app/web inset 18px/side (wrap 320) where real HC's is ~10/side.
+    Calibrated at Palatino scale 1.0 (unchanged): HC's 8 Stacks-card
+    breaks reproduce at interiors 332–340 (inset 8–12; 10 shipped), and
+    the Tour's card 1 (plain margins) matches at 1.0 — both cards,
+    zero font change. A brief 1.04 Palatino scale was compensating for
+    the oversized inset and was reverted. Method: NSLayoutManager
+    harness replicating LockedFieldLabel vs Basilisk screenshots.
+    Inset is render-time (no re-import needed for it); any stack
+    imported during the brief 1.04 should be re-imported.
  2. Vertical ~12px — NOT A BUG: dissolved with the edition artifact
     (block heights match at matching text).
  3. Trailing-whitespace centering — DONE (21244ce): QuickDraw measured

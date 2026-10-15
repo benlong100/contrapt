@@ -594,7 +594,7 @@ struct CardView: View {
         guard let range = findHighlightRange,
               case .field(let field) = part.kind,
               field.kind == .plain, !field.lockText else { return nil }
-        let margin: CGFloat = field.wideMargins ? 18 : 8
+        let margin: CGFloat = field.wideMargins ? 10 : 8
         // The same no-wrap heuristic plainField applies (short hard lines
         // render preformatted), plus the Don't Wrap option.
         let preformatted = field.text.split(separator: "\n", omittingEmptySubsequences: false)
@@ -1313,7 +1313,12 @@ struct PartView: View {
         // shift the text sideways. HyperCard sets field text just a few px in;
         // the roomier editable inset was the only thing that differed, and the
         // tight value is what imported stacks are tuned to.
-        let margin: CGFloat = properties.wideMargins ? 18 : 3
+        // Wide Margins: +7px/side over the base 3 — calibrated against real
+        // HyperCard (Basilisk): the What is HyperCard? Stacks card (Palatino
+        // 14, 356px field, wideMargins) reproduces HC's soft-wrap breaks at
+        // interiors 332–340; 10/side is the center. The old 18 wrapped ~9%
+        // early (an extra line per paragraph).
+        let margin: CGFloat = properties.wideMargins ? 10 : 3
         // SwiftUI seats a text line's glyphs nearer the top of the line box
         // than HyperCard does, so locked text reads a bit high. Nudge it down
         // by a fraction of the field height — enough for a tall multi-row grid
@@ -1703,7 +1708,7 @@ struct PartView: View {
                 trackMouse(value.location)
                 guard (0...part.frame.width).contains(value.location.x),
                       (0...part.frame.height).contains(value.location.y) else { return }
-                let margin: CGFloat = properties.wideMargins ? 18 : 3
+                let margin: CGFloat = properties.wideMargins ? 10 : 3
                 let hit = FieldClickHitTest.hit(
                     in: properties.text,
                     at: value.location,

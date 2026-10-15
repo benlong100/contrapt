@@ -634,10 +634,11 @@ extension WebsiteExporter {
           const runs = perCard ? (perCard.styleRuns || []) : (f.styleRuns || []);
           // Styled runs render as spans in LOCKED fields (editable fields stay
           // plain text so contentEditable editing isn't fighting markup).
-          // Wide Margins insets text HORIZONTALLY (matching the app); a
-          // flat 18px all-round shoved a short field's one line onto its
-          // bottom edge. Vertical padding stays the base .field value.
-          if (f.wideMargins) { d.style.paddingLeft = '18px'; d.style.paddingRight = '18px'; }
+          // Wide Margins insets text HORIZONTALLY (matching the app): 10px a
+          // side, calibrated against real HyperCard's soft-wrap breaks (the
+          // Stacks card band is 8-12/side; 18 wrapped ~9% early). Vertical
+          // padding stays the base .field value.
+          if (f.wideMargins) { d.style.paddingLeft = '10px'; d.style.paddingRight = '10px'; }
           if (f.kind === 'rich') { d.classList.add('rich'); richFields[p.scriptID] = true; renderMarkdown(d, text); }
           else if (runs.length && f.lockText) setRunStyledText(d, text, runs, f.format);
           else d.textContent = text;
