@@ -668,6 +668,11 @@ struct Parser {
                 // print-document-with-application; the app is consumed
                 // (Contrapt prints the field itself).
                 if consumeWord("with") { _ = try? parseExpression() }
+                // `print bkgnd field "3" cards from 0,0 to 510,714` (Fossils)
+                // — a page-geometry tail; consumed, the field prints whole.
+                if peekIdentifier() == "cards" || peekIdentifier() == "card" {
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                }
                 try expectNewline()
                 return Stmt(kind: .printField(object), line: line)
             }
@@ -1616,7 +1621,16 @@ struct Parser {
     /// (`b3 c#4 d e f# r g4`) is taken literally — reconstructed from its tokens
     /// so `#`, dots, and octave digits stay attached to their note letter.
     private mutating func parsePlayNotes() throws -> Expr {
-        if case .string = current.kind { return try parseExpression() }
+        if case .string = current.kind {
+            var notes = try parseExpression()
+            // Adjacent quoted strings are one note list — `play "Tick.rev"
+            // tempo 140 "Ce" "C" "C" "C"` (Tech Support TimeSaver).
+            while case .string(let next) = current.kind {
+                advance()
+                notes = .binary(.concat, .binary(.concat, notes, .stringLiteral(" ")), .stringLiteral(next))
+            }
+            return notes
+        }
         if case .symbol("(") = current.kind { return try parseExpression() }
         if let w = peekIdentifier(),
            ["field", "fld", "card", "cd", "background", "bkgnd", "bg", "the"].contains(w) {

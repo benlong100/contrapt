@@ -136,3 +136,8 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("if x then beep else play \"boing\""))   // 3C Timer
     #expect(parses("put the number of cards of this bg & return into menu"))  // Billing: menu as variable
 }
+
+@Test func playAdjacentQuotedNotesAndPrintGeometry() {
+    #expect(parses("play \"Tick.rev\" tempo 140 \"Ce\" \"C\" \"C\" \"C\""))   // Tech Support TimeSaver
+    #expect(parses("print bkgnd field \"3\" cards from 0,0 to 510,714"))       // Fossils
+}
