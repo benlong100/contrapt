@@ -178,3 +178,8 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("put offset (∆,line (c) of readTour)-1 into editTour"))  // Aloun-Madu
     #expect(parses("put 5 into ∆"))
 }
+
+@Test func parenthesizedHandlerParamsAndVisualTail() {
+    #expect((try? Parser.parse("on grebe (old)\nput old\nend grebe")) != nil)   // Achievement of Arms
+    #expect(parses("visual scrollAlong (that)"))                                 // Tarot Reader
+}

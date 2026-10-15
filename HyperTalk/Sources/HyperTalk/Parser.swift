@@ -258,11 +258,15 @@ struct Parser {
         advance()
 
         var parameters: [String] = []
+        // `on grebe (old)` (Achievement of Arms) — parameters may sit in
+        // parentheses, as some authors wrote them.
+        let parenthesized = consumeSymbol("(")
         while let parameter = peekIdentifier() {
             advance()
             parameters.append(parameter)
             if !consumeSymbol(",") { break }
         }
+        if parenthesized { _ = consumeSymbol(")") }
         try expectNewline()
 
         let body = try parseStatements(handlerName: name, stopBefore: [["end", name]], blockDescription: "handler '\(name)'", blockLine: startLine)
@@ -510,6 +514,9 @@ struct Parser {
             advance()
             _ = consumeWord("effect")
             let effect = try parseVisualEffect(line: line)
+            // `visual scrollAlong (that)` (Tarot Reader) — a custom-named
+            // effect with a parenthesized argument; consumed, best-effort.
+            if case .symbol("(") = current.kind { _ = try? parsePrimary() }
             try expectNewline()
             return Stmt(kind: .visualEffect(effect), line: line)
         case "lock", "unlock":

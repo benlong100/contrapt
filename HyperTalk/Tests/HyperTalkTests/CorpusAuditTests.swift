@@ -88,7 +88,14 @@ private struct StakReader {
 
     private func looksLikeScript(_ run: String) -> Bool {
         let lower = run.lowercased()
-        return (lower.hasPrefix("on ") || lower.contains("\non ") || lower.hasPrefix("function ")) && lower.contains("end ")
+        guard (lower.hasPrefix("on ") || lower.contains("\non ") || lower.hasPrefix("function ")) && lower.contains("end ") else {
+            return false
+        }
+        // HyperCard 2.2 scripts can BE AppleScript (WOSA/`ascr` OSA blocks —
+        // Annuaire NET's `on run aplic / tell application …`). Those aren't
+        // HyperTalk; auditing them as parse errors is noise.
+        if lower.contains("tell application ") && lower.contains("end tell") { return false }
+        return true
     }
 
     private func trimToCompleteHandlers(_ script: String) -> String {
