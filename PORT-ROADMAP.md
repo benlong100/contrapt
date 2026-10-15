@@ -344,21 +344,22 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**IA corpus sweep — batch 1 DONE 2026-10-15 (commits c7d9c23, ac9e5f8,
-4547da7).** Corpus grew 302 → 511 stacks via Scripts/ia-fetch-stacks.py
-(3,695 items in the Internet Archive collection; ~3,500 unfetched — next:
-`python3 Scripts/ia-fetch-stacks.py 200 2`). Errors 99 → 54; the remaining
-54 are author bugs EXCEPT three deferred judgment calls needing the
-Basilisk oracle or deeper surgery:
+**IA corpus sweep — batches 1-2 DONE 2026-10-15.** Corpus 302 → 740 stacks
+/ 27,054 scripts via Scripts/ia-fetch-stacks.py (batch 3 of ~3,300 remaining
+items in flight; `python3 Scripts/ia-fetch-stacks.py 200 <page>` continues).
+Parse errors: batch 1 arrived at 99 → mined to 54; batch 2 arrived at 126 →
+mined to 90. ~45 real language gaps fixed across the sweep (commits c7d9c23
+… 82c7f22); the floor is author bugs (unterminated quotes, `put 0.`, `&.`,
+template placeholders) plus TWO deferred oracle questions:
  1. `find theType theText in theField` (Readymade Fields) — juxtaposed
     variables where the first may be a runtime style word. Ask the oracle
     whether real HC accepts it before implementing.
  2. `put "…" & ¬ <CR> into field …` (AppleOrder BugReporter) — a dangling
     concat before the continuation joins `into`. Oracle: does HC treat the
     trailing & as concat-with-empty?
- 3. `put line 2 to the number of lines of cd fld "X" of cd fld "X" …`
-    (a Japanese icon utility) — a chunk range whose end expression carries
-    its own `of` chain; our suppression logic stops the inner parse.
+ (Former #3, the nested chunk-range `of` chain, was parser greed — fixed
+ in 60b6907.) Also deferred: `the clickChunk` as a container (AFI Catalog)
+ — needs the host to record the clicked word's chunk descriptor.
 
 **Text-metrics fidelity — RESOLVED 2026-10-15 (Basilisk ground truth;
 items 1–3 done, 4 open).** The original "~12 card-px taller" observation
