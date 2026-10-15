@@ -2425,6 +2425,16 @@ final class DocumentScriptHost: HyperTalkHost {
             var updated = part(at: location)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: location)
+            // HyperCard family rule, script side: SETTING a family member's
+            // hilite to true unhilights its same-layer siblings — the What is
+            // HyperCard? topic buttons rely on it (each card's openCard does
+            // `set the hilite of bkgnd btn <topic> to true`; nothing ever
+            // clears the old one by hand). The click path does this in
+            // ContentView.clearFamilySiblings; this is its set-path twin.
+            if ["hilite", "hilight", "highlight", "highlite"].contains(property),
+               case .button(let button) = updated.kind, button.family > 0, button.hilite {
+                clearFamilyHiliteSiblings(of: updated, family: button.family, at: location)
+            }
         case .card(let destination):
             try setCardProperty(property, cardAt: try resolveCardIndex(destination), to: value)
         case .thisCard:
@@ -3170,6 +3180,26 @@ final class DocumentScriptHost: HyperTalkHost {
             stackBinding.wrappedValue.cards[ci].parts[partIndex] = part
         case .background(let backgroundIndex, let partIndex):
             stackBinding.wrappedValue.backgrounds[backgroundIndex].parts[partIndex] = part
+        }
+    }
+
+    /// Clears the hilite of every OTHER same-family button on `location`'s
+    /// layer — HyperCard's family exclusivity when a member's hilite is SET
+    /// true from script (the click path's twin lives in ContentView).
+    private func clearFamilyHiliteSiblings(of part: Part, family: Int, at location: FieldLocation) {
+        func clear(_ parts: inout [Part]) {
+            for index in parts.indices where parts[index].id != part.id {
+                guard case .button(var sibling) = parts[index].kind, sibling.family == family,
+                      sibling.hilite else { continue }
+                sibling.hilite = false
+                parts[index].kind = .button(sibling)
+            }
+        }
+        switch location {
+        case .card(let ci, _):
+            clear(&stackBinding.wrappedValue.cards[ci].parts)
+        case .background(let backgroundIndex, _):
+            clear(&stackBinding.wrappedValue.backgrounds[backgroundIndex].parts)
         }
     }
 

@@ -112,3 +112,24 @@ private func hilite(_ engine: StackEngine, _ scriptID: Int) -> Bool? {
     _ = try await engine.runMessage("put (there is a family 1) & \" \" & (there is a family 9) into msg")
     #expect(engine.drainEffects().contains(.message("true false")))
 }
+
+@Test func settingHiliteByScriptClearsFamilySiblings() async throws {
+    // HyperCard's family rule applies to SCRIPT sets too, not just clicks —
+    // What is HyperCard?'s topic buttons depend on it (each card's openCard
+    // does `set the hilite of bkgnd btn <topic> to true` and nothing ever
+    // clears the previous one by hand; the stack file even ships with one
+    // button hilited, so without this rule two stay lit until a click).
+    let engine = try StackEngine(stackJSON: familyJSON)
+    _ = try await engine.runMessage("set the hilite of button \"Red\" to true")
+    #expect(hilite(engine, 40) == true)
+    _ = try await engine.runMessage("set the hilite of button \"Blue\" to true")
+    #expect(hilite(engine, 41) == true)
+    #expect(hilite(engine, 40) == false)   // sibling cleared by the set
+    // Setting a member FALSE clears only itself.
+    _ = try await engine.runMessage("set the hilite of button \"Blue\" to false")
+    #expect(hilite(engine, 41) == false)
+    #expect(hilite(engine, 40) == false)
+    // The background's family 1 is a separate namespace — untouched.
+    _ = try await engine.runMessage("set the hilite of button \"Red\" to true")
+    #expect(hilite(engine, 60) == nil || hilite(engine, 60) == false)
+}

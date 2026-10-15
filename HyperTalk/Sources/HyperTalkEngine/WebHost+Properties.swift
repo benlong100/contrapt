@@ -73,6 +73,15 @@ extension WebHost {
             var updated = part(at: loc)
             try applyPartProperty(property, to: &updated, kind: kind, value: value)
             setPart(updated, at: loc)
+            // HyperCard family rule, script side: SETTING a family member's
+            // hilite to true unhilights its same-layer siblings — the What is
+            // HyperCard? topic buttons rely on it (each card's openCard sets
+            // its own topic true; nothing clears the old one by hand). The
+            // click path's twin is applyClickHilite.
+            if ["hilite", "hilight", "highlight", "highlite"].contains(property),
+               case .button(let button) = updated.kind, button.family > 0, button.hilite {
+                clearFamilyHiliteSiblings(of: updated, family: button.family, at: loc)
+            }
         case .card(let destination):
             try setCardProperty(property, cardAt: try resolveCardIndex(destination), to: value)
         case .thisCard:
@@ -727,6 +736,24 @@ extension WebHost {
         switch location {
         case .card(let ci, let i): stack.cards[ci].parts[i] = part
         case .background(let b, let i): stack.backgrounds[b].parts[i] = part
+        }
+    }
+
+    /// Clears the hilite of every OTHER same-family button on `location`'s
+    /// layer — HyperCard's family exclusivity when a member's hilite is SET
+    /// true from script (the click path's twin is applyClickHilite).
+    func clearFamilyHiliteSiblings(of part: Part, family: Int, at location: PartLocation) {
+        func clear(_ parts: inout [Part]) {
+            for index in parts.indices where parts[index].id != part.id {
+                guard case .button(var sibling) = parts[index].kind, sibling.family == family,
+                      sibling.hilite else { continue }
+                sibling.hilite = false
+                parts[index].kind = .button(sibling)
+            }
+        }
+        switch location {
+        case .card(let ci, _): clear(&stack.cards[ci].parts)
+        case .background(let b, _): clear(&stack.backgrounds[b].parts)
         }
     }
 
