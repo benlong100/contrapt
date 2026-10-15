@@ -1360,25 +1360,46 @@ struct PartView: View {
                 // vertical layout. Don't Wrap keeps each hard line whole and
                 // clips it, like the preformatted heuristic.
                 let unwrapped = preformatted || properties.dontWrap
+                // QuickDraw's TextEdit measured centered/right-aligned lines
+                // WITHOUT trailing spaces, and authors space-padded centered
+                // text routinely ("text:" + 53 spaces — What is HyperCard?'s
+                // Stacks card). Modern layout measures the pad and shoves the
+                // words out of the clip, so strip it for display — remapping
+                // style-run starts and the find highlight, since characters
+                // moved. Left-aligned text is unaffected by a trailing pad.
+                let (displayProperties, displayHighlight): (FieldPart, Range<Int>?) = {
+                    guard properties.format.align != .left else { return (properties, highlightRange) }
+                    let stripped = TextMetrics.strippingTrailingLineWhitespace(properties.text)
+                    guard stripped.text != properties.text else { return (properties, highlightRange) }
+                    var display = properties
+                    display.text = stripped.text
+                    display.styleRuns = properties.styleRuns.map { run in
+                        var remapped = run
+                        remapped.start = stripped.remap(run.start)
+                        return remapped
+                    }
+                    let highlight = highlightRange.map { stripped.remap($0.lowerBound)..<stripped.remap($0.upperBound) }
+                    return (display, highlight)
+                }()
                 let lockedText = Group {
-                    if let exactLineHeight = properties.textHeight {
+                    if let exactLineHeight = displayProperties.textHeight {
                         LockedFieldLabel(
-                            text: properties.text,
-                            format: properties.format,
+                            text: displayProperties.text,
+                            format: displayProperties.format,
                             textHeight: exactLineHeight,
                             preformatted: unwrapped,
-                            highlightRange: highlightRange,
+                            highlightRange: displayHighlight,
                             wrapWidth: fieldWidth > 0 ? max(1, fieldWidth - 2 * margin) : nil,
-                            styleRuns: properties.styleRuns,
-                            textColor: properties.textColor.map { PlatformColor(Color(stackColor: $0)) }
+                            styleRuns: displayProperties.styleRuns,
+                            textColor: displayProperties.textColor.map { PlatformColor(Color(stackColor: $0)) }
                         )
                         // Ideal height, so a last line that only partially
                         // fits still draws (the part frame clips it) rather
                         // than the label dropping it whole.
                         .fixedSize(horizontal: unwrapped, vertical: true)
                     } else {
-                        Text(styledText(properties))
-                            .multilineTextAlignment(properties.format.align.swiftUI)
+                        Text(styledText(displayProperties, highlight: displayHighlight))
+                            .multilineTextAlignment(displayProperties.format.align.swiftUI)
                             .lineLimit(nil)
                             .fixedSize(horizontal: unwrapped, vertical: true)
                     }
@@ -1511,7 +1532,7 @@ struct PartView: View {
     /// `.font` modifier) so per-run fonts apply. Outline isn't expressible
     /// here — such fields almost always carry a textHeight and take the
     /// LockedFieldLabel path, which does render it.
-    private func styledText(_ properties: FieldPart) -> AttributedString {
+    private func styledText(_ properties: FieldPart, highlight: Range<Int>? = nil) -> AttributedString {
         var attributed = AttributedString(properties.text)
         attributed.font = properties.format.font
         if properties.format.isUnderline { attributed.underlineStyle = .single }
@@ -1534,7 +1555,7 @@ struct PartView: View {
             attributed[span].font = run.format.font
             attributed[span].underlineStyle = run.format.isUnderline ? .single : nil
         }
-        if let highlightRange, let span = range(highlightRange.lowerBound, highlightRange.upperBound) {
+        if let highlight, let span = range(highlight.lowerBound, highlight.upperBound) {
             attributed[span].backgroundColor = .accentColor.opacity(0.35)
         }
         return attributed
