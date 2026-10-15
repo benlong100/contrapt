@@ -344,27 +344,33 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**Text-metrics fidelity — TODO (2026-10-13, from the What is HyperCard?
-side-by-sides).** HyperCard has NO text wrap-around; authors ended text
-above their art by metrics. Ours runs ~12 card-px taller on that stack's
-Stacks card, so the paragraph collides with the artwork, and horizontal
-wraps drift ("organize information, show" breaks a word earlier). Work
-items, measured against this stack (and the Basilisk oracle for truth):
- 1. Width calibration for the serif mapping (fontID 16 / Benguiat-era
-    face): tune proportionalFontScale so this stack's line breaks match
-    HyperCard's. Audit other classic faces the corpus uses.
- 2. Vertical audit: find the ~12px — blank-line gap, first-baseline
-    nudge (lockedNudge), or textHeight adherence — so a field's text
-    block ENDS where HyperCard's did.
- 3. Centered/right-aligned text must ignore TRAILING whitespace when
-    measuring the line (QuickDraw TextEdit behavior) — the Stacks card's
-    "Tag" field is 'text:' + 53 spaces, centered; modern centering
-    pushes the words out of the clip (field looks empty). Authors
-    space-padded alignment routinely; this will bite other stacks.
-    (Pending Ben's `put bg field "Tag"` probe to rule out an import
-    drop, but the renderer fix is right regardless.)
- 4. Document the honest residue in the How to Import stack: layouts
-    tuned to exact 1-bit glyph pixels need a human pass after import.
+**Text-metrics fidelity — RESOLVED 2026-10-15 (Basilisk ground truth;
+items 1–3 done, 4 open).** The original "~12 card-px taller" observation
+was an ARTIFACT: the side-by-side compared the UK edition of What is
+HyperCard? ("cheque book… organise", the GarysHyperCardPage copy) against
+Basilisk showing the US edition ("checkbook… organize") — different
+words, different wraps. At matching text, real HC and Contrapt both set
+the Stacks-card Body in 11 lines; only intra-line breaks differed.
+ 1. Serif width — DONE: Palatino (fontID 16) calibrated to scale 1.04
+    against real HC in Basilisk. 1.04 reproduces all 8 Stacks-card
+    soft-wrap breaks exactly (Palatino 14, 356px field), and the Tour's
+    card 1 (Palatino 18, 476px) is break-stable from 1.0 through 1.06 —
+    no regression. Modern Palatino runs slightly NARROWER than the
+    classic bitmap (opposite of the old 1:1 guess). Other serif ids
+    stay 1:1 until measured the same way (method: NSLayoutManager
+    harness replicating LockedFieldLabel vs a Basilisk screenshot).
+    NEEDS RE-IMPORT to apply.
+ 2. Vertical ~12px — NOT A BUG: dissolved with the edition artifact
+    (block heights match at matching text).
+ 3. Trailing-whitespace centering — DONE (21244ce): QuickDraw measured
+    centered/right lines WITHOUT trailing spaces; TextMetrics.
+    strippingTrailingLineWhitespace + CardView's locked paths (style
+    runs and find highlight remapped). The Tag field's content was
+    confirmed present in the stack file — it was this centering trap,
+    not an import drop. Web already hangs trailing spaces (pre-wrap).
+ 4. OPEN: document the honest residue in the How to Import stack:
+    layouts tuned to exact 1-bit glyph pixels can still need a human
+    pass after import (much milder now that serif breaks match).
 
 **Web-parity follow-ups:** state-driven player renderer — DONE 2026-10-13
 (commit 2f983ae): the player builds the current card from engine state
