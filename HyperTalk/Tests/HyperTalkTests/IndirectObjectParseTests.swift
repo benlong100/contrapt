@@ -72,3 +72,32 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("put the contents of btn \"cover1\" into thePicts"))
     #expect(parses("select line empty of bkgnd btn \"Go Back History\" of card 2"))
 }
+
+// MARK: - IA batch 1 gaps (2026-10-15)
+
+@Test func emptyCallArgumentSlots() {
+    // Empty slots are empty arguments, as HyperCard passes them.
+    #expect(parses("ShowDialog 3,531,\"\",\"\",,4"))                       // ColorPaint
+    #expect(parses("playPICS fld PICSPath,128,,0,0,cd fld frames,1,true")) // E-Z Animate
+    #expect(parses("put SectionName(,theCard) into x"))                    // Dracula
+}
+
+@Test func clickLineAndSelectedChunkAsContainers() {
+    #expect(parses("put \"• \" before the clickLine"))                   // FontIndexer
+    #expect(parses("set the textStyle of the clickLine to holder"))
+    #expect(parses("put tab & return after the selectedChunk"))          // War of the Worlds
+    #expect(parses("put noEOL(selTx) into the selectedChunk"))           // EmailLog
+    #expect(parses("if the textstyle of item 1 of the clickLine is plain then beep"))  // TimeBook
+}
+
+@Test func readAtOffsetParses() {
+    #expect(parses("read from file filename at 0 until end"))     // Cloze Text
+    #expect(parses("read from file filename at 00000 for 30000"))
+}
+
+@Test func quotedGlobalsAndWindowPoints() {
+    #expect(parses("global \"mapper\""))                 // GeoDraw
+    #expect(parses("show window \"tools\" at 527,10"))   // DoodlePaint
+    #expect(parses("if there is a menuitem p+1 of menu \"Go To\" then beep"))  // <- GoTo ->
+    #expect(parses("if there is no application thePath then beep"))            // EmailLog
+}

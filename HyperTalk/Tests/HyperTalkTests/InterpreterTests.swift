@@ -310,8 +310,9 @@ final class MockHost: HyperTalkHost {
         guard openFiles.removeValue(forKey: path) != nil else { throw HostError("File not open.") }
     }
 
-    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool) {
-        guard let mark = openFiles[path], let content = diskFiles[path] else { throw HostError("File not open.") }
+    func fileRead(_ path: String, until delimiter: String?, count: Int?, at position: Int?) throws -> (text: String, atEOF: Bool) {
+        guard var mark = openFiles[path], let content = diskFiles[path] else { throw HostError("File not open.") }
+        if let position { mark = max(0, position - 1); openFiles[path] = mark }  // 1-based seek
         let characters = Array(content)
         guard mark < characters.count else { return ("", true) }
         var end = characters.count

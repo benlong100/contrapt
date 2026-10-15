@@ -140,7 +140,7 @@ indirect enum StmtKind {
     /// `the result` (not script errors), as in HyperCard. `read` fills `it`.
     case openFile(Expr)
     case closeFile(Expr)
-    case readFile(file: Expr, until: Expr?, count: Expr?)
+    case readFile(file: Expr, until: Expr?, count: Expr?, at: Expr?)
     case writeFile(value: Expr, file: Expr, atEOF: Bool, at: Expr?)
     /// `pass <message>` — stop this handler and let the message continue down
     /// the object path to the next handler.
@@ -337,6 +337,10 @@ indirect enum Container {
     /// function result (`the textHeight of item 1 of theFields()`, Power
     /// Tools). Reading evaluates; writing is an error.
     case expressionValue(Expr)
+    /// `[the] clickLine` as a container — the locked-field line last clicked
+    /// (`put "• " before the clickLine`, FontIndexer). Resolved at run time by
+    /// re-parsing the click descriptor ("line 3 of card field id 12").
+    case clickLine
     /// A BUTTON's contents as a container (HyperCard 2.x: popup/list text) —
     /// `put empty into bkgnd btn "Go Back History" of card 2` (New Features).
     /// The FieldRef shape carries domain/id/name/card for a button here.

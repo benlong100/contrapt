@@ -88,3 +88,20 @@ import Testing
     """, handler: "p")
     #expect(host.messages.last == "XYcdef")
 }
+
+@Test func readAtSeeksBeforeReading() async throws {
+    // `read from file f at <pos> for <n>` seeks (1-based) before reading —
+    // Cloze Text reloads its text file this way.
+    let host = try await run("""
+    on p
+      open file "notes"
+      write "abcdefgh" to file "notes"
+      close file "notes"
+      open file "notes"
+      read from file "notes" at 3 for 4
+      put it
+      close file "notes"
+    end p
+    """, handler: "p")
+    #expect(host.messages.last == "cdef")
+}

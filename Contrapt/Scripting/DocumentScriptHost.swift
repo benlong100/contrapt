@@ -1897,8 +1897,11 @@ final class DocumentScriptHost: HyperTalkHost {
         return FileManager.default.fileExists(atPath: url.path)
     }
 
-    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool) {
+    func fileRead(_ path: String, until delimiter: String?, count: Int?, at position: Int?) throws -> (text: String, atEOF: Bool) {
         guard var file = openFiles[path] else { throw HostError("File not open.") }
+        // `read … at <pos>` seeks before reading — 1-based like HyperCard's
+        // write-at (0 and 1 both mean the start). Cloze Text.
+        if let position { file.mark = max(0, position - 1) }
         guard file.mark < file.characters.count else { return ("", true) }
         var end = file.characters.count
         if let count { end = min(end, file.mark + max(0, count)) }

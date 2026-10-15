@@ -1020,7 +1020,7 @@ final class Runtime {
             fileCall { try host.fileClose(path) }
             return .normal
 
-        case .readFile(let fileExpression, let untilExpression, let countExpression):
+        case .readFile(let fileExpression, let untilExpression, let countExpression, let atExpression):
             let path = try await evaluate(fileExpression, line: statement.line)
             var delimiter: String? = nil
             var count: Int? = nil
@@ -1034,7 +1034,11 @@ final class Runtime {
                 count = Int(try Value.number(from: try await evaluate(countExpression, line: statement.line), line: statement.line))
             }
             do {
-                let (text, atEOF) = try host.fileRead(path, until: delimiter, count: count)
+                var position: Int? = nil
+                if let atExpression {
+                    position = Int(try Value.number(from: try await evaluate(atExpression, line: statement.line), line: statement.line))
+                }
+                let (text, atEOF) = try host.fileRead(path, until: delimiter, count: count, at: position)
                 setVariable("it", to: text)
                 lastResult = atEOF ? "eof" : ""
             } catch let error as HostError {
@@ -1488,6 +1492,10 @@ final class Runtime {
         case .expressionValue(let expression):
             // A function call as a read-only source (`item 1 of theFields()`).
             return try await evaluate(expression, line: line)
+        case .clickLine:
+            // Resolve the click descriptor to its chunk and read it.
+            guard let resolved = clickLineContainer() else { return "" }
+            return try await containerValue(resolved, line: line)
         case .buttonContents(let buttonRef):
             // A button's contents (HC 2.x) — read via the contents property.
             let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
@@ -1579,6 +1587,11 @@ final class Runtime {
         switch container {
         case .expressionValue:
             throw ScriptError(line: line, message: "You can't put something into a function's result.")
+        case .clickLine:
+            // `put "• " before the clickLine` — write through to the clicked
+            // line's chunk; a no-op before any click, like HyperCard.
+            guard let resolved = clickLineContainer() else { return }
+            try await setContainer(resolved, to: value, line: line)
         case .buttonContents(let buttonRef):
             // `put x into btn "X"` — write the button's contents (HC 2.x).
             let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
@@ -1760,6 +1773,15 @@ final class Runtime {
         }
     }
 
+    /// The clicked locked-field line as a container — re-parses the click
+    /// descriptor ("line 3 of card field id 12"); nil before any click.
+    private func clickLineContainer() -> Container? {
+        let descriptor = host.clickValue(.line)
+        guard !descriptor.isEmpty, let container = Parser.parseSoleContainer(descriptor),
+              !isVariableContainer(container) else { return nil }
+        return container
+    }
+
     /// Walks a (possibly nested) chunk container down to its base field and
     /// computes the chunk's absolute character range in the field's text.
     /// Nil when the base isn't a field (nothing text-selectable).
@@ -1818,6 +1840,9 @@ final class Runtime {
         case .expressionValue:
             // A function result isn't a text-selectable field range.
             return nil
+        case .clickLine:
+            guard let resolved = clickLineContainer() else { return nil }
+            return try await fieldAndRange(of: resolved, line: line)
         case .buttonContents:
             // Button contents aren't a text-selectable field range (`select
             // line … of bkgnd btn` no-ops gracefully, like old paint selects).
@@ -1847,7 +1872,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine: return false
         }
     }
 

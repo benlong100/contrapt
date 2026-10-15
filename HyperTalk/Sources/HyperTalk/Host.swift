@@ -292,7 +292,7 @@ public protocol HyperTalkHost: AnyObject {
     /// HostError surfaces as `the result`, not a script error (as HyperCard).
     func fileOpen(_ path: String) throws
     func fileClose(_ path: String) throws
-    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool)
+    func fileRead(_ path: String, until delimiter: String?, count: Int?, at position: Int?) throws -> (text: String, atEOF: Bool)
     func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws
     /// Whether a disk file exists, for `there is a file <path>`. Defaults to
     /// false — a stack probing an external file that Contrapt doesn't have gets
@@ -620,7 +620,7 @@ public extension HyperTalkHost {
     /// Hosts without file access report HyperCard's classic failure.
     func fileOpen(_ path: String) throws { throw HostError("Can't open that file.") }
     func fileClose(_ path: String) throws { throw HostError("File not open.") }
-    func fileRead(_ path: String, until delimiter: String?, count: Int?) throws -> (text: String, atEOF: Bool) {
+    func fileRead(_ path: String, until delimiter: String?, count: Int?, at position: Int?) throws -> (text: String, atEOF: Bool) {
         throw HostError("File not open.")
     }
     func fileWrite(_ path: String, text: String, at position: FileWritePosition) throws {

@@ -360,9 +360,18 @@ struct Parser {
         case "global":
             advance()
             var names: [String] = []
-            while let name = peekIdentifier() {
-                advance()
-                names.append(name)
+            while true {
+                if let name = peekIdentifier() {
+                    advance()
+                    names.append(name)
+                } else if case .string(let quoted) = current.kind {
+                    // `global "mapper"` (GeoDraw) — HyperCard accepts a quoted
+                    // name; the variable is the unquoted word.
+                    advance()
+                    names.append(quoted.lowercased())
+                } else {
+                    break
+                }
                 if !consumeSymbol(",") { break }
             }
             guard !names.isEmpty else {
@@ -709,12 +718,17 @@ struct Parser {
                 return Stmt(kind: .noOp, line: line)
             }
             let path = try parseExpression()
+            // `read from file f at <pos> until <d> / for <n>` — a seek
+            // offset before the span (Cloze Text). 1-based like HyperCard
+            // (0 and 1 both mean the start).
+            var at: Expr? = nil
+            if consumeWord("at") { at = try parseAdditive() }
             var until: Expr? = nil
             var count: Expr? = nil
             if consumeWord("until") { until = try parseExpression() }
             else if consumeWord("for") { count = try parseExpression() }
             try expectNewline()
-            return Stmt(kind: .readFile(file: path, until: until, count: count), line: line)
+            return Stmt(kind: .readFile(file: path, until: until, count: count, at: at), line: line)
         case "write":
             // `write <expr> to file <path> [at end|eof|<pos>]`.
             advance()
@@ -1229,6 +1243,17 @@ struct Parser {
         var arguments: [Expr] = []
         if current.kind != .newline, current.kind != .endOfScript {
             repeat {
+                // An empty slot (`ShowDialog 3,531,"","",,4` — ColorPaint,
+                // `playPICS path,128,,0,0,…` — E-Z Animate) is an empty
+                // argument, as HyperCard passes it.
+                if case .symbol(",") = current.kind {
+                    arguments.append(.stringLiteral(""))
+                    continue
+                }
+                if current.kind == .newline || current.kind == .endOfScript {
+                    arguments.append(.stringLiteral(""))
+                    break
+                }
                 arguments.append(try parseExpression())
             } while consumeSymbol(",")
         }
@@ -1335,7 +1360,9 @@ struct Parser {
             return .ordinal(ordinal)
         }
         _ = consumeWord("menuitem")
-        let value = try parsePrimary()
+        // Additive, so `menuItem p+1 of menu "Go To"` (<- GoTo ->) computes
+        // the index; stops before `of`.
+        let value = try parseAdditive()
         return .expr(value)
     }
 
@@ -1425,6 +1452,23 @@ struct Parser {
             if foundOffset == 1 { advance() } // the
             advance() // foundChunk
             return .foundChunk
+        }
+        // `[the] selectedChunk` as a destination is the selection itself —
+        // `put noEOL(selTx) into the selectedChunk` (EmailLog), `put tab &
+        // return after the selectedChunk` (BookMaker's War of the Worlds).
+        if peekIdentifier(foundOffset) == "selectedchunk" {
+            if foundOffset == 1 { advance() } // the
+            advance() // selectedChunk
+            return .selection
+        }
+        // `[the] clickLine` as a container — the locked-field line last
+        // clicked: `put "• " before the clickLine`, `set the textStyle of the
+        // clickLine to …` (FontIndexer, D'Entry, TimeBook). Resolved at run
+        // time from the click descriptor.
+        if peekIdentifier(foundOffset) == "clickline" {
+            if foundOffset == 1 { advance() } // the
+            advance() // clickLine
+            return .clickLine
         }
         // `url "https://…"` as a destination — `put <body> into url "…"` is an
         // HTTP PUT. Checked before the bare-variable fallback.
@@ -1916,9 +1960,13 @@ struct Parser {
             advance()
             let name = (current.kind == .newline || current.kind == .endOfScript)
                 ? Expr.stringLiteral("") : try parsePrimary()
-            // `show window "X" at "h,v"` positions the window as it shows; the
-            // location is consumed (Contrapt shows it at its registered loc).
-            if consumeWord("at") { _ = try? parsePrimary() }
+            // `show window "X" at "h,v"` / `at 527,10` positions the window as
+            // it shows; the location is consumed — quoted or a bare h,v pair
+            // (DoodlePaint) — since Contrapt shows it at its registered loc.
+            if consumeWord("at") {
+                _ = try? parseAdditive()
+                if consumeSymbol(",") { _ = try? parseAdditive() }
+            }
             try expectNewline()
             return Stmt(kind: .set(property: "visible", object: .window(name),
                                    value: .stringLiteral(visible ? "true" : "false")), line: line)
@@ -2799,8 +2847,10 @@ struct Parser {
         }
         // `file <path>` — `there is a file theFile`, `there is not a file
         // (thisFile)`. The path is any expression (literal, variable, or
-        // parenthesized); the host answers existence.
-        if peekIdentifier() == "file" {
+        // parenthesized); the host answers existence. `application <path>`
+        // (EmailLog's launcher guard) is the same disk check — a classic app
+        // path that isn't present reads correctly as absent.
+        if peekIdentifier() == "file" || peekIdentifier() == "application" {
             advance()
             let path: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
                 ? .stringLiteral("") : try parsePrimary()
@@ -2961,8 +3011,10 @@ struct Parser {
             advance()
             if w == "menubar" { return .menu(.stringLiteral("")) }
             _ = consumeWord("id")
+            // Additive, so `menuItem p+1 of menu "Go To"` computes the index
+            // and stops before `of` (<- GoTo ->'s existence guard).
             let name: Expr = (current.kind == .newline || current.kind == .endOfScript)
-                ? .stringLiteral("") : try parsePrimary()
+                ? .stringLiteral("") : try parseAdditive()
             if w == "menuitem", consumeWord("of") || consumeWord("in") {
                 _ = consumeWord("menu")
                 if let menuName = try? parsePrimary() {
@@ -3828,11 +3880,17 @@ struct Parser {
                 var arguments: [Expr] = []
                 if case .symbol(")") = current.kind {} else {
                     repeat {
-                        // A trailing comma is an empty final argument, which
-                        // HyperCard tolerates (`selectType("x",1,2,)` — Tubers).
+                        // An empty slot is an empty argument, as HyperCard
+                        // passes it: trailing (`selectType("x",1,2,)` —
+                        // Tubers), leading (`SectionName(,theCard)` —
+                        // Dracula), or interior (`playPICS(path,128,,0)`).
                         if case .symbol(")") = current.kind {
                             arguments.append(.stringLiteral(""))
                             break
+                        }
+                        if case .symbol(",") = current.kind {
+                            arguments.append(.stringLiteral(""))
+                            continue
                         }
                         arguments.append(try parseExpression())
                     } while consumeSymbol(",")
