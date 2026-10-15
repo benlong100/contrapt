@@ -2741,6 +2741,10 @@ final class Runtime {
         case .cardInScope(let base, let backgroundExpression):
             // `card "Color" of bkgnd "Content"` — the base card, scoped to a
             // background (nil = `of this bkgnd`, the current card's).
+            // `this card in this background` is identity — the card IS in its
+            // own background, and Car Care's page counter expects its plain
+            // stack number (it subtracts the background's first card itself).
+            if case .thisCard = base, backgroundExpression == nil { return .thisCard }
             let baseDestination = try await cardDestination(for: base, line: line)
             var backgroundName: String?
             if let backgroundExpression {

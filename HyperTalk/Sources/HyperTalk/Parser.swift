@@ -2617,7 +2617,10 @@ struct Parser {
     private mutating func parseObjectExpr() throws -> ObjectExpr {
         let line = current.line
         if consumeWord("this") {
-            if consumeCardWord() { return .thisCard }
+            // `this card` may carry a background scope: `the number of this
+            // card in this background` (Car Care's page counter) numbers the
+            // card within its background, not the stack.
+            if consumeCardWord() { return try scopeCardObject(.thisCard) }
             if consumeBackgroundWord() { return .thisBackground }
             if consumeWord("stack") { return .thisStack }
             throw ScriptError(line: line, message: "Expected 'card', 'background', or 'stack' after 'this'.")
