@@ -380,9 +380,11 @@ the Stacks-card Body in 11 lines; only intra-line breaks differed.
     NSTextField's trimming. Both replaced.) The Tag looked EMPTY before
     for a different reason entirely: `the environment` wasn't
     implemented, so the stack showed its empty Player twin.
- 4. OPEN: document the honest residue in the How to Import stack:
-    layouts tuned to exact 1-bit glyph pixels can still need a human
-    pass after import (much milder now that serif breaks match).
+ 4. DONE: the How to Import stack's "What Comes Across" card now says
+    it honestly — breaks/spacing are calibrated against real HyperCard,
+    but pixel-exact 1-bit layouts can sit a hair off, worth a look
+    after import. (Also fixed stale claims there: sounds DO come
+    across; common XCMDs are shimmed.)
 
 **Web-parity follow-ups:** state-driven player renderer — DONE 2026-10-13
 (commit 2f983ae): the player builds the current card from engine state
