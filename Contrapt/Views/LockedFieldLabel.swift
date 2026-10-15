@@ -51,6 +51,17 @@ struct LockedFieldLabel {
         return attributes
     }
 
+    /// QuickDraw centered/right-aligned a line INCLUDING its trailing spaces —
+    /// authors pad-size centered text to sit flush left (What is HyperCard?'s
+    /// Tag field: words + 53 spaces, verified against real HC in Basilisk).
+    /// NSTextField trims trailing whitespace (even no-break spaces) before
+    /// aligning, so native centering re-centers the bare words. Emulate
+    /// QuickDraw instead: render LEFT-aligned and indent each hard line by its
+    /// measured slack — `size()` does count trailing spaces.
+    private var emulatesQuickDrawAlignment: Bool {
+        format.align != .left && wrapWidth != nil
+    }
+
     fileprivate func attributedText() -> NSAttributedString {
         let font = FieldClickHitTest.platformFont(for: format)
         let paragraph = NSMutableParagraphStyle()
@@ -64,6 +75,7 @@ struct LockedFieldLabel {
         let baselineLift = max(0, textHeight - naturalHeight)
         paragraph.lineBreakMode = preformatted ? .byClipping : .byWordWrapping
         paragraph.alignment = switch format.align {
+        case _ where emulatesQuickDrawAlignment: .left
         case .center: .center
         case .right: .right
         default: .left
@@ -101,6 +113,34 @@ struct LockedFieldLabel {
                 let nsRange = NSRange(location: utf16Start, length: utf16Length)
                 attributed.addAttribute(.backgroundColor, value: PlatformColor.labelColor, range: nsRange)
                 attributed.addAttribute(.foregroundColor, value: PlatformColor.textBackground, range: nsRange)
+            }
+        }
+        // QuickDraw alignment: per hard line, indent by the slack left after
+        // measuring the WHOLE line — trailing pad included (see
+        // emulatesQuickDrawAlignment). A line wider than the field gets 0
+        // (QuickDraw went negative and clipped; flush left is the visible
+        // match for the real uses). Measured on the final attributed line so
+        // style runs count at their own fonts.
+        if emulatesQuickDrawAlignment, let width = wrapWidth {
+            let ns = attributed.string as NSString
+            var location = 0
+            while location < ns.length {
+                let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
+                var contentRange = lineRange
+                while contentRange.length > 0,
+                      let last = Unicode.Scalar(ns.character(at: contentRange.location + contentRange.length - 1)),
+                      CharacterSet.newlines.contains(last) {
+                    contentRange.length -= 1
+                }
+                let lineWidth = attributed.attributedSubstring(from: contentRange).size().width
+                let slack = max(0, width - lineWidth)
+                let indent = format.align == .center ? (slack / 2).rounded() : slack.rounded()
+                if indent > 0, let lineParagraph = paragraph.mutableCopy() as? NSMutableParagraphStyle {
+                    lineParagraph.firstLineHeadIndent = indent
+                    lineParagraph.headIndent = indent
+                    attributed.addAttribute(.paragraphStyle, value: lineParagraph, range: lineRange)
+                }
+                location = NSMaxRange(lineRange)
             }
         }
         return attributed

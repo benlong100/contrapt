@@ -1365,41 +1365,30 @@ struct PartView: View {
                 // vertical layout. Don't Wrap keeps each hard line whole and
                 // clips it, like the preformatted heuristic.
                 let unwrapped = preformatted || properties.dontWrap
-                // QuickDraw's TextEdit measured a centered/right line INCLUDING
-                // its trailing spaces — authors pad-sized centered text to sit
-                // flush left (What is HyperCard?'s Tag field: words + 53
-                // spaces; verified against real HC in Basilisk). TextKit hangs
-                // trailing whitespace instead, re-centering the bare words, so
-                // convert the pad to no-break spaces for display: same widths,
-                // same character count — style runs and the find highlight
-                // keep their offsets. Left-aligned text needs no change.
-                let (displayProperties, displayHighlight): (FieldPart, Range<Int>?) = {
-                    guard properties.format.align != .left else { return (properties, highlightRange) }
-                    let measured = TextMetrics.measuringTrailingSpaces(properties.text)
-                    guard measured != properties.text else { return (properties, highlightRange) }
-                    var display = properties
-                    display.text = measured
-                    return (display, highlightRange)
-                }()
+                // QuickDraw centered/right alignment (trailing spaces COUNT —
+                // the pad-to-sit-left idiom) is emulated inside
+                // LockedFieldLabel via per-line indents; the no-textHeight
+                // Text path keeps native alignment (imported fields always
+                // carry a textHeight, so the idiom lands on the label path).
                 let lockedText = Group {
-                    if let exactLineHeight = displayProperties.textHeight {
+                    if let exactLineHeight = properties.textHeight {
                         LockedFieldLabel(
-                            text: displayProperties.text,
-                            format: displayProperties.format,
+                            text: properties.text,
+                            format: properties.format,
                             textHeight: exactLineHeight,
                             preformatted: unwrapped,
-                            highlightRange: displayHighlight,
+                            highlightRange: highlightRange,
                             wrapWidth: fieldWidth > 0 ? max(1, fieldWidth - 2 * margin) : nil,
-                            styleRuns: displayProperties.styleRuns,
-                            textColor: displayProperties.textColor.map { PlatformColor(Color(stackColor: $0)) }
+                            styleRuns: properties.styleRuns,
+                            textColor: properties.textColor.map { PlatformColor(Color(stackColor: $0)) }
                         )
                         // Ideal height, so a last line that only partially
                         // fits still draws (the part frame clips it) rather
                         // than the label dropping it whole.
                         .fixedSize(horizontal: unwrapped, vertical: true)
                     } else {
-                        Text(styledText(displayProperties, highlight: displayHighlight))
-                            .multilineTextAlignment(displayProperties.format.align.swiftUI)
+                        Text(styledText(properties, highlight: highlightRange))
+                            .multilineTextAlignment(properties.format.align.swiftUI)
                             .lineLimit(nil)
                             .fixedSize(horizontal: unwrapped, vertical: true)
                     }
