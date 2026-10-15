@@ -364,18 +364,22 @@ the Stacks-card Body in 11 lines; only intra-line breaks differed.
     imported during the brief 1.04 should be re-imported.
  2. Vertical ~12px — NOT A BUG: dissolved with the edition artifact
     (block heights match at matching text).
- 3. Trailing-whitespace centering — DONE (corrected): QuickDraw measured
-    centered/right lines INCLUDING trailing spaces — authors pad-size
-    centered text to sit flush left (this stack's Tag: words + 53
-    spaces; verified against real HC, which draws the words at the
-    field's left edge). Modern layout HANGS trailing whitespace, which
-    re-centers the bare words, so TextMetrics.measuringTrailingSpaces
-    converts the trailing run to no-break spaces for locked display —
-    same character count, offsets untouched — in both CardView and the
-    web player. (An earlier strip-the-pad fix, 21244ce, had the rule
-    backwards and was replaced.) The Tag looked EMPTY before for a
-    different reason entirely: `the environment` wasn't implemented, so
-    the stack showed its empty Player twin — see the environment fix.
+ 3. Trailing-whitespace centering — DONE (bf5a550, verified pixel-
+    faithful by Ben's side-by-side): QuickDraw measured centered/right
+    lines INCLUDING trailing spaces — authors pad-size centered text to
+    sit flush left (this stack's Tag: words + 53 spaces; real HC draws
+    the words at the field's left edge). App: NSTextField trims
+    trailing whitespace before aligning (even no-break spaces + word
+    joiner — probed), so LockedFieldLabel EMULATES QuickDraw: render
+    left-aligned, indent each hard line by its measured slack
+    (NSAttributedString.size() does count trailing spaces; half for
+    center, full for right, clamped at 0). Web: the player converts the
+    trailing run to no-break spaces, which CSS — unlike NSTextField —
+    genuinely measures. (Two earlier attempts: 21244ce stripped the pad
+    — rule backwards; 155cdcd's app-side NBSP — defeated by
+    NSTextField's trimming. Both replaced.) The Tag looked EMPTY before
+    for a different reason entirely: `the environment` wasn't
+    implemented, so the stack showed its empty Player twin.
  4. OPEN: document the honest residue in the How to Import stack:
     layouts tuned to exact 1-bit glyph pixels can still need a human
     pass after import (much milder now that serif breaks match).
