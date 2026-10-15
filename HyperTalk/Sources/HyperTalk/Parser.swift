@@ -2948,7 +2948,7 @@ struct Parser {
     /// open-stack list), `mouseclick` (a pending click), `mouse` (the button
     /// state, up/down), and `sound` (the playing sound's name, "done" when
     /// idle) are functions in HyperCard; they read the same way here.
-    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "windows", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping", "textheight", "textsize", "textfont", "textstyle", "textalign", "httpheaders", "httptimeout", "httpstatus", "httpresponseheaders"]
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "windows", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping", "environment", "textheight", "textsize", "textfont", "textstyle", "textalign", "httpheaders", "httptimeout", "httpstatus", "httpresponseheaders"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,

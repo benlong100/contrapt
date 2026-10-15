@@ -57,6 +57,9 @@ final class WebHost: HyperTalkHost {
         switch name {
         case "userlevel": return "5"
         case "textarrows", "powerkeys", "blindtyping": return "false"
+        // Match the app (Host.swift's default): exported sites must show the
+        // same Player/Development twin fields the app does.
+        case "environment": return "Development"
         default: return nil
         }
     }

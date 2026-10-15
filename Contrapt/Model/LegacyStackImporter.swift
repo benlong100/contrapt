@@ -505,7 +505,24 @@ enum LegacyStackImporter {
             // data) are junk or unset markers, not a 2px line grid — ignore
             // them and keep the natural line height.
             if raw.textHeight >= 8 {
-                field.textHeight = Double(raw.textHeight)
+                // Fixed Line Height OFF: real HC sets each line at the FONT's
+                // natural height, capped at textHeight — NOT the grid itself.
+                // Measured in Basilisk: the What is HyperCard? Body (Palatino
+                // 14, textHeight 18, flag off) renders 16px lines; the Tour
+                // (Palatino 18, textHeight 20, flag off) renders 20 (natural
+                // ~22 capped). ceil(modern Palatino's natural) lands on the
+                // classic integers exactly (15.4→16, 19.8→20), so serif
+                // fields use min(ceil(natural), textHeight). Sans/mono keep
+                // the grid: their classic naturals ≈ textHeight (the flag is
+                // invisible in HC), and our SF rendering was calibrated under
+                // grid behavior — tightening them would regress those stacks.
+                if !raw.fixedLineHeight, format.fontDesign == .serif {
+                    let natural = FieldClickHitTest.platformFont(for: format)
+                    let naturalHeight = (natural.ascender - natural.descender + natural.leading).rounded(.up)
+                    field.textHeight = min(naturalHeight, Double(raw.textHeight))
+                } else {
+                    field.textHeight = Double(raw.textHeight)
+                }
             }
             kind = .field(field)
         }

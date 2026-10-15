@@ -708,10 +708,16 @@ public extension HyperTalkHost {
 
     /// Environment-global defaults: everything's allowed (scripting level),
     /// typing conveniences off — HyperCard's fresh-install reads.
+    /// `the environment` is "Development" (full HyperCard, not the Player):
+    /// Contrapt authors and edits stacks, and stacks with Player/Development
+    /// twin field sets (What is HyperCard?'s showTextFields idiom) switch on
+    /// it — Development picks the set real HyperCard displays. The web engine
+    /// inherits this default too, so exported sites show the same fields.
     func environmentSetting(_ name: String) -> String? {
         switch name {
         case "userlevel": "5"
         case "textarrows", "powerkeys", "blindtyping": "false"
+        case "environment": "Development"
         default: nil
         }
     }

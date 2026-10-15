@@ -714,6 +714,9 @@ final class DocumentScriptHost: HyperTalkHost {
         case "textarrows": return env.textArrows ? "true" : "false"
         case "powerkeys": return env.powerKeys ? "true" : "false"
         case "blindtyping": return env.blindTyping ? "true" : "false"
+        // Full HyperCard, not the Player — stacks with Player/Development twin
+        // field sets switch their visible fields on this (see Host.swift).
+        case "environment": return "Development"
         default: return nil
         }
     }

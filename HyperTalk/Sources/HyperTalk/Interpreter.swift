@@ -2297,7 +2297,9 @@ final class Runtime {
                 // property, parsed separately.
                 if let value = host.paintSetting(property) { return value }
                 throw ScriptError(line: line, message: "Can't read the '\(property)'.")
-            case "userlevel", "textarrows", "powerkeys", "blindtyping":
+            case "userlevel", "textarrows", "powerkeys", "blindtyping", "environment":
+                // `the environment` — "Development" (full HyperCard, not the
+                // Player); Player/Development twin-field stacks switch on it.
                 if let value = host.environmentSetting(property) { return value }
                 throw ScriptError(line: line, message: "Can't read the '\(property)'.")
             case "tool":
