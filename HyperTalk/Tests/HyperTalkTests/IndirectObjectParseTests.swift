@@ -141,3 +141,14 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("play \"Tick.rev\" tempo 140 \"Ce\" \"C\" \"C\" \"C\""))   // Tech Support TimeSaver
     #expect(parses("print bkgnd field \"3\" cards from 0,0 to 510,714"))       // Fossils
 }
+
+@Test func fieldSourceAfterChunkRangeIsNotACardOwner() {
+    // `the number of lines of cd fld "a"` inside a range end, followed by the
+    // REAL `of cd fld "a"` — the card-owner parse must not eat `of cd fld` as
+    // `of card <fld…>` (a Japanese icon utility's list rotation).
+    #expect(parses("put line 2 to the number of lines of cd fld \"a\" of cd fld \"a\" into y"))
+    #expect(parses("put x into line 1 + the number of lines of cd fld \"data\" of cd fld \"data\""))
+    // The legitimate card-owner form still parses.
+    #expect(parses("put bg fld \"marker\" of card 2 into y"))
+    #expect(parses("put field \"x\" of next card into y"))
+}

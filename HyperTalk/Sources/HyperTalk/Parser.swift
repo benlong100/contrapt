@@ -2750,6 +2750,15 @@ struct Parser {
             advance(); advance()
             ref = .expression(.numberLiteral(Double(n)))
         }
+        else if let next = peekIdentifier(1),
+                ["field", "fld", "button", "btn"].contains(next),
+                peekIdentifier().map({ Self.cardWords.contains($0) }) == true {
+            // `… of cd fld "a"` — that's a PART reference belonging to the
+            // surrounding expression (`the number of lines of cd fld "a" of
+            // cd fld "a"`), not a card owner. Leave it unconsumed.
+            index = saved
+            return nil
+        }
         else if consumeCardWord() {
             ref = consumeWord("id") ? .idExpression(try parsePrimary()) : .expression(try parsePrimary())
         } else {
