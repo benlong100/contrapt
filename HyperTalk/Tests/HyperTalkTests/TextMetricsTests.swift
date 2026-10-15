@@ -2,54 +2,38 @@
 //  TextMetricsTests.swift
 //  HyperTalk
 //
-//  QuickDraw-style trailing-whitespace stripping for centered/right-aligned
-//  field text (the "'text:' + 53 spaces, centered" idiom — What is HyperCard?'s
-//  Stacks card), including the offset remap style runs and selections ride.
+//  QuickDraw counted a centered/right line's trailing spaces; modern layout
+//  hangs them. measuringTrailingSpaces converts each line's trailing run to
+//  no-break spaces so they measure — same character count, offsets untouched.
 //
 
 import Testing
 @testable import HyperTalk
 
-@Test func stripsTrailingSpacesFromEachLine() {
-    let (text, _) = TextMetrics.strippingTrailingLineWhitespace("text:   \nnext  \t \nclean")
-    #expect(text == "text:\nnext\nclean")
+private let nbsp = "\u{00A0}"
+
+@Test func convertsTrailingSpacesPerLine() {
+    let text = "pad:  \nnext   \nclean"
+    let converted = TextMetrics.measuringTrailingSpaces(text)
+    #expect(converted == "pad:\(nbsp)\(nbsp)\nnext\(nbsp)\(nbsp)\(nbsp)\nclean")
+    #expect(converted.count == text.count)
 }
 
-@Test func spacePaddedCenteredFieldKeepsOnlyTheWords() {
-    let padded = "text:" + String(repeating: " ", count: 53)
-    let (text, remap) = TextMetrics.strippingTrailingLineWhitespace(padded)
-    #expect(text == "text:")
-    // An offset inside the removed pad clamps to the new line end.
-    #expect(remap(30) == 5)
-    #expect(remap(padded.count) == 5)
+@Test func tagFieldPadFullyConverts() {
+    let padded = "Stacks let you move among cards:" + String(repeating: " ", count: 53) + "\n"
+    let converted = TextMetrics.measuringTrailingSpaces(padded)
+    #expect(converted == "Stacks let you move among cards:" + String(repeating: nbsp, count: 53) + "\n")
 }
 
-@Test func leadingAndInteriorWhitespaceSurvive() {
-    let (text, _) = TextMetrics.strippingTrailingLineWhitespace("  a b \n\tc\t")
-    #expect(text == "  a b\n\tc")
+@Test func leadingAndInteriorSpacesSurvive() {
+    #expect(TextMetrics.measuringTrailingSpaces("  a b \n c") == "  a b\(nbsp)\n c")
 }
 
-@Test func offsetsRemapAcrossLines() {
-    //          0123456 789        (original)   ->  "ab\ncd"
-    let (text, remap) = TextMetrics.strippingTrailingLineWhitespace("ab    \ncd  ")
-    #expect(text == "ab\ncd")
-    #expect(remap(0) == 0)   // 'a'
-    #expect(remap(1) == 1)   // 'b'
-    #expect(remap(4) == 2)   // inside first pad -> first line's new end
-    #expect(remap(6) == 2)   // the newline keeps its place...
-    #expect(remap(7) == 3)   // 'c' right after it
-    #expect(remap(8) == 4)   // 'd'
-    #expect(remap(11) == 5)  // past the end clamps to the stripped length
-}
-
-@Test func blankAndWhitespaceOnlyLinesCollapseButRemain() {
-    let (text, _) = TextMetrics.strippingTrailingLineWhitespace("a\n   \nb")
-    #expect(text == "a\n\nb")
+@Test func allSpaceLineConvertsWithoutCrossingLines() {
+    #expect(TextMetrics.measuringTrailingSpaces("a\n   \nb") == "a\n\(nbsp)\(nbsp)\(nbsp)\nb")
 }
 
 @Test func untouchedTextRoundTrips() {
     let original = "no padding here\njust lines"
-    let (text, remap) = TextMetrics.strippingTrailingLineWhitespace(original)
-    #expect(text == original)
-    #expect(remap(10) == 10)
+    #expect(TextMetrics.measuringTrailingSpaces(original) == original)
 }

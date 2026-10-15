@@ -1365,26 +1365,21 @@ struct PartView: View {
                 // vertical layout. Don't Wrap keeps each hard line whole and
                 // clips it, like the preformatted heuristic.
                 let unwrapped = preformatted || properties.dontWrap
-                // QuickDraw's TextEdit measured centered/right-aligned lines
-                // WITHOUT trailing spaces, and authors space-padded centered
-                // text routinely ("text:" + 53 spaces — What is HyperCard?'s
-                // Stacks card). Modern layout measures the pad and shoves the
-                // words out of the clip, so strip it for display — remapping
-                // style-run starts and the find highlight, since characters
-                // moved. Left-aligned text is unaffected by a trailing pad.
+                // QuickDraw's TextEdit measured a centered/right line INCLUDING
+                // its trailing spaces — authors pad-sized centered text to sit
+                // flush left (What is HyperCard?'s Tag field: words + 53
+                // spaces; verified against real HC in Basilisk). TextKit hangs
+                // trailing whitespace instead, re-centering the bare words, so
+                // convert the pad to no-break spaces for display: same widths,
+                // same character count — style runs and the find highlight
+                // keep their offsets. Left-aligned text needs no change.
                 let (displayProperties, displayHighlight): (FieldPart, Range<Int>?) = {
                     guard properties.format.align != .left else { return (properties, highlightRange) }
-                    let stripped = TextMetrics.strippingTrailingLineWhitespace(properties.text)
-                    guard stripped.text != properties.text else { return (properties, highlightRange) }
+                    let measured = TextMetrics.measuringTrailingSpaces(properties.text)
+                    guard measured != properties.text else { return (properties, highlightRange) }
                     var display = properties
-                    display.text = stripped.text
-                    display.styleRuns = properties.styleRuns.map { run in
-                        var remapped = run
-                        remapped.start = stripped.remap(run.start)
-                        return remapped
-                    }
-                    let highlight = highlightRange.map { stripped.remap($0.lowerBound)..<stripped.remap($0.upperBound) }
-                    return (display, highlight)
+                    display.text = measured
+                    return (display, highlightRange)
                 }()
                 let lockedText = Group {
                     if let exactLineHeight = displayProperties.textHeight {

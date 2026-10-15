@@ -630,8 +630,18 @@ extension WebsiteExporter {
           // stacks (the Tour) keep their vertical layout.
           if (f.textHeight) d.style.lineHeight = f.textHeight + 'px';
           const perCard = overlay && !f.sharedText ? overlay[p.id] : null;
-          const text = (perCard ? perCard.text : f.text) || '';
+          let text = (perCard ? perCard.text : f.text) || '';
           const runs = perCard ? (perCard.styleRuns || []) : (f.styleRuns || []);
+          // QuickDraw measured a centered/right line INCLUDING its trailing
+          // spaces (authors pad-size centered text to sit flush left — the
+          // What is HyperCard? Tag idiom); CSS hangs them under pre-wrap, so
+          // convert the trailing run to no-break spaces for locked display.
+          // Same character count — style-run offsets are untouched.
+          const align = f.format && f.format.align;
+          if (f.lockText && (align === 'center' || align === 'right')) {
+            text = text.split('\\n').map(line =>
+              line.replace(/ +$/, pad => '\\u00A0'.repeat(pad.length))).join('\\n');
+          }
           // Styled runs render as spans in LOCKED fields (editable fields stay
           // plain text so contentEditable editing isn't fighting markup).
           // Wide Margins insets text HORIZONTALLY (matching the app): 10px a
