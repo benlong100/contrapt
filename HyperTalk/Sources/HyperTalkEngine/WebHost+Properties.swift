@@ -151,6 +151,10 @@ extension WebHost {
         case "hilite", "hilight", "highlight", "highlite":
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return p.hilite ? "true" : "false"
+        case "contents":
+            // HC 2.x button contents — also what a bare `btn "X"` reads.
+            guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return p.contents
         case "fillcolor":
             // A button's custom fill (empty = the themed default).
             guard case .button(let p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
@@ -277,6 +281,10 @@ extension WebHost {
         case "hilite", "hilight", "highlight", "highlite":
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             p.hilite = try boolean(value, for: property); part.kind = .button(p)
+        case "contents":
+            // `put x into btn "X"` — HC 2.x button contents.
+            guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            p.contents = value; part.kind = .button(p)
         case "fillcolor":
             // A color name or #RRGGBB; empty restores the themed default.
             guard case .button(var p) = part.kind else { throw Self.noSuchProperty(property, of: kind) }

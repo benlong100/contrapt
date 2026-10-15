@@ -392,6 +392,19 @@ struct Parser {
         case "do":
             advance()
             let expression = try parseExpression()
+            // `do <expr> as AppleScript` (HyperCard 2.2's OSA languages) — the
+            // language is a bare word or expression. Contrapt can't run other
+            // OSA languages, so a non-HyperTalk language is an accepted no-op
+            // (the result reports it); `as HyperTalk` runs normally.
+            if consumeWord("as") {
+                let language = peekIdentifier() ?? ""
+                if !language.isEmpty { advance() } else { _ = try parsePrimary() }
+                try expectNewline()
+                if language.lowercased() == "hypertalk" {
+                    return Stmt(kind: .doCommand(expression), line: line)
+                }
+                return Stmt(kind: .noOp, line: line)
+            }
             try expectNewline()
             return Stmt(kind: .doCommand(expression), line: line)
         case "answer":
@@ -1428,6 +1441,24 @@ struct Parser {
         if let fieldRef = try parseFieldRefIfPresent() {
             return try containerBrackets(.field(fieldRef), line: line)
         }
+        // A button's CONTENTS as a destination (HyperCard 2.x) — `put empty
+        // into bkgnd btn "Go Back History" of card 2` (New Features).
+        if case .property("contents", let object)? = try parseButtonContentsIfPresent() {
+            switch object {
+            case .part(let kind, let domain, let name, let card):
+                return .buttonContents(FieldRef(domain: domain, isID: false, expr: name, card: card))
+            case .partByID(let kind, let domain, let id, let card):
+                _ = kind
+                return .buttonContents(FieldRef(domain: domain, isID: true, expr: id, card: card))
+            default: break
+            }
+        }
+        // `theFields()` — a function call as a read-only source: a chunk of
+        // its RESULT names an object or value (`the textHeight of item 1 of
+        // theFields()`, Power Tools). Writing to it is a runtime error.
+        if peekIdentifier() != nil, case .symbol("(") = tokens[index + 1].kind {
+            return .expressionValue(try parsePrimary())
+        }
         if let name = peekIdentifier() {
             advance()
             return try containerBrackets(.variable(name), line: line)
@@ -1634,6 +1665,18 @@ struct Parser {
         case "string": advance(); mode = .string
         default: break
         }
+        // HyperCard also tolerates the qualifier AFTER the style word —
+        // `find string international globalFind` (10th Anniversary). Only
+        // when something follows, so `find international` alone still
+        // searches for the variable's value.
+        if peekIdentifier() == "international",
+           current.kind != .newline, peekIdentifier(1) != nil || {
+               if case .string = tokens[index + 1].kind { return true }
+               if case .number = tokens[index + 1].kind { return true }
+               return false
+           }() {
+            advance()
+        }
         let text = try parseExpression()
         var field: FieldRef?
         if consumeWord("in") {
@@ -1645,11 +1688,17 @@ struct Parser {
             if let w = peekIdentifier(fieldOffset), w == "foundfield" || w == "selectedfield" {
                 if fieldOffset == 1 { advance() } // the
                 advance() // foundField / selectedField
-            } else {
-                guard let reference = try parseFieldRefIfPresent() else {
-                    throw ScriptError(line: line, message: "Expected a field after 'in', like: find \"x\" in field \"Notes\".")
-                }
+            } else if let reference = try parseFieldRefIfPresent() {
                 field = reference
+            } else if current.kind != .newline, current.kind != .endOfScript {
+                // `find x in theField` — a variable (or expression) holding a
+                // whole field descriptor ("card field 3"), re-parsed at run
+                // time. Readymade Fields stores `word 1 to 3 of the long name
+                // of me` and finds within it.
+                field = FieldRef(domain: .any, isID: false, expr: try parsePrimary(),
+                                 isIndirectDescriptor: true)
+            } else {
+                throw ScriptError(line: line, message: "Expected a field after 'in', like: find \"x\" in field \"Notes\".")
             }
         }
         try expectNewline()
@@ -2399,12 +2448,76 @@ struct Parser {
     /// A field-contents reference if one begins here: `field <ref>`,
     /// `card field <ref>`, `background field <ref>`, each with optional
     /// `id`. Returns nil (consuming nothing) otherwise.
+    /// `[the] [cd|bg] (button|btn) [id] <ref> [of <card>]` read as a VALUE —
+    /// the button's CONTENTS (HyperCard 2.x). Nil (restoring the position)
+    /// when the words aren't a button reference.
+    private mutating func parseButtonContentsIfPresent() throws -> Expr? {
+        let saved = index
+        let buttonWords: Set<String> = ["button", "btn"]
+        _ = consumeWord("the")
+        var domain = HyperTalkObject.PartDomain.any
+        if let w = peekIdentifier(), buttonWords.contains(w) {
+            advance()
+        } else if let w = peekIdentifier(), Self.cardWords.contains(w),
+                  let next = peekIdentifier(1), buttonWords.contains(next) {
+            domain = .card; advance(); advance()
+        } else if let w = peekIdentifier(), Self.backgroundWords.contains(w),
+                  let next = peekIdentifier(1), buttonWords.contains(next) {
+            domain = .background; advance(); advance()
+        } else {
+            index = saved
+            return nil
+        }
+        let isID = consumeWord("id")
+        // Only a literal/number/parenthesized name — a bare word here is more
+        // likely a variable named `btn` than a button reference.
+        switch current.kind {
+        case .string, .number, .symbol("("):
+            let savedSuppress = suppressBarePropertyOf
+            suppressBarePropertyOf = true
+            let name = try parsePrimary()
+            suppressBarePropertyOf = savedSuppress
+            let card = parsePartScopeIfPresent()
+            let object: ObjectExpr = isID
+                ? .partByID(kind: "button", domain: domain, id: name, card: card)
+                : .part(kind: "button", domain: domain, name: name, card: card)
+            return .property("contents", object)
+        default:
+            index = saved
+            return nil
+        }
+    }
+
     private mutating func parseFieldRefIfPresent() throws -> FieldRef? {
         let fieldWords: Set<String> = ["field", "fld"]
         // An optional leading article: `the field "X"`, `the card field 1`. Undo
         // the `the` if what follows isn't actually a field reference.
         let saved = index
         _ = consumeWord("the")
+        // `last bg fld` / `middle field` / `first cd fld` as a container
+        // (`put x into last bg fld`, Readymade Buttons) — an ordinal-selected
+        // field. Exact ordinals (first…tenth) resolve to a plain number.
+        if let ordinalWord = peekIdentifier(),
+           Self.ordinalKeyword(ordinalWord) != nil || Self.ordinals[ordinalWord] != nil {
+            let ordinal = Self.ordinalKeyword(ordinalWord)
+            var ordinalDomain: HyperTalkObject.PartDomain? = nil
+            var consumed = 0
+            if let w = peekIdentifier(1), fieldWords.contains(w) {
+                ordinalDomain = .any; consumed = 2
+            } else if let w = peekIdentifier(1), Self.cardWords.contains(w),
+                      let next = peekIdentifier(2), fieldWords.contains(next) {
+                ordinalDomain = .card; consumed = 3
+            } else if let w = peekIdentifier(1), Self.backgroundWords.contains(w),
+                      let next = peekIdentifier(2), fieldWords.contains(next) {
+                ordinalDomain = .background; consumed = 3
+            }
+            if let ordinalDomain {
+                for _ in 0..<consumed { advance() }
+                let exact = Self.ordinals[ordinalWord].map { Expr.numberLiteral(Double($0)) }
+                return FieldRef(domain: ordinalDomain, isID: false,
+                                expr: exact ?? .numberLiteral(0), ordinal: exact == nil ? ordinal : nil)
+            }
+        }
         let domain: HyperTalkObject.PartDomain
         if let w = peekIdentifier(), fieldWords.contains(w) {
             domain = .any
@@ -2534,6 +2647,13 @@ struct Parser {
         else if consumeWord("this") { _ = consumeCardWord() || consumeBackgroundWord(); ref = .current }
         else if consumeWord("recent") { _ = consumeCardWord(); ref = .previous } // most recent ≈ previous
         else if consumeWord("marked") { _ = consumeCardWord(); ref = .markedCard(try parsePrimary()) }
+        else if let w = peekIdentifier(), let n = Self.ordinals[w],
+                let next = peekIdentifier(1), Self.cardWords.contains(next) {
+            // `of second cd` — an exact ordinal card owner (Imitatio Christi's
+            // `put bg fld "marker" of second cd into cardNO`).
+            advance(); advance()
+            ref = .expression(.numberLiteral(Double(n)))
+        }
         else if consumeCardWord() {
             ref = consumeWord("id") ? .idExpression(try parsePrimary()) : .expression(try parsePrimary())
         } else {
@@ -2878,7 +2998,12 @@ struct Parser {
         }
         // A bare identifier here is an indirect reference: a container whose
         // value names the object (`set loc of theButton to …`, where
-        // `theButton` holds "cd btn id 34"). Re-parsed at run time.
+        // `theButton` holds "cd btn id 34"). A function CALL works the same —
+        // `visible of fieldData()` (Readymade Buttons) resolves the call's
+        // result as the descriptor. Re-parsed at run time.
+        if peekIdentifier() != nil, case .symbol("(") = tokens[index + 1].kind {
+            return .indirect(try parsePrimary())
+        }
         if let word = peekIdentifier() {
             advance()
             return .indirect(.variable(word))
@@ -3363,9 +3488,16 @@ struct Parser {
             return inner
         case .identifier("field"), .identifier("fld"),
              .identifier("card"), .identifier("cd"),
-             .identifier("background"), .identifier("bkgnd"), .identifier("bkgd"), .identifier("bg"):
+             .identifier("background"), .identifier("bkgnd"), .identifier("bkgd"), .identifier("bg"),
+             .identifier("button"), .identifier("btn"):
             if let fieldRef = try parseFieldRefIfPresent() {
                 return .field(fieldRef)
+            }
+            // A BUTTON read as a value is its CONTENTS (HyperCard 2.x: popup/
+            // list text) — `put btn "cover3" into cd fld "title"` (10th
+            // Anniversary's slide lists).
+            if let contents = try parseButtonContentsIfPresent() {
+                return contents
             }
             // "card"/"background" not followed by "field": fall through to
             // the unquoted-literal behavior.

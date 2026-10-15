@@ -241,7 +241,14 @@ enum LegacyStackImporter {
             var fieldInfo: [Int: (uuid: UUID, format: TextFormat)] = [:]
             background.parts = parsed.parts.map { raw -> Part in
                 if raw.type == .button {
-                    return part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID), fonts: embeddedFonts)
+                    var buttonPart = part(from: raw, in: &stack, iconAsset: iconAsset(iconID: raw.iconID), fonts: embeddedFonts)
+                    // HyperCard 2.x button CONTENTS (popup/list text) live in
+                    // the block's content records, like shared field text.
+                    if case .button(var props) = buttonPart.kind, let content = parsed.contents[raw.id] {
+                        props.contents = content.text
+                        buttonPart.kind = .button(props)
+                    }
+                    return buttonPart
                 }
                 var fieldPart = part(from: raw, in: &stack, fonts: embeddedFonts)
                 if case .field(var props) = fieldPart.kind {
@@ -297,6 +304,10 @@ enum LegacyStackImporter {
                     props.text = content.text
                     props.styleRuns = resolveStyleRuns(raw, content: content, decorations: styleTable, baseFormat: props.format, fonts: embeddedFonts)
                     cardPart.kind = .field(props)
+                }
+                if case .button(var props) = cardPart.kind, let content = parsed.contents[raw.id] {
+                    props.contents = content.text   // HC 2.x button contents
+                    cardPart.kind = .button(props)
                 }
                 card.parts.append(cardPart)
             }

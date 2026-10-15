@@ -496,6 +496,10 @@ nonisolated struct ButtonPart: Hashable {
     /// member hilites it and clears the others on the same layer — the
     /// radio-group mechanism. Card and background families are distinct.
     var family: Int = 0
+    /// HyperCard 2.x button CONTENTS — text stored on the button (popup lists,
+    /// the 10th Anniversary slide lists). Read by `put btn "X" into y` /
+    /// `the contents of btn`, written by `put … into btn "X"`.
+    var contents: String = ""
 
     init(title: String, showName: Bool = true, autoHilite: Bool = true,
          style: ButtonStyleKind = .roundRect, hilite: Bool = false, format: TextFormat = TextFormat(),
@@ -519,7 +523,7 @@ nonisolated struct ButtonPart: Hashable {
 
 /// Manual Codable so older manifests without the new fields still decode.
 extension ButtonPart: Codable {
-    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol, iconMissing, iconID, fillColor, borderColor, textColor, family }
+    private enum CodingKeys: String, CodingKey { case title, showName, autoHilite, style, hilite, format, iconAsset, iconSymbol, iconMissing, iconID, fillColor, borderColor, textColor, family, contents }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -537,6 +541,7 @@ extension ButtonPart: Codable {
         borderColor = try container.decodeIfPresent(String.self, forKey: .borderColor)
         textColor = try container.decodeIfPresent(String.self, forKey: .textColor)
         family = try container.decodeIfPresent(Int.self, forKey: .family) ?? 0
+        contents = try container.decodeIfPresent(String.self, forKey: .contents) ?? ""
     }
 }
 

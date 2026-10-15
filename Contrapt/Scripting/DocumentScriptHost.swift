@@ -2516,6 +2516,11 @@ final class DocumentScriptHost: HyperTalkHost {
         case "hilite", "hilight", "highlight", "highlite":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.hilite ? "true" : "false"
+        case "contents":
+            // HyperCard 2.x button contents (popup/list text) — also what a
+            // bare `btn "X"` reads in an expression.
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.contents
         case "fillcolor":
             // A button's custom fill (empty = the themed default).
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
@@ -2667,6 +2672,11 @@ final class DocumentScriptHost: HyperTalkHost {
         case "hilite", "hilight", "highlight", "highlite":
             guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             properties.hilite = try boolean(value, for: property)
+            part.kind = .button(properties)
+        case "contents":
+            // `put x into btn "X"` routes here — HC 2.x button contents.
+            guard case .button(var properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            properties.contents = value
             part.kind = .button(properties)
         case "fillcolor":
             // A color name or #RRGGBB; empty restores the themed default.

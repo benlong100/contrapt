@@ -263,6 +263,14 @@ struct FieldRef {
     var expr: Expr
     /// `field "X" of <card>` — which card the field lives on (nil = current).
     var card: CardRef? = nil
+    /// `expr`'s VALUE is a whole field descriptor to re-parse at run time —
+    /// `find oldText in theField` where theField holds `card field "X"`
+    /// (Readymade Fields stores `word 1 to 3 of the long name of me`).
+    var isIndirectDescriptor: Bool = false
+    /// `last bg fld` / `middle field` as a CONTAINER (`put x into last bg
+    /// fld`, Readymade Buttons) — resolved against the live count; when set,
+    /// `expr` is unused.
+    var ordinal: Ordinal? = nil
 }
 
 /// A card named as the owner of a field: `field "X" of prev card`,
@@ -325,6 +333,14 @@ indirect enum Container {
     /// (an associative array backed by disk). Usually written through an
     /// element (`stackData["k"]`); writing the base replaces the whole store.
     case persistent
+    /// A read-only source whose value comes from an expression — a chunk of a
+    /// function result (`the textHeight of item 1 of theFields()`, Power
+    /// Tools). Reading evaluates; writing is an error.
+    case expressionValue(Expr)
+    /// A BUTTON's contents as a container (HyperCard 2.x: popup/list text) —
+    /// `put empty into bkgnd btn "Go Back History" of card 2` (New Features).
+    /// The FieldRef shape carries domain/id/name/card for a button here.
+    case buttonContents(FieldRef)
 }
 
 /// What `convert` operates on: a container (rewritten in place) or a bare

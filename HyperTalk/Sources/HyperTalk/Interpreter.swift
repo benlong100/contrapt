@@ -1485,6 +1485,14 @@ final class Runtime {
     /// Reads a container's text — a variable, a field, or a chunk of one.
     private func containerValue(_ container: Container, line: Int) async throws -> String {
         switch container {
+        case .expressionValue(let expression):
+            // A function call as a read-only source (`item 1 of theFields()`).
+            return try await evaluate(expression, line: line)
+        case .buttonContents(let buttonRef):
+            // A button's contents (HC 2.x) — read via the contents property.
+            let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
+            let object = HyperTalkObject.part(kind: "button", domain: domain, reference: reference, onCard: card)
+            return try hostCall(line: line) { try host.propertyValue("contents", of: object) }
         case .variable(let name):
             return variableValue(name) ?? ""
         case .field(let fieldRef):
@@ -1569,6 +1577,13 @@ final class Runtime {
     /// Writes a container's text — replacing a chunk in place when needed.
     private func setContainer(_ container: Container, to value: String, line: Int) async throws {
         switch container {
+        case .expressionValue:
+            throw ScriptError(line: line, message: "You can't put something into a function's result.")
+        case .buttonContents(let buttonRef):
+            // `put x into btn "X"` — write the button's contents (HC 2.x).
+            let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
+            let object = HyperTalkObject.part(kind: "button", domain: domain, reference: reference, onCard: card)
+            try hostCall(line: line) { try host.setProperty("contents", of: object, to: value) }
         case .variable(let name):
             // Variables keep the raw (possibly array-encoded) value so arrays
             // round-trip; only user-visible sinks below render arrays as JSON.
@@ -1672,7 +1687,23 @@ final class Runtime {
     }
 
     private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain, GoDestination?) {
+        // `last bg fld` as a container — resolve the ordinal against the
+        // live count, like the object path's .partByOrdinal.
+        if let ordinal = fieldRef.ordinal {
+            let total = try hostCall(line: line) { try host.count(.parts(kind: "field", domain: fieldRef.domain)) }
+            return (.number(Self.resolveOrdinal(ordinal, count: total)), fieldRef.domain, nil)
+        }
         let value = try await evaluate(fieldRef.expr, line: line)
+        // An indirect descriptor: the value IS the field reference ("card
+        // field 3", `find x in theField`). Re-parse and resolve that object.
+        if fieldRef.isIndirectDescriptor {
+            guard let parsed = try? Parser.parseSoleObject(value),
+                  case .part(let kind, let domain, let reference, _) = try await resolveObject(parsed, line: line),
+                  kind == "field" else {
+                throw ScriptError(line: line, message: "Can't understand \"\(value)\" as a field.")
+            }
+            return (reference, domain, nil)
+        }
         let reference: HyperTalkObject.Reference = fieldRef.isID ? .id(value) : self.reference(from: value)
         return (reference, fieldRef.domain, try await resolveCardRef(fieldRef.card, line: line))
     }
@@ -1784,6 +1815,13 @@ final class Runtime {
         case .persistent:
             // The persistent store isn't a text-selectable field range.
             return nil
+        case .expressionValue:
+            // A function result isn't a text-selectable field range.
+            return nil
+        case .buttonContents:
+            // Button contents aren't a text-selectable field range (`select
+            // line … of bkgnd btn` no-ops gracefully, like old paint selects).
+            return nil
         }
     }
 
@@ -1809,7 +1847,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents: return false
         }
     }
 
