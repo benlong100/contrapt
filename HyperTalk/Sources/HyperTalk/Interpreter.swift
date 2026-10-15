@@ -1504,7 +1504,7 @@ final class Runtime {
             return try await containerValue(resolved, line: line)
         case .buttonContents(let buttonRef):
             // A button's contents (HC 2.x) — read via the contents property.
-            let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
+            let (reference, domain, card) = try await resolveButtonRef(buttonRef, line: line)
             let object = HyperTalkObject.part(kind: "button", domain: domain, reference: reference, onCard: card)
             return try hostCall(line: line) { try host.propertyValue("contents", of: object) }
         case .variable(let name):
@@ -1610,7 +1610,7 @@ final class Runtime {
             try await setContainer(resolved, to: value, line: line)
         case .buttonContents(let buttonRef):
             // `put x into btn "X"` — write the button's contents (HC 2.x).
-            let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
+            let (reference, domain, card) = try await resolveButtonRef(buttonRef, line: line)
             let object = HyperTalkObject.part(kind: "button", domain: domain, reference: reference, onCard: card)
             try hostCall(line: line) { try host.setProperty("contents", of: object, to: value) }
         case .variable(let name):
@@ -1713,6 +1713,15 @@ final class Runtime {
     /// for a stable read-back), for `the httpHeaders`/`the httpResponseHeaders`.
     private static func headerArray(_ headers: [String: String]) -> String {
         HyperTalkArray.encode(headers.keys.sorted().map { (key: $0, value: headers[$0]!) })
+    }
+
+    /// Like resolveFieldRef, but ordinals count BUTTONS (`last cd btn`).
+    private func resolveButtonRef(_ buttonRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain, GoDestination?) {
+        if let ordinal = buttonRef.ordinal {
+            let total = try hostCall(line: line) { try host.count(.parts(kind: "button", domain: buttonRef.domain)) }
+            return (.number(Self.resolveOrdinal(ordinal, count: total)), buttonRef.domain, nil)
+        }
+        return try await resolveFieldRef(buttonRef, line: line)
     }
 
     private func resolveFieldRef(_ fieldRef: FieldRef, line: Int) async throws -> (HyperTalkObject.Reference, HyperTalkObject.PartDomain, GoDestination?) {

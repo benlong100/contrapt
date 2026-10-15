@@ -1601,15 +1601,22 @@ struct Parser {
             return try containerBrackets(.field(fieldRef), line: line)
         }
         // A button's CONTENTS as a destination (HyperCard 2.x) — `put empty
-        // into bkgnd btn "Go Back History" of card 2` (New Features).
-        if case .property("contents", let object)? = try parseButtonContentsIfPresent() {
-            switch object {
-            case .part(let kind, let domain, let name, let card):
-                return .buttonContents(FieldRef(domain: domain, isID: false, expr: name, card: card))
-            case .partByID(let kind, let domain, let id, let card):
-                _ = kind
-                return .buttonContents(FieldRef(domain: domain, isID: true, expr: id, card: card))
-            default: break
+        // into bkgnd btn "Go Back History" of card 2` (New Features), `put
+        // content into last cd btn` (Codebits).
+        do {
+            let beforeButton = index
+            if case .property("contents", let object)? = try parseButtonContentsIfPresent() {
+                switch object {
+                case .part(_, let domain, let name, let card):
+                    return .buttonContents(FieldRef(domain: domain, isID: false, expr: name, card: card))
+                case .partByID(_, let domain, let id, let card):
+                    return .buttonContents(FieldRef(domain: domain, isID: true, expr: id, card: card))
+                case .partByOrdinal(_, let domain, let ordinal):
+                    return .buttonContents(FieldRef(domain: domain, isID: false,
+                                                    expr: .numberLiteral(0), ordinal: ordinal))
+                default:
+                    index = beforeButton
+                }
             }
         }
         // `theFields()` — a function call as a read-only source: a chunk of
