@@ -1496,6 +1496,9 @@ final class Runtime {
             // Resolve the click descriptor to its chunk and read it.
             guard let resolved = clickLineContainer() else { return "" }
             return try await containerValue(resolved, line: line)
+        case .selectedLine:
+            guard let resolved = selectedLineContainer() else { return "" }
+            return try await containerValue(resolved, line: line)
         case .buttonContents(let buttonRef):
             // A button's contents (HC 2.x) — read via the contents property.
             let (reference, domain, card) = try await resolveFieldRef(buttonRef, line: line)
@@ -1591,6 +1594,11 @@ final class Runtime {
             // `put "• " before the clickLine` — write through to the clicked
             // line's chunk; a no-op before any click, like HyperCard.
             guard let resolved = clickLineContainer() else { return }
+            try await setContainer(resolved, to: value, line: line)
+        case .selectedLine:
+            // `put X into the selectedLine of me` — replace the selection's
+            // whole line; a no-op with nothing selected.
+            guard let resolved = selectedLineContainer() else { return }
             try await setContainer(resolved, to: value, line: line)
         case .buttonContents(let buttonRef):
             // `put x into btn "X"` — write the button's contents (HC 2.x).
@@ -1773,6 +1781,15 @@ final class Runtime {
         }
     }
 
+    /// The selection's whole line as a container — re-parses the selection's
+    /// line descriptor; nil when nothing is selected.
+    private func selectedLineContainer() -> Container? {
+        let descriptor = host.selectionValue(.line)
+        guard !descriptor.isEmpty, let container = Parser.parseSoleContainer(descriptor),
+              !isVariableContainer(container) else { return nil }
+        return container
+    }
+
     /// The clicked locked-field line as a container — re-parses the click
     /// descriptor ("line 3 of card field id 12"); nil before any click.
     private func clickLineContainer() -> Container? {
@@ -1843,6 +1860,9 @@ final class Runtime {
         case .clickLine:
             guard let resolved = clickLineContainer() else { return nil }
             return try await fieldAndRange(of: resolved, line: line)
+        case .selectedLine:
+            guard let resolved = selectedLineContainer() else { return nil }
+            return try await fieldAndRange(of: resolved, line: line)
         case .buttonContents:
             // Button contents aren't a text-selectable field range (`select
             // line … of bkgnd btn` no-ops gracefully, like old paint selects).
@@ -1872,7 +1892,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine: return false
         }
     }
 

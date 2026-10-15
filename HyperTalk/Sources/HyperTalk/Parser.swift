@@ -309,15 +309,30 @@ struct Parser {
 
     private mutating func parseStatement(handlerName: String) throws -> Stmt {
         let line = current.line
-        // A lone quoted word as a statement sends it as a message — `"flash"`
-        // (Chicxulub) / `"SuperSearch"` (Meal Time); HyperCard dispatched the
-        // string's word, reaching handlers and XCMDs (our flash shim included).
+        // A quoted word as a statement sends it as a message — `"flash"`
+        // (Chicxulub), `"SuperSearch"` (Meal Time), `"Picture" "JOHN WOLF",
+        // resource` (Alliance Redwoods, the Picture XCMD with arguments);
+        // HyperCard dispatched the string's word, reaching handlers and XCMDs
+        // (our flash shim included). Multi-word strings stay errors.
         if case .string(let quoted) = current.kind,
-           tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript,
            !quoted.isEmpty, !quoted.contains(" ") {
             advance()
+            var arguments: [Expr] = []
+            if current.kind != .newline, current.kind != .endOfScript {
+                repeat {
+                    if case .symbol(",") = current.kind {
+                        arguments.append(.stringLiteral(""))
+                        continue
+                    }
+                    if current.kind == .newline || current.kind == .endOfScript {
+                        arguments.append(.stringLiteral(""))
+                        break
+                    }
+                    arguments.append(try parseExpression())
+                } while consumeSymbol(",")
+            }
             try expectNewline()
-            return Stmt(kind: .send(quoted, []), line: line)
+            return Stmt(kind: .send(quoted, arguments), line: line)
         }
         guard let word = peekIdentifier() else {
             throw ScriptError(line: line, message: "Expected a command here, but found \(describe(current)).")
@@ -1031,7 +1046,7 @@ struct Parser {
             }
             let voice = try parsePrimary()
             var tempo: Expr?
-            if consumeWord("tempo") { tempo = try parsePrimary() }
+            if consumeWord("tempo") { tempo = try parseAdditive() }  // signs: `tempo -24` (Tarot Reader)
             var notes: Expr?
             if current.kind != .newline, current.kind != .endOfScript {
                 notes = try parsePlayNotes()
@@ -1492,6 +1507,19 @@ struct Parser {
             if foundOffset == 1 { advance() } // the
             advance() // clickLine
             return .clickLine
+        }
+        // `[the] selectedLine [of me]` as a container — the selection's whole
+        // line: `put "Other…" into the selectedLine of me` (ArrayMaster). The
+        // descriptor already names its field, so an `of me`/`of the target`
+        // tail is consumed and ignored.
+        if peekIdentifier(foundOffset) == "selectedline" {
+            if foundOffset == 1 { advance() } // the
+            advance() // selectedLine
+            if peekIdentifier() == "of" {
+                if peekIdentifier(1) == "me" { advance(); advance() }
+                else if peekIdentifier(1) == "the", peekIdentifier(2) == "target" { advance(); advance(); advance() }
+            }
+            return .selectedLine
         }
         // `url "https://…"` as a destination — `put <body> into url "…"` is an
         // HTTP PUT. Checked before the bare-variable fallback.
@@ -3209,7 +3237,7 @@ struct Parser {
     /// keyword taking a name (`if menu is "X"`, not the menu named "is").
     static let expressionConnectors: Set<String> = [
         "is", "and", "or", "then", "into", "of", "to", "from", "with", "within",
-        "contains", "mod", "div", "else", "in",
+        "contains", "mod", "div", "else", "in", "after", "before",
     ]
 
     /// Adjectives HyperTalk allows before `name` — `the short name of …`,

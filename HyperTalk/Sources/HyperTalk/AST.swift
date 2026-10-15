@@ -337,6 +337,10 @@ indirect enum Container {
     /// function result (`the textHeight of item 1 of theFields()`, Power
     /// Tools). Reading evaluates; writing is an error.
     case expressionValue(Expr)
+    /// `[the] selectedLine` as a container — the selection's whole line
+    /// (`put "Other…" into the selectedLine of me`, ArrayMaster). Resolved at
+    /// run time by re-parsing the selection's line descriptor.
+    case selectedLine
     /// `[the] clickLine` as a container — the locked-field line last clicked
     /// (`put "• " before the clickLine`, FontIndexer). Resolved at run time by
     /// re-parsing the click descriptor ("line 3 of card field id 12").

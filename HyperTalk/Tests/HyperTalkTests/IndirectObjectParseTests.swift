@@ -152,3 +152,29 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("put bg fld \"marker\" of card 2 into y"))
     #expect(parses("put field \"x\" of next card into y"))
 }
+
+// MARK: - IA batch 2 (2026-10-15)
+
+@Test func negativeTempoAndQuotedCommandArgs() {
+    #expect(parses("play yikes tempo -24 w."))                       // Tarot Reader
+    #expect(parses("\"Picture\"  \"JOHN WOLF\",  resource"))         // Alliance Redwoods
+    #expect(parses("\"Picture\"  \"Good time\",  resource,roundrect"))
+}
+
+@Test func chunkKeywordAsPlainVariableName() {
+    // `item` is the loop variable, not a chunk — `after` can't start an index.
+    #expect(parses("put cd fld item after list"))                    // AFI Catalog
+    #expect(parses("put cd fld item before list"))
+    // Real chunks keep parsing.
+    #expect(parses("put item 2 of x after list"))
+}
+
+@Test func selectedLineAsContainer() {
+    #expect(parses("put \"Other…\" into the selectedLine of me"))    // ArrayMaster
+    #expect(parses("put x into the selectedLine"))
+}
+
+@Test func macSymbolLettersInIdentifiers() {
+    #expect(parses("put offset (∆,line (c) of readTour)-1 into editTour"))  // Aloun-Madu
+    #expect(parses("put 5 into ∆"))
+}

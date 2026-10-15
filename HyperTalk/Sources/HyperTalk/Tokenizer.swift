@@ -81,7 +81,9 @@ struct Tokenizer {
             return numberLiteral()
         }
 
-        if character.isLetter || character == "_" {
+        // Classic Mac authors used option-key symbols in names (`∆` as a
+        // delimiter variable, Aloun-Madu) — HyperCard accepted them.
+        if character.isLetter || character == "_" || character == "\u{2206}" {
             return identifier()
         }
 
@@ -167,7 +169,7 @@ struct Tokenizer {
 
     private mutating func identifier() -> Token {
         var text = ""
-        while let character = current, character.isLetter || character.isNumber || character == "_" {
+        while let character = current, character.isLetter || character.isNumber || character == "_" || character == "\u{2206}" {
             text.append(character)
             advance()
         }
