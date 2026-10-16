@@ -1436,6 +1436,12 @@ struct Parser {
     }
 
     private mutating func parsePut(line: Int) throws -> Stmt {
+        // A bare `put` (everything after was a comment — `then put --da icon
+        // in button`, Developer Stack) does nothing.
+        if current.kind == .newline || current.kind == .endOfScript {
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        }
         let value = try parseExpression()
         // `put <expr> to program <app> [without reply]` — an AppleEvent to
         // another application (HyperBattleship's networked play). Contrapt can't
@@ -2937,6 +2943,12 @@ struct Parser {
         }
         let domain: HyperTalkObject.PartDomain
         if let w = peekIdentifier(), fieldWords.contains(w) {
+            // A bare `field` at the end of the line is a VARIABLE of that
+            // name (`put it into Field` — The Delimiter Fixer).
+            if tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+                index = saved
+                return nil
+            }
             domain = .any
             advance()
         } else if let w = peekIdentifier(), Self.cardWords.contains(w),
@@ -3115,6 +3127,12 @@ struct Parser {
             return nil
         }
         else if consumeCardWord() {
+            // A dangling `of card` at the end of the line names no card —
+            // the current one (`put "" into card field "SoundName" of card`,
+            // CheapSequencer).
+            if current.kind == .newline || current.kind == .endOfScript {
+                return .current
+            }
             // Concatenation level, so `of card "analysis" & i` (Beauty for
             // All) and `of card laPremiere + x - 1` (Archivist) compute —
             // but comparisons stay outside (`if fld 1 of card n is empty`).
@@ -4279,7 +4297,14 @@ struct Parser {
             // `the result`). The URL is a primary so `url x & "?q=1"` reads the
             // url of `x` then concatenates, as HyperCard groups it.
             if word == "url" {
-                return .urlContent(try parsePrimary())
+                // Bare `url` with nothing readable after is a variable —
+                // `the number of chars of URL` (Annuaire NET).
+                switch current.kind {
+                case .newline, .endOfScript: return .variable(word)
+                case .identifier(let n) where Self.expressionConnectors.contains(n) || n == "then" || n == "of" || n == "into":
+                    return .variable(word)
+                default: return .urlContent(try parsePrimary())
+                }
             }
             // `stackData` — the stack's persistent store, read whole or indexed
             // (`stackData["k"]`, via the bracket postfix in parsePrimary).

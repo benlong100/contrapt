@@ -324,3 +324,14 @@ private func parses(_ line: String) -> Bool {
     // Drag&Drop: bare `card` before a keyword is this card.
     #expect(parses("if it is not within the rect of card then beep"))
 }
+
+@Test func batchFiveRoundTwo() {
+    // Annuaire NET: bare `url` before a connector is a variable.
+    #expect(parses("repeat with i=1 to the number of chars of URL\nend repeat"))
+    // The Delimiter Fixer: bare `field` at the end of the line is a variable.
+    #expect(parses("put it into Field"))
+    // CheapSequencer: dangling `of card` is the current card.
+    #expect(parses("put \"\" into card field \"SoundName\" of card"))
+    // Developer Stack: a put whose value was all comment no-ops.
+    #expect(parses("if x then put"))
+}
