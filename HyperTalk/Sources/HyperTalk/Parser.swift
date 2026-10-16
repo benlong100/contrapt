@@ -2956,7 +2956,17 @@ struct Parser {
         else if consumeWord("last") { _ = consumeCardWord(); ref = .last }
         else if consumeWord("this") { _ = consumeCardWord() || consumeBackgroundWord(); ref = .current }
         else if consumeWord("recent") { _ = consumeCardWord(); ref = .previous } // most recent ≈ previous
-        else if consumeWord("marked") { _ = consumeCardWord(); ref = .markedCard(try parsePrimary()) }
+        else if consumeWord("marked") {
+            _ = consumeCardWord()
+            // `find … in fld "notes" in marked cards` (Caesar) — a bare
+            // marked-cards scope at line end has no index and isn't a card
+            // owner; leave it for the caller (find's search scope).
+            if current.kind == .newline || current.kind == .endOfScript {
+                index = saved
+                return nil
+            }
+            ref = .markedCard(try parsePrimary())
+        }
         else if let w = peekIdentifier(), let n = Self.ordinals[w],
                 let next = peekIdentifier(1), Self.cardWords.contains(next) {
             // `of second cd` — an exact ordinal card owner (Imitatio Christi's
