@@ -472,6 +472,19 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .answerFile(prompt, type: type), line: line)
             }
+            // `answer folder <prompt>` — a folder-choose dialog (HC 2.2+;
+            // the Elektra tool stacks). No folder is reachable here, so it
+            // behaves as cancelled: `it` empty, `the result` "Cancel".
+            if peekIdentifier() == "folder",
+               !(tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript) {
+                advance()
+                let savedSuppress = suppressBarePropertyOf
+                suppressBarePropertyOf = true
+                _ = try parseExpression() // the prompt (ignored)
+                suppressBarePropertyOf = savedSuppress
+                try expectNewline()
+                return Stmt(kind: .answerFolder, line: line)
+            }
             // `answer program <prompt> [of type <type>]` — a PPC program-browser
             // dialog (AppleEvents). No other app is reachable, so it behaves as
             // cancelled: `it` comes back empty.
@@ -484,7 +497,17 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .put(.stringLiteral(""), .into, .variable("it")), line: line)
             }
-            let prompt = try parseExpression()
+            var prompt = try parseExpression()
+            // Adjacent factors concatenate, as HyperCard reads them — `answer
+            // ""Joker""` (Data1/Data4) is "" & Joker & "" = "Joker".
+            while true {
+                if case .string = current.kind {
+                    prompt = .binary(.concat, prompt, try parsePrimary())
+                } else if let w = peekIdentifier(), w != "with",
+                          case .identifier = current.kind, !Self.expressionConnectors.contains(w) {
+                    prompt = .binary(.concat, prompt, try parsePrimary())
+                } else { break }
+            }
             var buttons: [Expr] = []
             if consumeWord("with") {
                 // Buttons are separated by `or` (parsed below it so `or` isn't
@@ -625,7 +648,9 @@ struct Parser {
             advance()
             // `pass <messageName>` — the name (usually the handler's own) is
             // accepted; the current message is what continues down the path.
+            // Quoted too: `pass "opencard"` (Exploring Multimedia).
             if peekIdentifier() != nil { advance() }
+            else if case .string = current.kind { advance() }
             try expectNewline()
             return Stmt(kind: .passMessage, line: line)
         case "send":
@@ -2010,7 +2035,7 @@ struct Parser {
                 // `find whole it in fld "notes" in marked cards` (Caesar) —
                 // the marked-cards restriction is consumed (search-all, best
                 // effort).
-                if peekIdentifier() == "in", peekIdentifier(1) == "marked" {
+                if peekIdentifier() == "in" || peekIdentifier() == "of", peekIdentifier(1) == "marked" {
                     advance(); advance(); _ = consumeCardWord()
                 }
             } else if current.kind != .newline, current.kind != .endOfScript {
@@ -3208,6 +3233,14 @@ struct Parser {
         // `of bkgnd …` or, as HyperCard also allows, `in bkgnd …`
         // (`the first card in background "User Pictures"`).
         guard peekIdentifier() == "of" || peekIdentifier() == "in" else { return nil }
+        // `of next bg` / `of previous bg` (EditCard's `cd n of next bg`) —
+        // an adjacent-background owner isn't modeled distinctly; the current
+        // background stands in (best effort).
+        if let rel = peekIdentifier(1), rel == "next" || rel == "previous" || rel == "prev",
+           let word = peekIdentifier(2), Self.backgroundWords.contains(word) {
+            advance(); advance(); advance()
+            return .current
+        }
         if let word = peekIdentifier(1), Self.backgroundWords.contains(word) {
             advance() // of / in
             advance() // background word
@@ -3363,6 +3396,14 @@ struct Parser {
             let name: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
                 ? .stringLiteral("") : try parsePrimary()
             return .window(name)
+        }
+        // The debugger palettes by NAME — `the variable watcher`, `the
+        // message watcher` (FastTab reads their visible). Same absent-window
+        // resolution as the qualified forms below.
+        if let w = peekIdentifier(), w == "variable" || w == "message",
+           peekIdentifier(1) == "watcher" {
+            advance(); advance()
+            return .window(.stringLiteral("\(w) watcher"))
         }
         if let w = peekIdentifier(), Self.windowQualifiers.contains(w), peekIdentifier(1) == "window" {
             advance() // qualifier
@@ -4019,6 +4060,11 @@ struct Parser {
                 advance() // next/previous/prev
                 advance() // card word
                 if cardScope == nil { cardScope = (w == "next") ? .next : .previous }
+            } else if let w = peekIdentifier(), ["next", "previous", "prev"].contains(w),
+                      let n = peekIdentifier(1), Self.backgroundWords.contains(n) {
+                // `… of card 1 of next bg` (EditCard) — an adjacent-background
+                // scope isn't modeled; consumed best-effort.
+                advance(); advance()
             } else if consumeCardWord() {
                 let isID = consumeWord("id")
                 // An optional identifier/number/string naming the card (`of cd

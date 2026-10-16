@@ -365,3 +365,17 @@ private func parses(_ line: String) -> Bool {
     // PAGER PROG#1: a run of the same mark is one literal.
     #expect(parses("put ######### into BEEPERNUM"))
 }
+
+@Test func batchSixRoundOne() {
+    // Exploring Multimedia: pass with a quoted message name.
+    #expect(parses("pass \"opencard\""))
+    // Elektra tool stacks: the folder-choose dialog.
+    #expect(parses("answer folder \"Choose a folder:\""))
+    // Data1/Data4: adjacent answer factors concatenate ("" & Joker & "").
+    #expect(parses("answer \"\"Joker\"\""))
+    // EditCard: of-marked-cards find scope; next-bg owners best effort.
+    #expect(parses("find string HT in bg fld \"Text\" of marked cards"))
+    #expect(parses("get the selectedline of bg btn \"- contents -\" of card 1 of next bg"))
+    // FastTab: the debugger palettes as absent windows.
+    #expect(parses("put the visible of the variable watcher into varVis"))
+}

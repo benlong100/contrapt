@@ -85,6 +85,9 @@ indirect enum StmtKind {
     /// can't present one mid-script, so it simulates a cancel (empty `it`, the
     /// result "Cancel"), which stacks treat as "no file chosen".
     case answerFile(Expr, type: Expr?)
+    /// `answer folder <prompt>` — a folder-choose dialog. Contrapt can't
+    /// browse folders, so it answers as cancelled.
+    case answerFolder
     /// `visual [effect] <effect> [<direction>] [<speed>]` — queues a screen
     /// transition for the next `go`.
     case visualEffect(ScreenEffect)

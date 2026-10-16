@@ -1384,6 +1384,12 @@ final class Runtime {
                 lastResult = "Cancel"
             }
             return .normal
+        case .answerFolder:
+            // No folder browser here — answer as cancelled (`it` empty,
+            // `the result` "Cancel"), the path Elektra-style scripts test.
+            setVariable("it", to: "")
+            lastResult = "Cancel"
+            return .normal
 
         case .ask(let promptExpression, let initialExpression):
             let prompt = try await evaluate(promptExpression, line: statement.line)
