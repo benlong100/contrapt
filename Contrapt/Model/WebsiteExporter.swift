@@ -1212,7 +1212,7 @@ extension WebsiteExporter {
         root.addEventListener('click', ev => {
           const partEl = ev.target.closest('.part');
           if (!partEl || partEl.dataset.scriptId == null) return;
-          let line = null, word = null;
+          let line = null, word = null, chunkStart = null, chunkEnd = null;
           if (partEl.classList.contains('field')) {
             const caret = document.caretRangeFromPoint
               ? document.caretRangeFromPoint(ev.clientX, ev.clientY)
@@ -1232,15 +1232,17 @@ extension WebsiteExporter {
               const group = groups.find(([gs, ge]) => pos.offset >= gs && pos.offset < ge);
               if (group) {
                 word = full.slice(group[0], group[1]).trim();
+                chunkStart = group[0]; chunkEnd = group[1];
               } else {
                 let s = pos.offset, e = pos.offset;
                 while (s > 0 && !/\\s/.test(full[s - 1])) s--;
                 while (e < full.length && !/\\s/.test(full[e])) e++;
                 word = full.slice(s, e);
+                chunkStart = s; chunkEnd = e;
               }
             }
           }
-          handle(engine.mouseUp(Number(partEl.dataset.scriptId), line, word, partEl.dataset.layer || null));
+          handle(engine.mouseUp(Number(partEl.dataset.scriptId), line, word, partEl.dataset.layer || null, chunkStart, chunkEnd));
         });
         // Keyboard activation: a focused button (role="button", tabindex=0)
         // fires its mouseUp on Enter/Space, so the stack is operable without a

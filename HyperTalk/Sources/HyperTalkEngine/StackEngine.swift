@@ -48,6 +48,7 @@ public final class StackEngine {
     /// message path. Returns the world effects the caller should now apply.
     @discardableResult
     public func dispatchMouseUp(partScriptID: Int, clickLine: Int? = nil, clickText: String? = nil,
+                                clickChunkStart: Int? = nil, clickChunkEnd: Int? = nil,
                                 partLayer: String? = nil) async throws -> [HostEffect] {
         // scriptIDs are unique only WITHIN a layer, so a card part and a
         // background part can legitimately share one — e.g. a card-layer button
@@ -61,6 +62,13 @@ public final class StackEngine {
         if let clickLine, let layer = resolvedLayerWord(scriptID: partScriptID, prefer: partLayer) {
             host.clickLine = "line \(clickLine) of \(layer) field id \(partScriptID)"
             host.clickText = clickText ?? ""
+            // The clicked word's char range (0-based, end-exclusive from the
+            // browser) as `the clickChunk` descriptor (1-based inclusive).
+            if let start = clickChunkStart, let end = clickChunkEnd, end > start {
+                host.clickChunk = "char \(start + 1) to \(end) of \(layer) field id \(partScriptID)"
+            } else {
+                host.clickChunk = ""
+            }
         }
         // A checkbox/radio click flips its hilite (the checked state) before
         // the message dispatches — exactly the app's CardView order.

@@ -355,6 +355,10 @@ indirect enum Container {
     /// `[the] clipboard` as a container — the system pasteboard (`put
     /// theList into the clipboard`, HyperCard 10th Anniversary; budgetBoss).
     case clipboard
+    /// `[the] clickChunk` as a container — the clicked word's chunk (`put
+    /// theNewText after the clickchunk`, AFI Catalog). Resolved at run time
+    /// by re-parsing the click descriptor.
+    case clickChunk
     /// A BUTTON's contents as a container (HyperCard 2.x: popup/list text) —
     /// `put empty into bkgnd btn "Go Back History" of card 2` (New Features).
     /// The FieldRef shape carries domain/id/name/card for a button here.

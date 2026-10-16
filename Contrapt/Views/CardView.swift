@@ -1702,7 +1702,7 @@ struct PartView: View {
                     textHeight: properties.textHeight,
                     styleRuns: properties.styleRuns
                 )
-                ClickRecord.shared.recordPending(line: hit.line, text: hit.text)
+                ClickRecord.shared.recordPending(line: hit.line, text: hit.text, chunk: hit.chunk)
                 onTap()
             }
     }

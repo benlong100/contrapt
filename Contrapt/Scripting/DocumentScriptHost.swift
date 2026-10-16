@@ -158,9 +158,10 @@ struct FindHighlight: Equatable {
 @MainActor final class ClickRecord {
     static let shared = ClickRecord()
     /// The raw hit from the press gesture, consumed by the dispatcher.
-    private var pending: (line: Int, text: String)?
+    private var pending: (line: Int, text: String, chunk: Range<Int>?)?
     var line = ""
     var text = ""
+    var chunk = ""
     /// The card point of the last press — `the clickLoc` (DateBook's month
     /// grids compute the clicked row from it). Nil before any press.
     var clickLocation: CGPoint?
@@ -171,8 +172,8 @@ struct FindHighlight: Equatable {
     /// idiom) sees the user's next click — not the one that launched it.
     var clickPending = false
 
-    func recordPending(line: Int, text: String) { pending = (line, text) }
-    func takePending() -> (line: Int, text: String)? {
+    func recordPending(line: Int, text: String, chunk: Range<Int>?) { pending = (line, text, chunk) }
+    func takePending() -> (line: Int, text: String, chunk: Range<Int>?)? {
         defer { pending = nil }
         return pending
     }
@@ -1498,6 +1499,7 @@ final class DocumentScriptHost: HyperTalkHost {
         switch field {
         case .line: return ClickRecord.shared.line
         case .text: return ClickRecord.shared.text
+        case .chunk: return ClickRecord.shared.chunk
         case .location:
             guard let point = ClickRecord.shared.clickLocation else { return "" }
             return "\(Int(point.x.rounded())),\(Int(point.y.rounded()))"

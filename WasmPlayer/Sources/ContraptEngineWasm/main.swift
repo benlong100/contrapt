@@ -149,9 +149,13 @@ func installEngine() {
         // 4th arg: which layer the click hit ("card"/"bkgnd") — disambiguates a
         // scriptID shared by a card and a background part.
         let layer = arguments.count > 3 ? arguments[3].string : nil
+        // 5th/6th args: the clicked word's char range (the clickChunk).
+        let chunkStart = arguments.count > 4 ? arguments[4].number.map { Int($0) } : nil
+        let chunkEnd = arguments.count > 5 ? arguments[5].number.map { Int($0) } : nil
         return .string(await engine.dispatchMouseUpJSON(
             partScriptID: Int(arguments.first?.number ?? -1),
-            clickLine: line, clickText: text, partLayer: layer
+            clickLine: line, clickText: text,
+            clickChunkStart: chunkStart, clickChunkEnd: chunkEnd, partLayer: layer
         ))
     })
     api.openCard = retained(JSClosure.async { arguments in

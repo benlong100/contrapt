@@ -671,10 +671,12 @@ final class WebHost: HyperTalkHost {
     /// Where the page's last field click landed (see StackEngine.dispatchMouseUp).
     var clickLine = ""
     var clickText = ""
+    var clickChunk = ""
     func clickValue(_ field: ClickField) -> String {
         switch field {
         case .line: clickLine
         case .text: clickText
+        case .chunk: clickChunk
         case .location: "" // the page doesn't report press coordinates yet
         }
     }

@@ -1649,6 +1649,11 @@ struct Parser {
         // clicked: `put "• " before the clickLine`, `set the textStyle of the
         // clickLine to …` (FontIndexer, D'Entry, TimeBook). Resolved at run
         // time from the click descriptor.
+        if peekIdentifier(foundOffset) == "clickchunk" {
+            if foundOffset == 1 { advance() } // the
+            advance() // clickChunk
+            return .clickChunk
+        }
         if peekIdentifier(foundOffset) == "clickline" {
             if foundOffset == 1 { advance() } // the
             advance() // clickLine
@@ -2480,9 +2485,22 @@ struct Parser {
         }
         if peekIdentifier() == "of" || peekIdentifier() == "in", peekIdentifier(1) == "stack" {
             // `of stack "X"` / `in stack "X"` (Sean's Help: `go to card 1 in
-            // stack "Sean's World II Help" in a new window`).
+            // stack "Sean's World II Help" in a new window`). An unquoted
+            // MULTI-word name joins its bare words, as in the stack shorthand
+            // (`in stack Celestial Wind Carillons®` — Celestial Wind
+            // Carillons); the join stops before `in a new window`/`without`.
             advance(); advance()
-            target = .inStack(name: try parseExpression(), card: target)
+            if case .identifier(let first) = current.kind, isGoNameWord(first),
+               let second = peekIdentifier(1), isGoNameWord(second), second != "a" {
+                var words: [String] = []
+                while case .identifier(let w) = current.kind, isGoNameWord(w),
+                      !(w == "in" || w == "without") {
+                    words.append(w); advance()
+                }
+                target = .inStack(name: .stringLiteral(words.joined(separator: " ")), card: target)
+            } else {
+                target = .inStack(name: try parseExpression(), card: target)
+            }
         }
         if peekIdentifier() == "of" {
             // Some other trailing `of …` qualifier we don't model — ignore it.
@@ -3566,6 +3584,7 @@ struct Parser {
     /// landed (HyperCard 2.2's list-navigation idiom).
     static let clickFields: [String: ClickField] = [
         "clickline": .line, "clicktext": .text, "clickloc": .location,
+        "clickchunk": .chunk,
     ]
 
     /// `the selectedLine` etc. — the script selection set by `select`.

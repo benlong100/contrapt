@@ -1496,6 +1496,9 @@ final class Runtime {
             // Resolve the click descriptor to its chunk and read it.
             guard let resolved = clickLineContainer() else { return "" }
             return try await containerValue(resolved, line: line)
+        case .clickChunk:
+            guard let resolved = clickChunkContainer() else { return "" }
+            return try await containerValue(resolved, line: line)
         case .selectedLine:
             guard let resolved = selectedLineContainer() else { return "" }
             return try await containerValue(resolved, line: line)
@@ -1602,6 +1605,9 @@ final class Runtime {
             // `put "• " before the clickLine` — write through to the clicked
             // line's chunk; a no-op before any click, like HyperCard.
             guard let resolved = clickLineContainer() else { return }
+            try await setContainer(resolved, to: value, line: line)
+        case .clickChunk:
+            guard let resolved = clickChunkContainer() else { return }
             try await setContainer(resolved, to: value, line: line)
         case .selectedLine:
             // `put X into the selectedLine of me` — replace the selection's
@@ -1846,6 +1852,13 @@ final class Runtime {
         return container
     }
 
+    private func clickChunkContainer() -> Container? {
+        let descriptor = host.clickValue(.chunk)
+        guard !descriptor.isEmpty, let container = Parser.parseSoleContainer(descriptor),
+              !isVariableContainer(container) else { return nil }
+        return container
+    }
+
     /// Walks a (possibly nested) chunk container down to its base field and
     /// computes the chunk's absolute character range in the field's text.
     /// Nil when the base isn't a field (nothing text-selectable).
@@ -1907,6 +1920,9 @@ final class Runtime {
         case .clickLine:
             guard let resolved = clickLineContainer() else { return nil }
             return try await fieldAndRange(of: resolved, line: line)
+        case .clickChunk:
+            guard let resolved = clickChunkContainer() else { return nil }
+            return try await fieldAndRange(of: resolved, line: line)
         case .selectedLine:
             guard let resolved = selectedLineContainer() else { return nil }
             return try await fieldAndRange(of: resolved, line: line)
@@ -1947,7 +1963,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine, .selectedField, .foundLine, .clipboard: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .clickChunk, .selectedLine, .selectedField, .foundLine, .clipboard: return false
         }
     }
 

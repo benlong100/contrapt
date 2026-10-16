@@ -177,7 +177,8 @@ struct Tokenizer {
 
     private mutating func identifier() -> Token {
         var text = ""
-        while let character = current, character.isLetter || character.isNumber || character == "_" || character == "\u{2206}" {
+        while let character = current, character.isLetter || character.isNumber || character == "_" || character == "\u{2206}"
+                || character == "\u{00AE}" || character == "\u{2122}" || character == "\u{00A9}" {
             text.append(character)
             advance()
         }

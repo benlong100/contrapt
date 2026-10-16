@@ -44,3 +44,18 @@ import Testing
     """, host: host)
     #expect(host.fields["out"] == "")
 }
+
+@Test func clickChunkReadsAndWritesTheClickedWord() async throws {
+    // `the clickChunk` — the clicked word as a chunk, usable as a container
+    // (`put theNewText after the clickchunk` — AFI Catalog).
+    let host = MockHost(fields: ["out": "", "card id 12": "hello world here"])
+    host.clickValues = [.chunk: "char 7 to 11 of card field id 12"]
+    try await run("""
+    on mouseUp
+      put the clickChunk into field "out"
+      put "W" into the clickChunk
+    end mouseUp
+    """, host: host)
+    #expect(host.fields["out"] == "char 7 to 11 of card field id 12")
+    #expect(host.fields["card id 12"] == "hello W here")
+}

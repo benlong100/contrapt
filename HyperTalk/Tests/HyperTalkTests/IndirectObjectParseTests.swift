@@ -295,3 +295,13 @@ private func parses(_ line: String) -> Bool {
     // SportsArena: card-then-stack with no card named goes to the stack.
     #expect(parses("go to card stack \"book\""))
 }
+
+@Test func batchFourRoundSix() {
+    // AFI Catalog: the clickChunk as a container.
+    #expect(parses("put theNewText after the clickchunk"))
+    // Celestial Wind Carillons: unquoted multi-word stack name (with a
+    // trademark sign) after `in stack`.
+    #expect(parses("go to card \"first\" in stack Celestial Wind Carillons\u{00AE}"))
+    // The windowed form keeps its modifier.
+    #expect(parses("go to card 1 in stack \"Sean's World II Help\" in a new window"))
+}

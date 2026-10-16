@@ -146,6 +146,9 @@ public enum FoundField: Sendable, Equatable {
 /// grids compute the clicked row from it).
 public enum ClickField: Sendable, Equatable {
     case line, text, location
+    /// The clicked word as a chunk descriptor ("char 5 to 9 of card field
+    /// id 3") — `the clickChunk`, usable as a container.
+    case chunk
 }
 
 /// What the `selected*` readers ask about the script selection (set by the

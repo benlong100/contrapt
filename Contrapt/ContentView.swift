@@ -1619,6 +1619,12 @@ struct ContentView: View {
             let layer = stack.cards[cardIndex].parts.contains(where: { $0.id == part.id }) ? "card" : "bkgnd"
             ClickRecord.shared.line = "line \(pending.line) of \(layer) field id \(part.scriptID)"
             ClickRecord.shared.text = pending.text
+            if let chunk = pending.chunk, !chunk.isEmpty {
+                ClickRecord.shared.chunk =
+                    "char \(chunk.lowerBound + 1) to \(chunk.upperBound) of \(layer) field id \(part.scriptID)"
+            } else {
+                ClickRecord.shared.chunk = ""
+            }
             // Auto Select (the list-field idiom): the click selects its whole
             // line — visible highlight plus the selected* readers — before the
             // field's mouseUp handler runs (which typically reads

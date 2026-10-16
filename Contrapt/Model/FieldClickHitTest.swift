@@ -24,10 +24,10 @@ enum FieldClickHitTest {
     /// (the field renders it unwrapped and clips, so the layout must too).
     static func hit(in text: String, at location: CGPoint, textWidth: CGFloat,
                     format: TextFormat, wraps: Bool, textHeight: Double? = nil,
-                    styleRuns: [StyleRun] = []) -> (line: Int, text: String) {
-        guard !text.isEmpty else { return (1, "") }
+                    styleRuns: [StyleRun] = []) -> (line: Int, text: String, chunk: Range<Int>?) {
+        guard !text.isEmpty else { return (1, "", nil) }
         let (lines, origins, layoutWidth, pathHeight) = layout(text, textWidth: textWidth, format: format, wraps: wraps, textHeight: textHeight)
-        guard !lines.isEmpty else { return (1, "") }
+        guard !lines.isEmpty else { return (1, "", nil) }
 
         // Find the visual line whose band contains the click's y (top-down;
         // clicks past the last line clamp to it, as HyperCard does).
@@ -59,7 +59,15 @@ enum FieldClickHitTest {
         let penOffset = CGFloat(CTLineGetPenOffsetForFlush(line, flush, Double(layoutWidth)))
         let index = CTLineGetStringIndexForPosition(line, CGPoint(x: location.x - penOffset, y: 0))
         let grouped = groupedMask(text: nsText, format: format, styleRuns: styleRuns)
-        return (hardLine, clickedText(in: nsText, around: index, lineRange: range, grouped: grouped))
+        let (clicked, utf16Range) = clickedText(in: nsText, around: index, lineRange: range, grouped: grouped)
+        // The chunk range in CHARACTERS (HyperTalk counts graphemes), 0-based.
+        var chunk: Range<Int>?
+        if let utf16Range, let swiftRange = Range(utf16Range, in: text) {
+            let start = text.distance(from: text.startIndex, to: swiftRange.lowerBound)
+            let length = text.distance(from: swiftRange.lowerBound, to: swiftRange.upperBound)
+            chunk = start..<(start + length)
+        }
+        return (hardLine, clicked, chunk)
     }
 
     /// Lays `text` out the way the field renders it (same font, width,
@@ -165,8 +173,8 @@ enum FieldClickHitTest {
     /// a line break or the first ungrouped character), otherwise the single
     /// word. The grouped run may span soft wraps, so it isn't confined to the
     /// clicked visual line the way the word fallback is.
-    private static func clickedText(in text: NSString, around index: Int, lineRange: CFRange, grouped: [Bool]) -> String {
-        guard lineRange.length > 0 else { return "" }
+    private static func clickedText(in text: NSString, around index: Int, lineRange: CFRange, grouped: [Bool]) -> (String, NSRange?) {
+        guard lineRange.length > 0 else { return ("", nil) }
         let lineEnd = lineRange.location + lineRange.length
         let i = min(max(index, lineRange.location), lineEnd - 1)
         func isNewline(_ at: Int) -> Bool { text.character(at: at) == 0x0A }
@@ -174,16 +182,17 @@ enum FieldClickHitTest {
             var start = i, end = i + 1
             while start > 0, grouped[start - 1], !isNewline(start - 1) { start -= 1 }
             while end < text.length, end < grouped.count, grouped[end], !isNewline(end) { end += 1 }
-            return text.substring(with: NSRange(location: start, length: end - start))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let range = NSRange(location: start, length: end - start)
+            return (text.substring(with: range)
+                .trimmingCharacters(in: .whitespacesAndNewlines), range)
         }
         return word(in: text, around: index, lineRange: lineRange)
     }
 
     /// The whitespace-delimited word containing utf16 `index` (clamped into
     /// the clicked line, so a click past a line's end yields its last word).
-    private static func word(in text: NSString, around index: Int, lineRange: CFRange) -> String {
-        guard lineRange.length > 0 else { return "" }
+    private static func word(in text: NSString, around index: Int, lineRange: CFRange) -> (String, NSRange?) {
+        guard lineRange.length > 0 else { return ("", nil) }
         let lineEnd = lineRange.location + lineRange.length
         var i = min(max(index, lineRange.location), lineEnd - 1)
         func isSpace(_ at: Int) -> Bool {
@@ -192,12 +201,13 @@ enum FieldClickHitTest {
         }
         // A click on whitespace binds to the word before it.
         while i > lineRange.location, isSpace(i) { i -= 1 }
-        if isSpace(i) { return "" }
+        if isSpace(i) { return ("", nil) }
         var start = i, end = i + 1
         while start > lineRange.location, !isSpace(start - 1) { start -= 1 }
         while end < lineEnd, !isSpace(end) { end += 1 }
-        return text.substring(with: NSRange(location: start, length: end - start))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(location: start, length: end - start)
+        return (text.substring(with: range)
+            .trimmingCharacters(in: .whitespacesAndNewlines), range)
     }
 
     /// The platform font matching how the field's SwiftUI Text renders.
