@@ -204,3 +204,15 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("set menuMessage of menuItem 1 of menu \"Apple\" to send mouseUp to bg btn \"Uss\""))  // HyperDark
     #expect(parses("set the menuMsg of menuItem \"Save...\" of menu \"File\" to doMenu \"Save a Copy...\""))  // AOL Mail
 }
+
+// MARK: - IA batch 3 (2026-10-15)
+
+@Test func batchThreeRoundOne() {
+    #expect(parses("put \"\" into bg fld \"measured\" of card \"analysis\"&i"))  // Beauty for All
+    #expect(parses("find word 1 of choosen in bg fld \"jnum\""))                  // BlinkBill: chunk, not style
+    #expect(parses("find chars \"ego\" in field \"notes\""))                      // style stays a style
+    #expect(parses("get card field \"X\" of card \"About\" of stack \"Copy\""))   // Biorhythm: cross-stack scope
+    #expect(parses("select selectedchunk()"))                                     // Book Reporter's Guild
+    #expect(parses("select selectedline()"))
+    #expect(parses("if selectedchunk() ≠ empty then beep"))
+}

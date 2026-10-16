@@ -1138,6 +1138,7 @@ struct Parser {
             }
             if let component = Self.selectionFields[peekIdentifier() ?? ""] {
                 advance()
+                if consumeSymbol("(") { _ = consumeSymbol(")") }   // selectedchunk() form
                 try expectNewline()
                 return Stmt(kind: .select(.descriptor(.selected(component))), line: line)
             }
@@ -1833,12 +1834,25 @@ struct Parser {
         // `find [international|normal] [chars|word|whole|string] <text> [in <field>]`.
         if peekIdentifier() == "international" || peekIdentifier() == "normal" { advance() }
         var mode: FindMode = .wordPrefix
-        switch peekIdentifier() {
-        case "chars", "characters": advance(); mode = .chars
-        case "word": advance(); mode = .wholeWord
-        case "whole": advance(); mode = .wholePhrase
-        case "string": advance(); mode = .string
-        default: break
+        // A style word that actually BEGINS A CHUNK is the search text, not a
+        // style — `find word 1 of choosen in …` (BlinkBill). Only the full
+        // chunk shape counts (index then of/to); `find chars "ego"` keeps
+        // chars as the style.
+        var styleIsChunk = false
+        if Self.chunkKinds[peekIdentifier() ?? ""] != nil {
+            if case .number = tokens[index + 1].kind,
+               let after = peekIdentifier(2), ["of", "in", "to"].contains(after) {
+                styleIsChunk = true
+            }
+        }
+        if !styleIsChunk {
+            switch peekIdentifier() {
+            case "chars", "characters": advance(); mode = .chars
+            case "word": advance(); mode = .wholeWord
+            case "whole": advance(); mode = .wholePhrase
+            case "string": advance(); mode = .string
+            default: break
+            }
         }
         // HyperCard also tolerates the qualifier AFTER the style word —
         // `find string international globalFind` (10th Anniversary). Only
@@ -2905,8 +2919,10 @@ struct Parser {
             return nil
         }
         else if consumeCardWord() {
-            // Additive, so `of card laPremiere + x - 1` (Archivist) computes.
-            ref = consumeWord("id") ? .idExpression(try parseAdditive()) : .expression(try parseAdditive())
+            // Concatenation level, so `of card "analysis" & i` (Beauty for
+            // All) and `of card laPremiere + x - 1` (Archivist) compute —
+            // but comparisons stay outside (`if fld 1 of card n is empty`).
+            ref = consumeWord("id") ? .idExpression(try parseConcatenation()) : .expression(try parseConcatenation())
         } else {
             index = saved // not a card owner (e.g. `field "x" of the target`)
             return nil
@@ -2918,6 +2934,15 @@ struct Parser {
             case .current: return .inBackground(ref, background: nil)
             case .named(let background): return .inBackground(ref, background: background)
             }
+        }
+        // `… of card "About" of stack "Copy of …"` (Biorhythm Chartbook) —
+        // a CROSS-STACK owner. Contrapt can't read other stacks; consume the
+        // scope so the script parses (the read resolves on this stack,
+        // best-effort — usually a self-referencing backup copy).
+        if peekIdentifier() == "of" || peekIdentifier() == "in",
+           peekIdentifier(1) == "stack" {
+            advance(); advance()
+            _ = try? parsePrimary()
         }
         return ref
     }
@@ -4160,6 +4185,19 @@ struct Parser {
                     return .chunkProperty(word.lowercased(), try parseContainer(line: line))
                 }
                 return .property(word.lowercased(), try parseObjectExpr())
+            }
+            // `selectedChunk()` / `selectedLine()` / `clickLine()` — the
+            // reader in FUNCTION form (`select selectedchunk()`, `if
+            // selectedchunk() ≠ empty` — Book Reporter's Guild).
+            if case .symbol("(") = current.kind, tokens[index + 1].kind == .symbol(")") {
+                if let component = Self.selectionFields[word] {
+                    advance(); advance()
+                    return .selected(component)
+                }
+                if let click = Self.clickFields[word] {
+                    advance(); advance()
+                    return .click(click)
+                }
             }
             // `name(args)` — a function call. Otherwise a plain variable.
             if case .symbol("(") = current.kind {
