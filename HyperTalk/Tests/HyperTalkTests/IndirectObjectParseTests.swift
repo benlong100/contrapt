@@ -345,3 +345,18 @@ private func parses(_ line: String) -> Bool {
     // follows it.
     #expect(parses("put \"From:\" && field From & return into exportVar"))
 }
+
+@Test func batchFiveRoundFour() {
+    // Bare punctuation as literal characters (King Arthur, Area:Perimeter,
+    // Bunny-Coder, Dartmouth XCMD's).
+    #expect(parses("put ? into cd field \"Your Score\""))
+    #expect(parses("put . after card field \"answer\""))
+    #expect(parses("if char x of cd fld decoder is i then put % into char x of cd fld decoder"))
+    #expect(parses("get DelimitedChunk( cd fld \"Dwarves\", \";\", #, false )"))
+    // Castle Quest: a trailing period is part of the number.
+    #expect(parses("go to card 39."))
+    // Click Scripts: of-less set with an object target.
+    #expect(parses("set hilite cd btn 3 to false"))
+    // Annuaire NET: url before an operator is a variable.
+    #expect(parses("put char 1 to typeAdr of URL &HREF into bg fld \"HREF\""))
+}

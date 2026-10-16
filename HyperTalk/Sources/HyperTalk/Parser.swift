@@ -1319,6 +1319,15 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .setGlobalProperty("numberformat", value), line: line)
             }
+            // An of-less OBJECT target — `set hilite cd btn 3 to false`
+            // (Click Scripts) — reads like the `of` form.
+            let savedObject = index
+            if let object = try? parseObjectExpr(), consumeWord("to") {
+                let value = try parseSetValue()
+                try expectNewline()
+                return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
+            }
+            index = savedObject
             // Object-less property: `set the itemDelimiter to ";"`.
             guard consumeWord("to") else {
                 throw ScriptError(line: line, message: "Expected 'of <object> to …' or 'to …' after 'set the \(property)'.")
@@ -4318,6 +4327,10 @@ struct Parser {
                 case .newline, .endOfScript: return .variable(word)
                 case .identifier(let n) where Self.expressionConnectors.contains(n) || n == "then" || n == "of" || n == "into":
                     return .variable(word)
+                case .symbol(let sym) where sym != "(":
+                    // `… of URL &HREF` (Annuaire NET) — an operator follows,
+                    // so url was the variable.
+                    return .variable(word)
                 default: return .urlContent(try parsePrimary())
                 }
             }
@@ -4541,6 +4554,17 @@ struct Parser {
             }
             return .variable(word)
         default:
+            // Classic authors used bare punctuation as literal characters —
+            // `put ? into cd field "Your Score"` (A Quiz on King Arthur),
+            // `put . after card field "answer"` (Area:Perimeter Quiz),
+            // `put % into char x of cd fld decoder` (Bunny-Coder),
+            // `DelimitedChunk(…, #, false)` (Dartmouth XCMD's). Operators
+            // and brackets keep their meaning; only inert marks read as text.
+            if case .symbol(let sym) = current.kind,
+               ["?", "%", "$", "#", ".", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
+                advance()
+                return .stringLiteral(String(sym))
+            }
             throw ScriptError(line: line, message: "Expected a value here, but found \(describe(current)).")
         }
     }

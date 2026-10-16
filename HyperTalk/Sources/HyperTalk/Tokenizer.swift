@@ -164,6 +164,12 @@ struct Tokenizer {
             text.append(character)
             advance()
         }
+        // A trailing period after the digits is part of the number, as the
+        // classic converter read it — `go to card 39.` (Castle Quest) is 39.
+        if current == ".", peekAhead?.isNumber != true, peekAhead != "." {
+            advance()
+            return Token(kind: .number(Double(text) ?? 0), line: line)
+        }
         if current == ".", peekAhead?.isNumber == true {
             text.append(".")
             advance()
