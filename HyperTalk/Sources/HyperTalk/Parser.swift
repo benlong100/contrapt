@@ -1092,11 +1092,17 @@ struct Parser {
             return try parseSort(line: line)
         case "post":
             // `post <data> to url <expr>` — HTTP POST (reply in it, errors in
-            // the result).
+            // the result). Without `to url`, `post` is a custom message
+            // (`post fileName` — Cindy's Newsmailer posts via an XCMD).
+            let savedPost = index
             advance()
-            let data = try parseExpression()
+            guard let data = try? parseExpression(), peekIdentifier() == "to" else {
+                index = savedPost
+                return try parseMessageSend(word: word, line: line)
+            }
             guard consumeWord("to"), consumeWord("url") else {
-                throw ScriptError(line: line, message: "Expected 'to url <address>' after 'post <data>'.")
+                index = savedPost
+                return try parseMessageSend(word: word, line: line)
             }
             let url = try parseExpression()
             try expectNewline()
@@ -2108,7 +2114,7 @@ struct Parser {
         // (`sort bg "CURRENT" by …` — the cards of that background), which
         // Contrapt doesn't model distinctly: skip up to `by` and sort the
         // stack's cards (best effort, as for the `of` scope).
-        if peekIdentifier() == "of" || (peekIdentifier().map(Self.backgroundWords.contains) ?? false) {
+        if peekIdentifier() == "of" || peekIdentifier() == "in" || (peekIdentifier().map(Self.backgroundWords.contains) ?? false) {
             while current.kind != .newline, current.kind != .endOfScript,
                   peekIdentifier() != "by" { advance() }
         }
@@ -4243,14 +4249,21 @@ struct Parser {
                 index = saved // e.g. `number of this cd` → the ordinal property
             }
             // Bare ordinal chunk: `last char of X`, `first word of X`,
-            // `middle line of X` — HyperTalk's `the` is optional.
-            if !suppressBarePropertyOf, let selector = Self.ordinalSelector(word),
+            // `middle line of X` — HyperTalk's `the` is optional. Allowed even
+            // where bare property-of is suppressed (`go cd last line of
+            // allMarked`, Buy It Try It): ordinal + chunk word + of is
+            // unambiguous; without the `of`, fall through instead.
+            if let selector = Self.ordinalSelector(word),
                let kindWord = peekIdentifier(), let kind = Self.chunkKinds[kindWord] {
+                let savedChunk = index
                 advance() // chunk kind
-                guard consumeWord("of") || consumeWord("in") else {
+                if consumeWord("of") || consumeWord("in") {
+                    return .chunk(kind, selector, try parsePrimary())
+                }
+                if !suppressBarePropertyOf {
                     throw ScriptError(line: line, message: "Expected 'of' after '\(word) \(kindWord)'.")
                 }
-                return .chunk(kind, selector, try parsePrimary())
+                index = savedChunk
             }
             // Bare `<property> of <object>` — HyperTalk lets you drop the
             // leading `the`, e.g. `loc of field "x"`, `rect of card field 2`.

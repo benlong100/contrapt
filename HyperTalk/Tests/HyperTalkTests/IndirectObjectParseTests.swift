@@ -253,3 +253,13 @@ private func parses(_ line: String) -> Bool {
     // Real expression errors still fail.
     #expect(!parses("set the cursor to 3 + "))
 }
+
+@Test func batchFourRoundTwo() {
+    // Buy It Try It: an ordinal chunk as a go destination name.
+    #expect(parses("go cd last line of allMarked"))
+    // Cindy's Newsmailer: post without `to url` is a custom message.
+    #expect(parses("post fileName"))
+    #expect(parses("post theData to url theURL"))
+    // Cindy's Recipes: `in` scopes the cards sort like `of`.
+    #expect(parses("sort cds in this bg by bg fld \"Name\""))
+}
