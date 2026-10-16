@@ -1394,6 +1394,15 @@ struct Parser {
         return try parseExpressionList()
     }
 
+    private mutating func parseMenuMessageList() throws -> Expr {
+        var msgs = try parseExpression()
+        while consumeSymbol(",") {
+            let next = try parseExpression()
+            msgs = .binary(.concat, .binary(.concat, msgs, .stringLiteral(",")), next)
+        }
+        return msgs
+    }
+
     private mutating func parseExpressionList() throws -> Expr {
         var value = try parseExpression()
         while consumeSymbol(",") {
@@ -1442,12 +1451,17 @@ struct Parser {
                 // The messages are a comma-separated list, one per item
                 // (`with menuMsg "AC_Undo","","AddColorDelete",…` — Color
                 // Tools), joined with commas to match the interpreter's split.
-                var msgs = try parseExpression()
-                while consumeSymbol(",") {
-                    let next = try parseExpression()
-                    msgs = .binary(.concat, .binary(.concat, msgs, .stringLiteral(",")), next)
+                // A message may also be RAW COMMAND TEXT — `with menuMessage
+                // send mouseUp to bg btn "Sleep"` (HyperDark, Cheese.Cake) —
+                // which won't parse as an expression: capture it verbatim.
+                let savedMsgs = index
+                if let msgs = try? parseMenuMessageList(),
+                   current.kind == .newline || current.kind == .endOfScript {
+                    messages = msgs
+                } else {
+                    index = savedMsgs
+                    messages = captureRestOfLineAsText()
                 }
-                messages = msgs
             }
             try expectNewline()
             return Stmt(kind: .menuCommand(.putIntoMenu(menu: menuName, items: value, mode: mode ?? .into, messages: messages)), line: line)
@@ -3982,8 +3996,12 @@ struct Parser {
                 advance()
                 return .found(found)
             }
-            // `the clickLine` / `the clickText`.
-            if let click = Self.clickFields[peekIdentifier() ?? ""], peekIdentifier(1) != "of" {
+            // `the clickLine` / `the clickText`. Unlike the selection
+            // readers, these never take `of` in HyperCard, so a following
+            // `of` belongs to the surrounding chunk: `get line word 2 of the
+            // clickline of fld "Card id"` (CD Stack) is line (word 2 of the
+            // clickLine) of the field.
+            if let click = Self.clickFields[peekIdentifier() ?? ""] {
                 advance()
                 return .click(click)
             }

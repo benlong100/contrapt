@@ -263,3 +263,13 @@ private func parses(_ line: String) -> Bool {
     // Cindy's Recipes: `in` scopes the cards sort like `of`.
     #expect(parses("sort cds in this bg by bg fld \"Name\""))
 }
+
+@Test func batchFourRoundThree() {
+    // HyperDark / Cheese.Cake: menuMessage as raw command text in put-into-menu.
+    #expect(parses("put \"Sleep Now...\" into menu \"File\" with menuMessage send mouseUp to bg btn \"Sleep\""))
+    #expect(parses("put \"January\" after menu \"Calendar\" with menumsg send mouseup to bg button jan"))
+    // Color Tools' comma list still parses as expressions.
+    #expect(parses("put theItems into menu \"Tools\" with menuMsg \"AC_Undo\",\"\",\"AddColorDelete\""))
+    // CD Stack: the clickLine is complete without `of`; the chunk keeps it.
+    #expect(parses("get line word 2 of the clickline of fld \"Card id\""))
+}
