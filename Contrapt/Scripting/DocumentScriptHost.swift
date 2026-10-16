@@ -1878,6 +1878,23 @@ final class DocumentScriptHost: HyperTalkHost {
         try String(file.characters).write(to: file.url, atomically: true, encoding: .utf8)
     }
 
+    func clipboardContents() -> String {
+        #if canImport(AppKit)
+        return NSPasteboard.general.string(forType: .string) ?? ""
+        #else
+        return UIPasteboard.general.string ?? ""
+        #endif
+    }
+
+    func setClipboardContents(_ text: String) {
+        #if canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #else
+        UIPasteboard.general.string = text
+        #endif
+    }
+
     func pictureExists(background: Bool) -> Bool {
         guard stack.cards.indices.contains(cardIndex) else { return false }
         let card = stack.cards[cardIndex]

@@ -242,3 +242,14 @@ private func parses(_ line: String) -> Bool {
     // Clinton Issues: `the param of N` inside a chunk index position.
     #expect(parses("put the param of 3 into item 1 of line param of 2 of cd fld \"whatToPrint\""))
 }
+
+@Test func batchFourRoundOne() {
+    // College Savings Plus: a multi-word unquoted set value reads as text.
+    #expect(parses("set the cursor to browse tool"))
+    #expect(parses("set textFont of fld 1 to New York"))
+    // box monitor / CCVSF.ORG: file-system existence kinds.
+    #expect(parses("if there is a document \"intromid\" then put true into x"))
+    #expect(parses("if there is not a folder pPath then createFolder pPath"))
+    // Real expression errors still fail.
+    #expect(!parses("set the cursor to 3 + "))
+}

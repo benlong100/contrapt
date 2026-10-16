@@ -16,6 +16,10 @@ final class MockHost: HyperTalkHost {
     var fields: [String: String]
     var destinations: [GoDestination] = []
     var messages: [String] = []
+    var clipboardText = ""
+
+    func clipboardContents() -> String { clipboardText }
+    func setClipboardContents(_ text: String) { clipboardText = text }
 
     init(fields: [String: String] = [:]) {
         self.fields = Dictionary(uniqueKeysWithValues: fields.map { ($0.key.lowercased(), $0.value) })

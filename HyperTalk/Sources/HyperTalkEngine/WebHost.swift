@@ -26,6 +26,9 @@ final class WebHost: HyperTalkHost {
         // and this catches every card-change path (go, openCard, find, sort).
         didSet { if oldValue != currentIndex { selection = nil } }
     }
+    /// The `the clipboard` container's text. The wasm sandbox has no system
+    /// pasteboard; scripts that stage text through it still round-trip.
+    var clipboardText: String = ""
     /// World-facing effects recorded during the current dispatch, drained by
     /// the engine afterwards.
     private(set) var recorded: [HostEffect] = []
@@ -613,6 +616,10 @@ final class WebHost: HyperTalkHost {
             throw HostError("Can't address a field of that card.")
         }
     }
+
+    func clipboardContents() -> String { clipboardText }
+
+    func setClipboardContents(_ text: String) { clipboardText = text }
 
     func pictureExists(background: Bool) -> Bool {
         guard stack.cards.indices.contains(cardIndex) else { return false }

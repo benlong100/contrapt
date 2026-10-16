@@ -1505,6 +1505,8 @@ final class Runtime {
         case .foundLine:
             guard let resolved = foundLineContainer() else { return "" }
             return try await containerValue(resolved, line: line)
+        case .clipboard:
+            return host.clipboardContents()
         case .buttonContents(let buttonRef):
             // A button's contents (HC 2.x) — read via the contents property.
             let (reference, domain, card) = try await resolveButtonRef(buttonRef, line: line)
@@ -1616,6 +1618,8 @@ final class Runtime {
             // chunk; a no-op before any find.
             guard let resolved = foundLineContainer() else { return }
             try await setContainer(resolved, to: value, line: line)
+        case .clipboard:
+            host.setClipboardContents(value)
         case .buttonContents(let buttonRef):
             // `put x into btn "X"` — write the button's contents (HC 2.x).
             let (reference, domain, card) = try await resolveButtonRef(buttonRef, line: line)
@@ -1912,6 +1916,8 @@ final class Runtime {
         case .foundLine:
             guard let resolved = foundLineContainer() else { return nil }
             return try await fieldAndRange(of: resolved, line: line)
+        case .clipboard:
+            return nil
         case .buttonContents:
             // Button contents aren't a text-selectable field range (`select
             // line … of bkgnd btn` no-ops gracefully, like old paint selects).
@@ -1941,7 +1947,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine, .selectedField, .foundLine: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine, .selectedField, .foundLine, .clipboard: return false
         }
     }
 
@@ -2429,6 +2435,10 @@ final class Runtime {
                 // property, parsed separately.
                 if let value = host.paintSetting(property) { return value }
                 throw ScriptError(line: line, message: "Can't read the '\(property)'.")
+            case "clipboard":
+                // `the clipboard` as an expression reads the same pasteboard
+                // the container writes.
+                return host.clipboardContents()
             case "userlevel", "textarrows", "powerkeys", "blindtyping", "environment":
                 // `the environment` — "Development" (full HyperCard, not the
                 // Player); Player/Development twin-field stacks switch on it.

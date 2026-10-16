@@ -302,6 +302,11 @@ public protocol HyperTalkHost: AnyObject {
     /// artwork — `there is a[ no] card picture` (Clip Art prunes blank cards
     /// with it). Defaults to false (hosts without paint).
     func pictureExists(background: Bool) -> Bool
+    /// The system clipboard as a container — `put theList into the
+    /// clipboard` (HyperCard 10th Anniversary). Hosts without a pasteboard
+    /// keep a per-run string via the defaults.
+    func clipboardContents() -> String
+    func setClipboardContents(_ text: String)
     /// An HTTP request for the `url` container and the `post`/`delete url`
     /// verbs. `headers` are the request headers the script set via `set the
     /// httpHeaders`; `timeout` is `the httpTimeout` in seconds (0 = the host's
@@ -628,6 +633,8 @@ public extension HyperTalkHost {
     }
     func fileExists(_ path: String) -> Bool { false }
     func pictureExists(background: Bool) -> Bool { false }
+    func clipboardContents() -> String { "" }
+    func setClipboardContents(_ text: String) {}
     func adjacentBackgroundCardNumber(forward: Bool) -> Int? { nil }
     func httpRequest(method: String, url: String, body: String?, headers: [String: String], timeout: Double) async -> (body: String, status: Int, headers: [String: String], error: String?) {
         ("", 0, [:], "Networking isn't available here.")

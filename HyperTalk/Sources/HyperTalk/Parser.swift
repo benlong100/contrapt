@@ -1361,6 +1361,34 @@ struct Parser {
     }
 
     private mutating func parseSetValue() throws -> Expr {
+        // A multi-word unquoted text value — `set the cursor to browse tool`
+        // (College Savings Plus), `set textFont of fld 1 to New York` —
+        // reads as literal text in HyperCard. Only when the whole remainder
+        // is plain words/numbers; operators and strings mean a real
+        // expression (and real errors still fail).
+        let saved = index
+        if let value = try? parseExpressionList(),
+           current.kind == .newline || current.kind == .endOfScript {
+            return value
+        }
+        index = saved
+        var i = index
+        var wordCount = 0
+        var allWords = true
+        while tokens[i].kind != .newline, tokens[i].kind != .endOfScript {
+            switch tokens[i].kind {
+            case .identifier, .number: wordCount += 1
+            default: allWords = false
+            }
+            i += 1
+        }
+        if allWords, wordCount >= 2 {
+            return captureRestOfLineAsText()
+        }
+        return try parseExpressionList()
+    }
+
+    private mutating func parseExpressionList() throws -> Expr {
         var value = try parseExpression()
         while consumeSymbol(",") {
             let next = try parseExpression()
@@ -1547,6 +1575,13 @@ struct Parser {
             if selectionOffset == 1 { advance() } // the
             advance() // selection
             return .selection
+        }
+        // `[the] clipboard` as a destination/source — `put theList into the
+        // clipboard` (HyperCard 10th Anniversary, budgetBoss, cs timers).
+        if peekIdentifier(selectionOffset) == "clipboard" {
+            if selectionOffset == 1 { advance() } // the
+            advance() // clipboard
+            return .clipboard
         }
         // `[the] foundChunk` as a destination — the last find match, usable as
         // a container (`put X after the foundChunk` / `delete the foundChunk`).
@@ -3216,8 +3251,11 @@ struct Parser {
         // (thisFile)`. The path is any expression (literal, variable, or
         // parenthesized); the host answers existence. `application <path>`
         // (EmailLog's launcher guard) is the same disk check — a classic app
-        // path that isn't present reads correctly as absent.
-        if peekIdentifier() == "file" || peekIdentifier() == "application" {
+        // path that isn't present reads correctly as absent. `document` is
+        // HyperCard's synonym for file (`there is a document "intromid"` —
+        // box monitor), and `folder`/`directory` check the same way (`there
+        // is not a folder pPath` — CCVSF.ORG).
+        if ["file", "application", "document", "folder", "directory"].contains(peekIdentifier() ?? "") {
             advance()
             let path: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
                 ? .stringLiteral("") : try parsePrimary()
@@ -3511,7 +3549,7 @@ struct Parser {
     /// open-stack list), `mouseclick` (a pending click), `mouse` (the button
     /// state, up/down), and `sound` (the playing sound's name, "done" when
     /// idle) are functions in HyperCard; they read the same way here.
-    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "windows", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping", "environment", "textheight", "textsize", "textfont", "textstyle", "textalign", "httpheaders", "httptimeout", "httpstatus", "httpresponseheaders"]
+    static let readableGlobalProperties: Set<String> = ["itemdelimiter", "userlevel", "stacks", "mouseclick", "mouse", "sound", "tool", "mouseloc", "mouseh", "mousev", "screenrect", "numberformat", "optionkey", "shiftkey", "commandkey", "cmdkey", "controlkey", "menus", "windows", "linesize", "pensize", "pattern", "penpattern", "filled", "centered", "brush", "multiple", "userlevel", "textarrows", "powerkeys", "blindtyping", "environment", "clipboard", "textheight", "textsize", "textfont", "textstyle", "textalign", "httpheaders", "httptimeout", "httpstatus", "httpresponseheaders"]
 
     static let chunkKinds: [String: ChunkKind] = [
         "char": .character, "character": .character, "chars": .character, "characters": .character,

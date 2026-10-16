@@ -352,6 +352,9 @@ indirect enum Container {
     /// (`put "• " before the clickLine`, FontIndexer). Resolved at run time by
     /// re-parsing the click descriptor ("line 3 of card field id 12").
     case clickLine
+    /// `[the] clipboard` as a container — the system pasteboard (`put
+    /// theList into the clipboard`, HyperCard 10th Anniversary; budgetBoss).
+    case clipboard
     /// A BUTTON's contents as a container (HyperCard 2.x: popup/list text) —
     /// `put empty into bkgnd btn "Go Back History" of card 2` (New Features).
     /// The FieldRef shape carries domain/id/name/card for a button here.
