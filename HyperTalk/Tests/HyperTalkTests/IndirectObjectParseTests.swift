@@ -284,3 +284,14 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("put short name of bkgnd item 2 of x into y"))
     #expect(parses("put \"Asia\" after the third menuItem of menu \"Regions\" with MenuMsg go to card \"Asia\""))
 }
+
+@Test func batchFourRoundFive() {
+    // Compiler Data / ColorPaint EMaker: a lone number line is a message send.
+    #expect(parses("111"))
+    // Verb Conjugation: hyphenated bare words in a go stack shorthand.
+    #expect(parses("go to French-English Translator"))
+    // calvin-game: the command modifier spelled as two words.
+    #expect(parses("type \"Q\" with command key"))
+    // SportsArena: card-then-stack with no card named goes to the stack.
+    #expect(parses("go to card stack \"book\""))
+}

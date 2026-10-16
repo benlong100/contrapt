@@ -338,6 +338,15 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .send(quoted, arguments), line: line)
         }
+        // A lone number as a statement is a message send, like any unknown
+        // word — ColorPaint's pro-check marker handlers hold just `111`
+        // (Compiler Data, ColorPaint EMaker).
+        if case .number(let n) = current.kind,
+           tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+            advance()
+            try expectNewline()
+            return Stmt(kind: .send(Value.string(from: n), []), line: line)
+        }
         guard let word = peekIdentifier() else {
             throw ScriptError(line: line, message: "Expected a command here, but found \(describe(current)).")
         }
@@ -976,6 +985,12 @@ struct Parser {
                     while let modifier = peekIdentifier() {
                         advance()
                         if modifier == "commandkey" || modifier == "cmdkey" { withCommand = true }
+                        // `with command key` — the modifier as two words
+                        // (calvin-game's `type "Q" with command key`).
+                        if modifier == "command" || modifier == "cmd" {
+                            _ = consumeWord("key"); withCommand = true
+                        }
+                        if modifier == "option" || modifier == "shift" { _ = consumeWord("key") }
                         if !consumeSymbol(",") { break }
                     }
                 }
@@ -2397,6 +2412,12 @@ struct Parser {
         } else if consumeCardWord() {
             if current.kind == .newline || current.kind == .endOfScript {
                 target = .current // bare `go [to] card` → the current card
+            } else if peekIdentifier() == "stack",
+                      !(tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript) {
+                // `go to card stack "book"` (SportsArena) — no card named;
+                // land on that stack as `go stack` would.
+                advance() // stack
+                target = .inStack(name: try parsePrimary(), card: nil)
             } else if consumeWord("id") {
                 // A dangling `go card id` with no number (a leftover line) stays
                 // on the current card rather than failing the handler.
@@ -2421,11 +2442,25 @@ struct Parser {
             // consecutive bare words. A single bare word stays an expression (it
             // may be a variable holding a destination name). Stops at a trailing
             // qualifier (`of …`, `in a new window`, `without dialog`).
+            // A hyphen joins bare words into one (`go to French-English
+            // Translator` — Verb Conjugation), so it also marks the shorthand.
+            let hyphenJoins: Bool = {
+                guard case .symbol("-") = tokens[index + 1].kind,
+                      case .identifier = tokens[index + 2].kind else { return false }
+                return true
+            }()
             if case .identifier(let first) = current.kind, isGoNameWord(first),
-               let second = peekIdentifier(1), isGoNameWord(second) {
+               (peekIdentifier(1).map(isGoNameWord) ?? false) || hyphenJoins {
                 var words: [String] = []
                 while case .identifier(let w) = current.kind, isGoNameWord(w) {
-                    words.append(w); advance()
+                    var piece = w
+                    advance()
+                    while case .symbol("-") = current.kind,
+                          case .identifier(let nw) = tokens[index + 1].kind, isGoNameWord(nw) {
+                        piece += "-" + nw
+                        advance(); advance()
+                    }
+                    words.append(piece)
                 }
                 target = .inStack(name: .stringLiteral(words.joined(separator: " ")), card: nil)
             } else {
