@@ -1106,6 +1106,9 @@ struct Parser {
             if current.kind != .newline, current.kind != .endOfScript {
                 notes = try parsePlayNotes()
             }
+            // Tempo may also FOLLOW the notes — `play "Flute" "c2w …"
+            // tempo 10` (fate2:6).
+            if tempo == nil, consumeWord("tempo") { tempo = try parseAdditive() }
             try expectNewline()
             return Stmt(kind: .play(voice: voice, tempo: tempo, notes: notes), line: line)
         case "start", "stop":
@@ -1953,6 +1956,14 @@ struct Parser {
             // effect Contrapt doesn't model — can't be resolved at parse time.
             // The transition is cosmetic, so fall back to a dissolve and still
             // consume any direction/speed tail, rather than failing the handler.
+            // A COMPUTED name — `visual effect any line of visEffectData()`
+            // (Englisch Ninja) — consumes its chunk-expression tail the same
+            // way.
+            if let kindWord = peekIdentifier(), Self.chunkKinds[kindWord] != nil,
+               peekIdentifier(1) == "of" || peekIdentifier(1) == "in" {
+                advance(); advance()
+                _ = try? parsePrimary()
+            }
             kind = .dissolve
         }
 
@@ -3948,11 +3959,16 @@ struct Parser {
             if consumeWord("of") || consumeWord("in") {
                 let isThis = consumeWord("this")
                 let hasOrdinal = { if let w = self.peekIdentifier() { return w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil }; return false }()
-                if !isThis, !hasOrdinal, consumeBackgroundWord(), !consumeWord("id"),
-                   case .identifier = current.kind {
-                    // `of bg <variable>` — a runtime-named background.
-                    let background = try parsePrimary()
-                    return .cardCountInBackground(background)
+                if !isThis, !hasOrdinal, consumeBackgroundWord(), !consumeWord("id") {
+                    // `of bg <variable>` / `of bg (item x of bgs)` (Financial
+                    // Portfolio) — a runtime-named background.
+                    var named = false
+                    if case .identifier = current.kind { named = true }
+                    if case .symbol("(") = current.kind { named = true }
+                    if named {
+                        let background = try parsePrimary()
+                        return .cardCountInBackground(background)
+                    }
                 }
                 index = saved // not a dynamic background — fall back to static
             }
@@ -4229,7 +4245,7 @@ struct Parser {
                 return .property("name", .target)
             }
             // `the value of X` → evaluate X (a string) as an expression.
-            if peekIdentifier() == "value", peekIdentifier(1) == "of" {
+            if peekIdentifier() == "value", peekIdentifier(1) == "of" || peekIdentifier(1) == "in" {
                 advance() // value
                 advance() // of
                 return .call("value", [try parsePrimary()])

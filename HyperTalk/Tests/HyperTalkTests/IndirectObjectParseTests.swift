@@ -379,3 +379,14 @@ private func parses(_ line: String) -> Bool {
     // FastTab: the debugger palettes as absent windows.
     #expect(parses("put the visible of the variable watcher into varVis"))
 }
+
+@Test func batchSixRoundTwo() {
+    // fate2:6: tempo may follow the notes.
+    #expect(parses("play \"Flute\"  \"c2w  e2w d2w a1w\"  tempo 10"))
+    // Financial Portfolio: a parenthesized runtime background in a card count.
+    #expect(parses("add the number of cds of bg (item x of bgs) to totCds"))
+    // Englisch Ninja: a computed visual-effect name.
+    #expect(parses("visual effect any line of visEffectData()"))
+    // EnglishCalendar: the value IN a container reads like of.
+    #expect(parses("put the value in card field \"year\" into Year"))
+}
