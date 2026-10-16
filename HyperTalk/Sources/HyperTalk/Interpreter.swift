@@ -1502,6 +1502,9 @@ final class Runtime {
         case .selectedField:
             guard let resolved = selectedFieldContainer() else { return "" }
             return try await containerValue(resolved, line: line)
+        case .foundLine:
+            guard let resolved = foundLineContainer() else { return "" }
+            return try await containerValue(resolved, line: line)
         case .buttonContents(let buttonRef):
             // A button's contents (HC 2.x) — read via the contents property.
             let (reference, domain, card) = try await resolveButtonRef(buttonRef, line: line)
@@ -1607,6 +1610,11 @@ final class Runtime {
             // `put X into the selectedField` — replace that field's whole
             // text; a no-op with nothing selected.
             guard let resolved = selectedFieldContainer() else { return }
+            try await setContainer(resolved, to: value, line: line)
+        case .foundLine:
+            // `put X after the foundLine` — write through the found line's
+            // chunk; a no-op before any find.
+            guard let resolved = foundLineContainer() else { return }
             try await setContainer(resolved, to: value, line: line)
         case .buttonContents(let buttonRef):
             // `put x into btn "X"` — write the button's contents (HC 2.x).
@@ -1798,6 +1806,15 @@ final class Runtime {
         }
     }
 
+    /// The last find's matched LINE as a container — re-parses the found-line
+    /// descriptor; nil before any find.
+    private func foundLineContainer() -> Container? {
+        let descriptor = host.foundValue(.line)
+        guard !descriptor.isEmpty, let container = Parser.parseSoleContainer(descriptor),
+              !isVariableContainer(container) else { return nil }
+        return container
+    }
+
     /// The selection's whole FIELD as a container — re-parses the selection's
     /// field descriptor; nil when nothing is selected.
     private func selectedFieldContainer() -> Container? {
@@ -1892,6 +1909,9 @@ final class Runtime {
         case .selectedField:
             guard let resolved = selectedFieldContainer() else { return nil }
             return try await fieldAndRange(of: resolved, line: line)
+        case .foundLine:
+            guard let resolved = foundLineContainer() else { return nil }
+            return try await fieldAndRange(of: resolved, line: line)
         case .buttonContents:
             // Button contents aren't a text-selectable field range (`select
             // line … of bkgnd btn` no-ops gracefully, like old paint selects).
@@ -1921,7 +1941,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine, .selectedField: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .selectedLine, .selectedField, .foundLine: return false
         }
     }
 

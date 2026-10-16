@@ -1133,6 +1133,7 @@ struct Parser {
             // a container at run time. (HyperCard's classic list one-liner.)
             if let click = Self.clickFields[peekIdentifier() ?? ""] {
                 advance()
+                if consumeSymbol("(") { _ = consumeSymbol(")") }   // clickline() form
                 try expectNewline()
                 return Stmt(kind: .select(.descriptor(.click(click))), line: line)
             }
@@ -1281,6 +1282,13 @@ struct Parser {
                 let value = try parseSetValue()
                 try expectNewline()
                 return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
+            }
+            // `set [the] numberFormat to 0.###` (Broker's) — the format is
+            // raw text, not an expression (`.#`, `0.###` don't tokenize).
+            if ["numberformat"].contains(property.lowercased()), consumeWord("to") {
+                let value = captureRestOfLineAsText()
+                try expectNewline()
+                return Stmt(kind: .setGlobalProperty("numberformat", value), line: line)
             }
             // Object-less property: `set the itemDelimiter to ";"`.
             guard consumeWord("to") else {
@@ -1547,6 +1555,13 @@ struct Parser {
             if foundOffset == 1 { advance() } // the
             advance() // foundChunk
             return .foundChunk
+        }
+        // `[the] foundLine` as a destination — the line the last find
+        // matched (`put return & accntID after the foundline`, Broker's).
+        if peekIdentifier(foundOffset) == "foundline" {
+            if foundOffset == 1 { advance() } // the
+            advance() // foundLine
+            return .foundLine
         }
         // `[the] selectedChunk` as a destination is the selection itself —
         // `put noEOL(selTx) into the selectedChunk` (EmailLog), `put tab &
@@ -1996,11 +2011,13 @@ struct Parser {
         var isContainerSort = false
         let theOffset = peekIdentifier() == "the" ? 1 : 0
         if let unit = peekIdentifier(theOffset), unit == "lines" || unit == "items",
-           peekIdentifier(theOffset + 1) == "of" {
+           peekIdentifier(theOffset + 1) == "of" || peekIdentifier(theOffset + 1) == "in" {
+            // `sort items in line 1 of cd fld ID 142` (Balls!) — `in` works
+            // like `of`, and the target may be a chunk of a field.
             if theOffset == 1 { advance() } // the
             sortItems = unit == "items"
             advance() // lines / items
-            advance() // of
+            advance() // of / in
             isContainerSort = true
         } else if startsFieldContainer() {
             isContainerSort = true
@@ -2123,6 +2140,19 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .set(property: "visible", object: .window(name),
                                    value: .stringLiteral(visible ? "true" : "false")), line: line)
+        }
+        // `show/hide [the] name of btn X` (BSA Troop Tracker) — showName.
+        do {
+            let theOffset = peekIdentifier() == "the" ? 1 : 0
+            if peekIdentifier(theOffset) == "name", peekIdentifier(theOffset + 1) == "of" {
+                if theOffset == 1 { advance() }
+                advance(); advance()   // name of
+                if let object = try? parseObjectExpr() {
+                    try expectNewline()
+                    return Stmt(kind: .set(property: "showname", object: object,
+                                           value: .stringLiteral(visible ? "true" : "false")), line: line)
+                }
+            }
         }
         // Ignorable targets.
         let ignorable = ["menubar", "menu", "titlebar", "message", "msg", "tool",
@@ -2778,7 +2808,18 @@ struct Parser {
             index = saved
             return nil
         }
-        let isID = consumeWord("id")
+        var isID = consumeWord("id")
+        // `fld ID` (Broker's Bailiwick) — a field NAMED "ID": the keyword was
+        // the name when nothing nameable follows it.
+        if isID {
+            switch current.kind {
+            case .string, .number, .symbol("("): break
+            case .identifier(let w) where !Self.expressionConnectors.contains(w) && w != "then": break
+            default:
+                isID = false
+                return FieldRef(domain: domain, isID: false, expr: .stringLiteral("ID"), card: try parseFieldCardRef())
+            }
+        }
         // Parse the name/number with bare `<word> of <object>` property reads
         // suppressed, so a bareword-named field with a card scope — `cd fld
         // verse of cd haiku` (Haiku Master) — stops the name at `verse` and
@@ -3359,6 +3400,7 @@ struct Parser {
     /// The types recognized by `is a[n] <type>`.
     static let typeNames: Set<String> = [
         "number", "integer", "point", "rect", "rectangle", "logical", "boolean", "date",
+        "text",   // `if theLine is not a text` (Broker's Bailiwick) — any value is a text
     ]
 
     /// Functions readable as `the <fn> of X`, not just `fn(X)`.

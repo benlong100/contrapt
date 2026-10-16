@@ -216,3 +216,17 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("select selectedline()"))
     #expect(parses("if selectedchunk() ≠ empty then beep"))
 }
+
+@Test func batchThreeRoundTwo() {
+    #expect(parses("sort items in line 1 of cd fld ID 142 ascending numeric"))   // Balls!
+    #expect(parses("answer \"Please fill in \"\"Lotto 5 / ___\"\" field in Prefs\"")) // doubled quotes
+    #expect(parses("put \"\" into x"))                                            // empty string unharmed
+    #expect(parses("select clickline()"))                                         // Book Reporter's Guild
+    #expect(parses("if theLine is not a text then beep"))                         // Broker's Bailiwick
+    #expect(parses("set numberformat to 0.###"))
+    #expect(parses("set the numberformat to .#"))
+    #expect(parses("put return & accntID after the foundline"))
+    #expect(parses("if line 1 of me ≠ line 1 of fld ID then beep"))               // field named "ID"
+    #expect(parses("show name of btn stackName"))                                 // BSA Troop Tracker
+    #expect(parses("hide the name of btn 3"))
+}

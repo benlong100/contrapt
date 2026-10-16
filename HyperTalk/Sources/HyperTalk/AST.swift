@@ -337,6 +337,10 @@ indirect enum Container {
     /// function result (`the textHeight of item 1 of theFields()`, Power
     /// Tools). Reading evaluates; writing is an error.
     case expressionValue(Expr)
+    /// `[the] foundLine` as a container — the line the last `find` matched
+    /// (`put return & x after the foundLine`, Broker's Bailiwick). Resolved at
+    /// run time by re-parsing the found-line descriptor.
+    case foundLine
     /// `[the] selectedField` as a container — the whole field the selection
     /// sits in (`put theNewText into the selectedField`, AFI Catalog).
     case selectedField

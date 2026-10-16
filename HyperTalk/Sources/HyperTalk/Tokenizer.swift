@@ -139,6 +139,14 @@ struct Tokenizer {
         while let character = current {
             if Self.closesString(opener: opener, character) {
                 advance()
+                // A DOUBLED quote is a literal quote inside the string —
+                // `answer "Please fill in ""Lotto 5"" field"` (Balls!). An
+                // empty string (`""` then anything else) is unaffected.
+                if opener == "\"", current == "\"" {
+                    text.append("\"")
+                    advance()
+                    continue
+                }
                 return Token(kind: .string(text), line: startLine)
             }
             if character == "\n" {
