@@ -403,3 +403,19 @@ private func parses(_ line: String) -> Bool {
     // FontCard: last-marked-card field owner (approximated by last).
     #expect(parses("put field FontNameSize of last marked cd into NameSize"))
 }
+
+@Test func batchSixRoundFour() {
+    // HyperCard 10th Anniversary: quoted junk in a handler's parameter slot.
+    #expect((try? Parser.parse("on closeCard \"DMikel\"\nbeep\nend closeCard")) != nil)
+    // Know Thyself: a number destination is the variable of that spelling.
+    #expect(parses("put 100 into 100"))
+    // ECM: reversed type args mean type the key with the modifier.
+    #expect(parses("if it is \"Quit\" then type commandkey with \"q\""))
+    // Ever Be So Humble / Address Ace: putting into the name property renames.
+    #expect(parses("put bg field \"Paths\" into the short name of this cd"))
+    #expect(parses("put \"registered\" into short name of me"))
+    // ExtractIt!: an answer-file type list.
+    #expect(parses("answer file \"Select:\" of type \"PICT\",\"PNTG\""))
+    // Flying box: go to home card.
+    #expect(parses("go to home card"))
+}

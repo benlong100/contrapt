@@ -261,9 +261,15 @@ struct Parser {
         // `on grebe (old)` (Achievement of Arms) — parameters may sit in
         // parentheses, as some authors wrote them.
         let parenthesized = consumeSymbol("(")
-        while let parameter = peekIdentifier() {
-            advance()
-            parameters.append(parameter)
+        while true {
+            if let parameter = peekIdentifier() {
+                advance()
+                parameters.append(parameter)
+            } else if case .string = current.kind {
+                // Quoted junk in the parameter slot — `on closeCard "DMikel"`
+                // (HyperCard 10th Anniversary) — consumed and ignored.
+                advance()
+            } else { break }
             if !consumeSymbol(",") { break }
         }
         if parenthesized { _ = consumeSymbol(")") }
@@ -468,6 +474,9 @@ struct Parser {
                 if consumeWord("of") {
                     _ = consumeWord("type")
                     type = try parseExpression()
+                    // A type LIST — `of type "PICT","PNTG"` (ExtractIt!) —
+                    // extra types consumed (the first wins, best effort).
+                    while consumeSymbol(",") { _ = try parseExpression() }
                 }
                 try expectNewline()
                 return Stmt(kind: .answerFile(prompt, type: type), line: line)
@@ -1015,6 +1024,15 @@ struct Parser {
                 return Stmt(kind: .resetPaint, line: line)
             }
             if verb == "type", current.kind != .newline, current.kind != .endOfScript {
+                // Reversed args — `type commandkey with "q"` (ECM) means
+                // type "q" with commandKey.
+                if let w = peekIdentifier(), w == "commandkey" || w == "cmdkey",
+                   peekIdentifier(1) == "with" {
+                    advance(); advance()
+                    let value = try parseExpression()
+                    try expectNewline()
+                    return Stmt(kind: .typeText(value, withCommandKey: true), line: line)
+                }
                 let value = try parseExpression()
                 var withCommand = false
                 if consumeWord("with") {
@@ -1563,6 +1581,21 @@ struct Parser {
             index = saved
         }
 
+        // `put X into [the] [short|long] name of <object>` renames it, like
+        // set — `put bg field "Paths" into the short name of this cd` (Ever
+        // Be So Humble), `put "registered" into short name of me` (Address
+        // Ace).
+        if mode == .into {
+            let savedProp = index
+            _ = consumeWord("the")
+            _ = consumeWord("short") || consumeWord("long")
+            if consumeWord("name"), consumeWord("of"), let object = try? parseObjectExpr(),
+               current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .set(property: "name", object: object, value: value), line: line)
+            }
+            index = savedProp
+        }
         let container = try parseContainer(line: line)
         try expectNewline()
         return Stmt(kind: .put(value, mode, container), line: line)
@@ -1780,6 +1813,12 @@ struct Parser {
         if let name = peekIdentifier() {
             advance()
             return try containerBrackets(.variable(name), line: line)
+        }
+        // A number as a destination is the variable of that spelling —
+        // `put 100 into 100` (Know Thyself) stores and discards.
+        if case .number(let n) = current.kind {
+            advance()
+            return .variable(Value.string(from: n))
         }
         // A quoted single word as a destination is the variable of that name
         // — `put 0 into "score"` (Canada/Central Amer. map games; the same
@@ -2467,6 +2506,7 @@ struct Parser {
             _ = consumeCardWord()
             target = .last
         } else if consumeWord("home") {
+            _ = consumeCardWord() // `go to home card` (Flying box)
             target = .home
         } else if consumeWord("back") {
             target = .back
