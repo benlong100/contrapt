@@ -1727,6 +1727,14 @@ struct Parser {
             advance()
             return try containerBrackets(.variable(name), line: line)
         }
+        // A quoted single word as a destination is the variable of that name
+        // — `put 0 into "score"` (Canada/Central Amer. map games; the same
+        // handler reads `score` as a variable right after).
+        if case .string(let quoted) = current.kind,
+           !quoted.isEmpty, !quoted.contains(" ") {
+            advance()
+            return .variable(quoted)
+        }
         throw ScriptError(line: line, message: "Expected a variable, field, or chunk here.")
     }
 

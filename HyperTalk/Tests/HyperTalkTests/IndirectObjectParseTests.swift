@@ -305,3 +305,11 @@ private func parses(_ line: String) -> Bool {
     // The windowed form keeps its modifier.
     #expect(parses("go to card 1 in stack \"Sean's World II Help\" in a new window"))
 }
+
+@Test func batchFourRoundSeven() {
+    // Canada/Central Amer. map games: a quoted word as a put destination is
+    // the variable of that name.
+    #expect(parses("put 0 into \"score\""))
+    // Multi-word strings stay errors.
+    #expect(!parses("put 0 into \"two words\""))
+}

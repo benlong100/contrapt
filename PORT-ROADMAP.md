@@ -362,8 +362,9 @@ oracle questions:
     concat before the continuation joins `into`. Oracle: does HC treat the
     trailing & as concat-with-empty?
  (Former #3, the nested chunk-range `of` chain, was parser greed — fixed
- in 60b6907.) Also deferred: `the clickChunk` as a container (AFI Catalog)
- — needs the host to record the clicked word's chunk descriptor.
+ in 60b6907. The former clickChunk deferral SHIPPED 2026-10-15 in 2c07645:
+ app hit test + web bridge both record the clicked word's chunk
+ descriptor.)
 
 **Text-metrics fidelity — RESOLVED 2026-10-15 (Basilisk ground truth;
 items 1–3 done, 4 open).** The original "~12 card-px taller" observation
