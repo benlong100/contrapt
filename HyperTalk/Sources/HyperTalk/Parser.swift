@@ -634,7 +634,15 @@ struct Parser {
             // it goes to the current card (`send openCard`, `send "calc" && x`),
             // travelling the normal card→background→stack path from there.
             // A trailing `in <amount> [unit]` schedules it instead (timed send).
-            let message = try parseExpression()
+            var message = try parseExpression()
+            // A juxtaposed argument joins the message with a space — `send
+            // sendWhenFound lookingFor to this card` (Data Transfer Info.)
+            // dispatches "<handler name> <arg value>", as HyperCard does.
+            while peekIdentifier() != "to", peekIdentifier() != "in",
+                  current.kind != .newline, current.kind != .endOfScript {
+                let next = try parsePrimary()
+                message = .binary(.concat, .binary(.concat, message, .stringLiteral(" ")), next)
+            }
             var object: ObjectExpr = .thisCard
             if consumeWord("to") {
                 // `send <expr> to program <app> [with/without reply]` — an
@@ -3405,10 +3413,18 @@ struct Parser {
         // `any` resolve against the live count when evaluated.
         if let w = peekIdentifier(), Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil,
            let next = peekIdentifier(1),
-           isPartKind(next) || Self.cardWords.contains(next) || Self.backgroundWords.contains(next) {
+           isPartKind(next) || Self.cardWords.contains(next) || Self.backgroundWords.contains(next)
+           || next == "menu" {
             let numeric = Self.ordinals[w]
             let keyword = Self.ordinalKeyword(w)
             advance() // the ordinal word
+            // `second menu` — a menu by position (`the name of second menu`,
+            // the Japanese returnKey idiom). Keyword ordinals fall back to
+            // the first menu (best effort — menu counts aren't modeled).
+            if peekIdentifier() == "menu" {
+                advance()
+                return .menu(.numberLiteral(Double(numeric ?? 1)))
+            }
             // Optional domain qualifier before a part kind (`last cd btn`).
             var ordDomain = HyperTalkObject.PartDomain.any
             if let q = peekIdentifier(), Self.cardWords.contains(q), isPartKind(peekIdentifier(1)) {
@@ -3494,8 +3510,15 @@ struct Parser {
             if consumeWord("id") {
                 return try scopeCardObject(.cardByID(try parsePrimary()))
             }
-            // A bare `card`/`cd` with nothing naming a specific card → this card.
+            // A bare `card`/`cd` with nothing naming a specific card → this
+            // card — at the end of the line, or before a keyword that can't
+            // start a card name (`if it is not within the rect of card then`,
+            // Drag&Drop).
             if current.kind == .newline || current.kind == .endOfScript {
+                return .thisCard
+            }
+            if let next = peekIdentifier(),
+               ["then", "is", "and", "or", "into", "end", "with", "without"].contains(next) {
                 return .thisCard
             }
             return try scopeCardObject(.card(try parsePrimary()))
@@ -4350,6 +4373,19 @@ struct Parser {
                     return .countDynamic(try parsePrimary())
                 }
                 index = saved // e.g. `number of this cd` → the ordinal property
+                // `number of the target` / `of me` stays a part-number read
+                // even where bare property-of is suppressed — `card field
+                // number of the target` (Disk Information) indexes a field
+                // by the target's part number.
+                if suppressBarePropertyOf, peekIdentifier() == "of",
+                   peekIdentifier(1) == "the", peekIdentifier(2) == "target" {
+                    advance(); advance(); advance()
+                    return .property("number", .target)
+                }
+                if suppressBarePropertyOf, peekIdentifier() == "of", peekIdentifier(1) == "me" {
+                    advance(); advance()
+                    return .property("number", .me)
+                }
             }
             // Bare ordinal chunk: `last char of X`, `first word of X`,
             // `middle line of X` — HyperTalk's `the` is optional. Allowed even

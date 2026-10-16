@@ -313,3 +313,14 @@ private func parses(_ line: String) -> Bool {
     // Multi-word strings stay errors.
     #expect(!parses("put 0 into \"two words\""))
 }
+
+@Test func batchFiveRoundOne() {
+    // Japanese returnKey idiom: a menu by ordinal position.
+    #expect(parses("if the name of second menu is \"x\" then beep"))
+    // Data Transfer Info.: a juxtaposed send argument joins the message.
+    #expect(parses("send sendWhenFound lookingFor to this card"))
+    // Disk Information: a field indexed by the target's part number.
+    #expect(parses("if folders and card field number of the target is not empty then beep"))
+    // Drag&Drop: bare `card` before a keyword is this card.
+    #expect(parses("if it is not within the rect of card then beep"))
+}
