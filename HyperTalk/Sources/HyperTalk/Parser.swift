@@ -2943,9 +2943,24 @@ struct Parser {
         }
         let domain: HyperTalkObject.PartDomain
         if let w = peekIdentifier(), fieldWords.contains(w) {
-            // A bare `field` at the end of the line is a VARIABLE of that
-            // name (`put it into Field` — The Delimiter Fixer).
-            if tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+            // A bare `field` that nothing nameable follows is a VARIABLE of
+            // that name — `put it into Field`, `item i of Field, …` (The
+            // Delimiter Fixer).
+            let bails: Bool
+            switch tokens[index + 1].kind {
+            case .newline, .endOfScript: bails = true
+            // Punctuation that can't start a descriptor bails. A connector
+            // word bails only when ANOTHER identifier follows it (`chars in
+            // field into FieldChars` — The Delimiter Fixer, where `field` is
+            // a parameter) — otherwise the word names the field (`field From
+            // & return` — AOL Mail Reader).
+            case .symbol(let sym): bails = sym != "("
+            case .identifier(let n) where n == "then": bails = true
+            case .identifier(let n) where Self.expressionConnectors.contains(n):
+                if case .identifier = tokens[index + 2].kind { bails = true } else { bails = false }
+            default: bails = false
+            }
+            if bails {
                 index = saved
                 return nil
             }

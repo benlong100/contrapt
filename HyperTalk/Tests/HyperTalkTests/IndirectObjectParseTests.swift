@@ -335,3 +335,13 @@ private func parses(_ line: String) -> Bool {
     // Developer Stack: a put whose value was all comment no-ops.
     #expect(parses("if x then put"))
 }
+
+@Test func batchFiveRoundThree() {
+    // The Delimiter Fixer: `field` as a handler parameter stays a variable
+    // before punctuation or a connector-plus-identifier.
+    #expect(parses("ConvertToFixedField item i of Field, line i of columns"))
+    #expect(parses("put the number of chars in field into FieldChars"))
+    // AOL Mail Reader: a connector word still NAMES a field when punctuation
+    // follows it.
+    #expect(parses("put \"From:\" && field From & return into exportVar"))
+}
