@@ -510,6 +510,9 @@ struct Parser {
             }
             var buttons: [Expr] = []
             if consumeWord("with") {
+                // A doubled `with` across a line continuation (Ez-Mail's
+                // `with¬ / with "Read" or "Delete"`).
+                _ = consumeWord("with")
                 // Buttons are separated by `or` (parsed below it so `or` isn't
                 // swallowed as the boolean operator); some stacks use commas
                 // instead (`answer "…" with "No","Yes"`).
@@ -2155,6 +2158,9 @@ struct Parser {
         } else {
             cardRef = .expression(try parsePrimary())
         }
+        // `unmark card "Template" of bg "Users"` (Cindy's FC HyperAnalyzer)
+        // — the background owner is consumed (cards are stack-global here).
+        _ = try? parseOfBackground()
         try expectNewline()
         return Stmt(kind: .setMarked(mark: mark, .card(cardRef)), line: line)
     }
@@ -2759,6 +2765,13 @@ struct Parser {
                 left = .binary(.greater, left, try parseConcatenation())
             } else if peekIdentifier() == "is" {
                 advance()
+                // `is <` / `is >=` — a redundant `is` before an operator
+                // (`IF the userlevel is < 5` — Cool Address Book): the
+                // operator wins; loop again to pick it up.
+                if case .symbol(let sym) = current.kind,
+                   ["<", ">", "<=", ">=", "=", "<>"].contains(String(sym)) {
+                    continue
+                }
                 let negated = consumeWord("not")
                 // `is [not] a[n] <type>` — a type test.
                 if peekIdentifier() == "a" || peekIdentifier() == "an",
@@ -3155,8 +3168,12 @@ struct Parser {
         let ref: CardRef
         if consumeWord("next") { _ = consumeCardWord(); ref = .next }
         else if consumeWord("previous") || consumeWord("prev") { _ = consumeCardWord(); ref = .previous }
-        else if consumeWord("first") { _ = consumeCardWord(); ref = .first }
-        else if consumeWord("last") { _ = consumeCardWord(); ref = .last }
+        else if consumeWord("first") { _ = consumeWord("marked"); _ = consumeCardWord(); ref = .first }
+        else if consumeWord("last") {
+            // `of last marked cd` (FontCard) — approximated by the last card
+            // (marked ordinals aren't modeled as field owners).
+            _ = consumeWord("marked"); _ = consumeCardWord(); ref = .last
+        }
         else if consumeWord("this") { _ = consumeCardWord() || consumeBackgroundWord(); ref = .current }
         else if consumeWord("recent") { _ = consumeCardWord(); ref = .previous } // most recent ≈ previous
         else if consumeWord("marked") {
@@ -3613,6 +3630,11 @@ struct Parser {
             }
             if let next = peekIdentifier(),
                ["then", "is", "and", "or", "into", "end", "with", "without"].contains(next) {
+                return .thisCard
+            }
+            // Before an operator too: `(short id of card = StopSave)` (Demo
+            // Stack). A parenthesis still starts a computed name.
+            if case .symbol(let sym) = current.kind, sym != "(" {
                 return .thisCard
             }
             return try scopeCardObject(.card(try parsePrimary()))

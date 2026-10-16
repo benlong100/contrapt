@@ -390,3 +390,16 @@ private func parses(_ line: String) -> Bool {
     // EnglishCalendar: the value IN a container reads like of.
     #expect(parses("put the value in card field \"year\" into Year"))
 }
+
+@Test func batchSixRoundThree() {
+    // Cool Address Book: a redundant `is` before a comparison operator.
+    #expect(parses("IF the userlevel is < 5 then set userlevel to 5"))
+    // Demo Stack: bare card before an operator is this card.
+    #expect(parses("repeat until (short id of card = StopSave)\nend repeat"))
+    // Ez-Mail: a doubled `with` across a continuation.
+    #expect(parses("answer \"What?\" with with \"Read\" or \"Delete\""))
+    // Cindy's FC HyperAnalyzer: unmark with a background owner.
+    #expect(parses("unmark card \"Template\" of bg \"Users\""))
+    // FontCard: last-marked-card field owner (approximated by last).
+    #expect(parses("put field FontNameSize of last marked cd into NameSize"))
+}
