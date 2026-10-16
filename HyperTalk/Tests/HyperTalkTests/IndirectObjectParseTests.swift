@@ -360,3 +360,8 @@ private func parses(_ line: String) -> Bool {
     // Annuaire NET: url before an operator is a variable.
     #expect(parses("put char 1 to typeAdr of URL &HREF into bg fld \"HREF\""))
 }
+
+@Test func batchFiveRoundFive() {
+    // PAGER PROG#1: a run of the same mark is one literal.
+    #expect(parses("put ######### into BEEPERNUM"))
+}

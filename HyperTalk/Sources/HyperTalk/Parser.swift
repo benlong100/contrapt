@@ -4563,7 +4563,14 @@ struct Parser {
             if case .symbol(let sym) = current.kind,
                ["?", "%", "$", "#", ".", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
                 advance()
-                return .stringLiteral(String(sym))
+                // A run of the same mark is one literal — `put #########
+                // into BEEPERNUM` (PAGER PROG#1).
+                var text = String(sym)
+                while case .symbol(let next) = current.kind, next == sym {
+                    text.append(next)
+                    advance()
+                }
+                return .stringLiteral(text)
             }
             throw ScriptError(line: line, message: "Expected a value here, but found \(describe(current)).")
         }
