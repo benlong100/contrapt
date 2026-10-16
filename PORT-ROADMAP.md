@@ -344,11 +344,14 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**IA corpus sweep — batches 1-3 DONE 2026-10-15 (batch 4 in flight).**
-Corpus 302 → 967 stacks / 34,331 scripts via Scripts/ia-fetch-stacks.py
-(~3,100 items remain; `python3 Scripts/ia-fetch-stacks.py 200 <page>`).
-Parse errors per batch: b1 99→54, b2 126→90, b3 164→132 — each batch
-yields 15-20 real language gaps before hitting its author-bug floor.
+**IA corpus sweep — batches 1-4 DONE 2026-10-15.**
+Corpus 302 → 1,254 stacks / 42,099 scripts via Scripts/ia-fetch-stacks.py
+(~2,900 items remain; `python3 Scripts/ia-fetch-stacks.py 200 <page>`).
+Parse errors per batch: b1 99→54, b2 126→90, b3 164→132, b4 253→165 —
+each batch yields 15-20 real language gaps before its author-bug floor.
+Batch 4 highlights: loose multi-word set values, the clipboard container,
+the clickChunk container (host + web), document/folder existence, raw
+menuMessage text, ordinal-chunk go targets, ®™© in identifiers.
 ~60 real gaps fixed across the sweep (commits c7d9c23 … 72f2b40), incl.
 doubled-quote escaping, foundLine/selectedLine/selectedField/clickLine
 containers, button-contents everything, sort-in-chunk, selected*() call
