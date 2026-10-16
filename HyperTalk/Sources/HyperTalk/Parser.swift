@@ -4253,6 +4253,15 @@ struct Parser {
                 advance() // of
                 return .call(word, [try parsePrimary()])
             }
+            // `param` stays a function even where bare property-of reads are
+            // suppressed — `item 1 of line param of 2 of cd fld "X"` (Clinton
+            // Issues) uses it as a chunk index. (The general suppression
+            // exists for names like `Ln` that shadow functions; `param` as a
+            // variable followed by `of` has no sane reading.)
+            if suppressBarePropertyOf, word.lowercased() == "param", peekIdentifier() == "of" {
+                advance() // of
+                return .call(word, [try parsePrimary()])
+            }
             if !suppressBarePropertyOf, peekIdentifier() == "of" {
                 advance() // of
                 // `textStyle of line 2 of fld "X"` — a run property of a chunk.

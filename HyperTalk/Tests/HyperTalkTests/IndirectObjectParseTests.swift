@@ -237,3 +237,8 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("mark it"))                                           // Caesar: card by value
     #expect(parses("if the number of the next card is not 1 then go next card"))  // Broker's
 }
+
+@Test func paramAsChunkIndex() {
+    // Clinton Issues: `the param of N` inside a chunk index position.
+    #expect(parses("put the param of 3 into item 1 of line param of 2 of cd fld \"whatToPrint\""))
+}
