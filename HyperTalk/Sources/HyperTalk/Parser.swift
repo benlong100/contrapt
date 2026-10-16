@@ -1894,6 +1894,12 @@ struct Parser {
                 advance() // foundField / selectedField
             } else if let reference = try parseFieldRefIfPresent() {
                 field = reference
+                // `find whole it in fld "notes" in marked cards` (Caesar) —
+                // the marked-cards restriction is consumed (search-all, best
+                // effort).
+                if peekIdentifier() == "in", peekIdentifier(1) == "marked" {
+                    advance(); advance(); _ = consumeCardWord()
+                }
             } else if current.kind != .newline, current.kind != .endOfScript {
                 // `find x in theField` — a variable (or expression) holding a
                 // whole field descriptor ("card field 3"), re-parsed at run
@@ -1982,6 +1988,13 @@ struct Parser {
         // A single card: `mark [this] card [N | "name" | id N]` (bare = current).
         _ = consumeWord("this")
         guard consumeCardWord() else {
+            // `mark it` (Caesar) — a card named by a value. A bare `mark`
+            // stays the current card.
+            if current.kind != .newline, current.kind != .endOfScript {
+                let named = try parsePrimary()
+                try expectNewline()
+                return Stmt(kind: .setMarked(mark: mark, .card(.expression(named))), line: line)
+            }
             try expectNewline()
             return Stmt(kind: .setMarked(mark: mark, .card(nil)), line: line)
         }
@@ -2128,6 +2141,7 @@ struct Parser {
         // `show/hide window "X"` toggles a scripted palette's visibility.
         if peekIdentifier() == "window" {
             advance()
+            _ = consumeWord("id")   // `show window id gFindWindow` (BulkChange)
             let name = (current.kind == .newline || current.kind == .endOfScript)
                 ? Expr.stringLiteral("") : try parsePrimary()
             // `show window "X" at "h,v"` / `at 527,10` positions the window as
@@ -3053,6 +3067,15 @@ struct Parser {
     /// `this card` / `this background` / `this stack`.
     private mutating func parseObjectExpr() throws -> ObjectExpr {
         let line = current.line
+        // `the next card` / `the prev card` as an object — `the number of
+        // the next card` (Broker's Bailiwick). The relative forms also parse
+        // without `the` further below; this handles the article.
+        if peekIdentifier() == "the",
+           let w = peekIdentifier(1), ["next", "previous", "prev"].contains(w),
+           let c = peekIdentifier(2), Self.cardWords.contains(c) {
+            advance(); advance(); advance()
+            return .cardRelative(w == "next" ? .next : .previous)
+        }
         if consumeWord("this") {
             // `this card` may carry a background scope: `the number of this
             // card in this background` (Car Care's page counter) numbers the

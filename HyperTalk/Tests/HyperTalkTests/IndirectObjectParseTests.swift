@@ -230,3 +230,10 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("show name of btn stackName"))                                 // BSA Troop Tracker
     #expect(parses("hide the name of btn 3"))
 }
+
+@Test func batchThreeRoundThree() {
+    #expect(parses("show window id gFindWindow"))                        // BulkChange
+    #expect(parses("find whole it in fld \"notes\" in marked cards"))    // Caesar
+    #expect(parses("mark it"))                                           // Caesar: card by value
+    #expect(parses("if the number of the next card is not 1 then go next card"))  // Broker's
+}
