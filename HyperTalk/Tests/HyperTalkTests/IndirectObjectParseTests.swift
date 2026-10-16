@@ -273,3 +273,14 @@ private func parses(_ line: String) -> Bool {
     // CD Stack: the clickLine is complete without `of`; the chunk keeps it.
     #expect(parses("get line word 2 of the clickline of fld \"Card id\""))
 }
+
+@Test func batchFourRoundFour() {
+    // Annuaire NET: a bare `url` at end of line is a variable, not the container.
+    #expect(parses("put line 2 of bg fld \"comments\" into url"))
+    // Colorizing HC Aids: this-card scope after an ordinal part is identity.
+    #expect(parses("put the id of the last btn of this cd into iden"))
+    // Coyote's Functions: a chunk expression names the background; ordinal
+    // menuItem put with raw menuMsg text.
+    #expect(parses("put short name of bkgnd item 2 of x into y"))
+    #expect(parses("put \"Asia\" after the third menuItem of menu \"Regions\" with MenuMsg go to card \"Asia\""))
+}

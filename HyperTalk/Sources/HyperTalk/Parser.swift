@@ -1468,9 +1468,13 @@ struct Parser {
         }
         if let w = peekIdentifier(),
            w == "menuitem" || w == "menubar"
-           || ((Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil) && peekIdentifier(1) == "menuitem") {
+           || ((Self.ordinals[w] != nil || Self.ordinalKeyword(w) != nil) && peekIdentifier(1) == "menuitem")
+           || (w == "the" && (peekIdentifier(1).map { Self.ordinals[$0] != nil || Self.ordinalKeyword($0) != nil } ?? false)
+               && peekIdentifier(2) == "menuitem") {
             // Renaming one item / writing the menu bar — accept and ignore
             // (rare forms; `set the name of menuItem …` is the modeled path).
+            // `put "Asia" after the third menuItem of menu "Regions" with
+            // MenuMsg go to card "Asia"` (Coyote's Functions) lands here too.
             while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
@@ -1657,8 +1661,11 @@ struct Parser {
             return .selectedLine
         }
         // `url "https://…"` as a destination — `put <body> into url "…"` is an
-        // HTTP PUT. Checked before the bare-variable fallback.
-        if peekIdentifier() == "url" {
+        // HTTP PUT. Checked before the bare-variable fallback. A bare `url`
+        // at the end of the line is a variable of that name (`put line 2 of
+        // bg fld "comments" into url` — Annuaire NET).
+        if peekIdentifier() == "url",
+           !(tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript) {
             advance()
             return .url(try parseExpression())
         }
@@ -3353,6 +3360,14 @@ struct Parser {
                 if let n = numeric {
                     return .part(kind: kind, domain: ordDomain, name: .numberLiteral(Double(n)), card: parsePartScopeIfPresent())
                 }
+                // `the last btn of this cd` (Colorizing HC Aids) — a this-card
+                // or this-bg owner is the identity; consume it. Other owners
+                // aren't modeled for last/middle/any.
+                let savedScope = index
+                if !(consumeWord("of") && consumeWord("this")
+                        && (consumeCardWord() || consumeBackgroundWord())) {
+                    index = savedScope
+                }
                 return .partByOrdinal(kind: kind, domain: ordDomain, ordinal: keyword!)
             }
             if let c = peekIdentifier(), Self.cardWords.contains(c) {
@@ -3399,9 +3414,17 @@ struct Parser {
             // `bg theBgName` — a bareword variable naming the background
             // (`there is a background theBgName`, HyperHacker). Consumed and
             // ignored (one bg context); stop at a condition/statement keyword.
+            // The name may be a whole chunk expression — `bkgnd item 2 of x`
+            // (Coyote's Functions) — parsed and ignored the same way.
             else if let n = peekIdentifier(),
                     !["then", "is", "of", "in", "to", "and", "or", "into", "from", "end", "the", "without"].contains(n) {
-                advance()
+                let savedName = index
+                if Self.chunkKinds[n] != nil, (try? parsePrimary()) != nil {
+                    // the chunk expression was consumed
+                } else {
+                    index = savedName
+                    advance()
+                }
             }
             return .thisBackground
         }
