@@ -419,3 +419,14 @@ private func parses(_ line: String) -> Bool {
     // Flying box: go to home card.
     #expect(parses("go to home card"))
 }
+
+@Test func batchSixRoundFive() {
+    // floppy labeler: print-all with a page-geometry tail.
+    #expect(parses("if it is \"Yes\" then print all cards from 57,13 to 476,317"))
+    // Forces and Faces: a concat tail after a print field (first field wins).
+    #expect(parses("print card field \"odd page\" && return && card field \"even page\""))
+    // Sons1: unmark the Nth marked card.
+    #expect(parses("if doWhat is \"Unmark\" then unmark marked cd x"))
+    // Font Shower: a bare colon as a set value.
+    #expect(parses("set the ItemDelimiter to :"))
+}

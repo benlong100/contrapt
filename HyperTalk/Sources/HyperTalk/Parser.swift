@@ -722,11 +722,19 @@ struct Parser {
             advance()
             if peekIdentifier() == "all", peekIdentifier(1) == "cards" {
                 advance(); advance()
+                // `print all cards from 57,13 to 476,317` (floppy labeler) —
+                // a page-geometry tail; consumed, the cards print whole.
+                if peekIdentifier() == "from" {
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                }
                 try expectNewline()
                 return Stmt(kind: .printCards(.all), line: line)
             }
             if peekIdentifier() == "marked", peekIdentifier(1) == "cards" {
                 advance(); advance()
+                if peekIdentifier() == "from" {
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                }
                 try expectNewline()
                 return Stmt(kind: .printCards(.marked), line: line)
             }
@@ -746,7 +754,13 @@ struct Parser {
                 if consumeWord("with") { _ = try? parseExpression() }
                 // `print bkgnd field "3" cards from 0,0 to 510,714` (Fossils)
                 // — a page-geometry tail; consumed, the field prints whole.
-                if peekIdentifier() == "cards" || peekIdentifier() == "card" {
+                // A concat tail — `print card field "odd page" && return &&
+                // card field "even page"` (Forces and Faces) — prints the
+                // FIRST field, best effort; the rest is consumed.
+                if peekIdentifier() == "cards" || peekIdentifier() == "card"
+                    || { if case .symbol("&") = current.kind { return true }
+                         if case .symbol("&&") = current.kind { return true }
+                         return false }() {
                     while current.kind != .newline, current.kind != .endOfScript { advance() }
                 }
                 try expectNewline()
@@ -2178,6 +2192,13 @@ struct Parser {
         }
         // A single card: `mark [this] card [N | "name" | id N]` (bare = current).
         _ = consumeWord("this")
+        // `unmark marked cd x` (Sons1) — the Nth MARKED card.
+        if peekIdentifier() == "marked", let c = peekIdentifier(1), Self.cardWords.contains(c) {
+            advance(); advance()
+            let n = try parsePrimary()
+            try expectNewline()
+            return Stmt(kind: .setMarked(mark: mark, .card(.markedCard(n))), line: line)
+        }
         guard consumeCardWord() else {
             // `mark it` (Caesar) — a card named by a value. A bare `mark`
             // stays the current card.
@@ -4685,7 +4706,7 @@ struct Parser {
             // `DelimitedChunk(…, #, false)` (Dartmouth XCMD's). Operators
             // and brackets keep their meaning; only inert marks read as text.
             if case .symbol(let sym) = current.kind,
-               ["?", "%", "$", "#", ".", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
+               ["?", "%", "$", "#", ".", ":", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
                 advance()
                 // A run of the same mark is one literal — `put #########
                 // into BEEPERNUM` (PAGER PROG#1).
