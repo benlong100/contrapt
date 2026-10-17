@@ -1670,6 +1670,17 @@ struct Parser {
         }
 
         guard let mode else {
+            // A missing `into` before a field container — `put empty  field
+            // "event"` (LaboratoryToolbox), `put empty card field Zufall`
+            // (LottoGlueck) — reads as into.
+            if let w = peekIdentifier(),
+               ["field", "fld"].contains(w)
+                || ((Self.cardWords.contains(w) || Self.backgroundWords.contains(w))
+                    && ["field", "fld"].contains(peekIdentifier(1) ?? "")) {
+                let container = try parseContainer(line: line)
+                try expectNewline()
+                return Stmt(kind: .put(value, .into, container), line: line)
+            }
             try expectNewline()
             return Stmt(kind: .put(value, .into, nil), line: line)
         }
@@ -2780,7 +2791,19 @@ struct Parser {
             target = .inBackground(.first, background: try parseExpression())
         } else if consumeWord("stack") {
             // `go [to] stack "X"` — another stack (opens at its first card).
-            target = .inStack(name: try parseExpression(), card: nil)
+            // Unquoted multiword names join (`go to stack Address Book` —
+            // LOGO POWER), like the stack shorthand.
+            if case .identifier(let first) = current.kind, isGoNameWord(first),
+               let second = peekIdentifier(1), isGoNameWord(second), second != "a" {
+                var words: [String] = []
+                while case .identifier(let w) = current.kind, isGoNameWord(w),
+                      !(w == "in" || w == "without") {
+                    words.append(w); advance()
+                }
+                target = .inStack(name: .stringLiteral(words.joined(separator: " ")), card: nil)
+            } else {
+                target = .inStack(name: try parseExpression(), card: nil)
+            }
         } else if current.kind != .newline && current.kind != .endOfScript {
             // A bare `go [to] "Name"` — a card/stack by name/number. An unquoted
             // MULTI-word name (`go to File Index`, `go to Clip Art`, `go to Area
@@ -2839,7 +2862,8 @@ struct Parser {
             case .named(let background): target = .inBackground(target, background: background)
             }
         }
-        if peekIdentifier() == "of" || peekIdentifier() == "in", peekIdentifier(1) == "stack" {
+        if peekIdentifier() == "of" || peekIdentifier() == "in", peekIdentifier(1) == "stack",
+           !(tokens[index + 2].kind == .newline || tokens[index + 2].kind == .endOfScript) {
             // `of stack "X"` / `in stack "X"` (Sean's Help: `go to card 1 in
             // stack "Sean's World II Help" in a new window`). An unquoted
             // MULTI-word name joins its bare words, as in the stack shorthand
@@ -3120,6 +3144,10 @@ struct Parser {
             } else if peekIdentifier() == "contains" {
                 advance()
                 left = .binary(.contains, left, try parseConcatenation())
+            } else if peekIdentifier() == "not", peekIdentifier(1) == "in" {
+                // `if WName not in "…"` (Listoid) — the is-less membership.
+                advance(); advance()
+                left = .unary(.not, .binary(.contains, try parseConcatenation(), left))
             } else if peekIdentifier() == "doesn't", peekIdentifier(1) == "contain" {
                 advance(); advance()
                 left = .unary(.not, .binary(.contains, left, try parseConcatenation()))
@@ -3348,7 +3376,8 @@ struct Parser {
             // & return` — AOL Mail Reader).
             case .symbol(let sym): bails = sym != "("
             case .identifier(let n) where n == "then" || n == "is": bails = true
-            case .identifier(let n) where Self.expressionConnectors.contains(n):
+            case .identifier(let n) where Self.expressionConnectors.contains(n) && n != "to" && n != "from":
+                // `to`/`from` can NAME a field (`line i of fld to` — Logo 2.1).
                 if case .identifier = tokens[index + 2].kind { bails = true } else { bails = false }
             default: bails = false
             }
@@ -4345,9 +4374,12 @@ struct Parser {
             if consumeWord("of") || consumeWord("in") {
                 let isThis = consumeWord("this")
                 let hasOrdinal = { if let w = self.peekIdentifier() { return w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil }; return false }()
-                if !isThis, !hasOrdinal, consumeBackgroundWord(), !consumeWord("id") {
+                if !isThis, !hasOrdinal, consumeBackgroundWord() {
                     // `of bg <variable>` / `of bg (item x of bgs)` (Financial
-                    // Portfolio) — a runtime-named background.
+                    // Portfolio) / `in bg id searchBg` (Legal Power) — a
+                    // runtime-named background (ids match as names, best
+                    // effort).
+                    _ = consumeWord("id")
                     var named = false
                     if case .identifier = current.kind { named = true }
                     if case .symbol("(") = current.kind { named = true }
@@ -4836,6 +4868,12 @@ struct Parser {
             // reserves both words for dispatch identity).
             if word == "me" { return .meValue }
             if word == "target" { return .property("name", .target) }
+            // `the short target` (Lines&Kinetics) — the adjective reads the
+            // target's short name.
+            if Self.nameAdjectives.contains(word), peekIdentifier() == "target" {
+                advance()
+                return .property("name", .target)
+            }
             // `[the] msg [box|window]` / `message [box|window]` read as a value —
             // the message box's current contents (`if the message box is not
             // empty`, `first char of the message box`).
@@ -5074,7 +5112,7 @@ struct Parser {
             // and brackets keep their meaning; only inert marks read as text.
             if case .symbol(let sym) = current.kind,
                ["?", "%", "$", "#", ".", ":", "\u{2022}", "\u{00A1}", "\u{2122}", "\u{00AE}",
-                "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
+                "@", "\u{00AF}", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
                 advance()
                 // A run of the same mark is one literal — `put #########
                 // into BEEPERNUM` (PAGER PROG#1).

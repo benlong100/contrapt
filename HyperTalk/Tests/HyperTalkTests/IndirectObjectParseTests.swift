@@ -593,3 +593,23 @@ private func parses(_ line: String) -> Bool {
     // InvoiceMaker Plus: decorated handler names (on AddBlanks...MM).
     #expect((try? Parser.parse("on AddBlanks...MM\nbeep\nend AddBlanks...MM")) != nil)
 }
+
+@Test func batchTenRoundTwo() {
+    // LaboratoryToolbox / LottoGlueck: a missing into before a field.
+    #expect(parses("put empty  field \"event\""))
+    #expect(parses("put empty card field Zufall"))
+    // Legal Power: a card count in a bg named by id variable.
+    #expect(parses("get the number of cards in bg id searchBg"))
+    // To Do: a bare of-stack qualifier is the current stack.
+    #expect(parses("if it = 1 then go last card of stack"))
+    // Letter Learner / LinksBase: @ and macron as inert literals.
+    #expect(parses("put @ into lastLetter"))
+    // Lines&Kinetics: the short target.
+    #expect(parses("if the short target is \"New X\" then beep"))
+    // Listoid: is-less not-in membership.
+    #expect(parses("if WName not in \"Message Memory,Find\"\nthen put WName\nelse beep"))
+    // Logo 2.1: a field named to.
+    #expect(parses("repeat until line i of fld to is empty or line i of fld to is \"end\"\nend repeat"))
+    // LOGO POWER: unquoted multiword names after go-to-stack.
+    #expect(parses("go to stack Address Book"))
+}
