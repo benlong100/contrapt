@@ -458,3 +458,19 @@ private func parses(_ line: String) -> Bool {
     // ADMIN: the selectedLine of an explicit field as a destination.
     #expect(parses("put x into the selectedline of bg fld \"Entries\""))
 }
+
+@Test func batchSevenRoundThree() {
+    // Geoglossary: a doubled article before this-card.
+    #expect(parses("get the number of the this card"))
+    // GaW loader: an object reference names the stack after of-stack.
+    #expect(parses("go to card \"village\" of stack card field \"name\""))
+    // Gradebook: a this-background scope at the end of a condition.
+    #expect(parses("if the hilite of cd btn 11 of cd 1 of this bkgnd then beep"))
+    // Gradebook: a bare close file closes the open one.
+    #expect(parses("close file"))
+    // storyboard: an additive card index before a background scope.
+    #expect(parses("put the short id of cd i-1 of bg story into bg fld \"**prev\""))
+    // guitar.stack / elwins-plethoria: do with command-style args dispatches.
+    #expect(parses("do showdialog 3, \"510\",  , ,\"Untitled\" , \"7\",,"))
+    #expect(parses("do my_RTF format_record"))
+}

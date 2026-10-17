@@ -455,6 +455,20 @@ struct Parser {
             return Stmt(kind: .get(expression), line: line)
         case "do":
             advance()
+            // `do showdialog 3, "510", …` (guitar.stack), `do my_RTF
+            // format_record` (elwins-plethoria) — a bare word with more after
+            // it is a command-style dispatch, not a text to execute.
+            if let w = peekIdentifier(), case .identifier = current.kind,
+               !(tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript),
+               peekIdentifier(1) != "as" {
+                let savedDo = index
+                if (try? parseExpression()) == nil
+                    || !(current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "as") {
+                    index = savedDo
+                    return try parseMessageSend(word: w, line: line)
+                }
+                index = savedDo
+            }
             let expression = try parseExpression()
             // `do <expr> as AppleScript` (HyperCard 2.2's OSA languages) — the
             // language is a bare word or expression. Contrapt can't run other
@@ -819,6 +833,12 @@ struct Parser {
             // session; `close window …` no-ops.
             advance()
             if consumeWord("file") {
+                // A bare `close file` (Gradebook) closes the file just
+                // written; the empty path means "the open one" downstream.
+                if current.kind == .newline || current.kind == .endOfScript {
+                    try expectNewline()
+                    return Stmt(kind: .closeFile(.stringLiteral("")), line: line)
+                }
                 let path = try parseFilePath()
                 try expectNewline()
                 return Stmt(kind: .closeFile(path), line: line)
@@ -2693,7 +2713,13 @@ struct Parser {
             // (`in stack Celestial Wind Carillons®` — Celestial Wind
             // Carillons); the join stops before `in a new window`/`without`.
             advance(); advance()
+            // An object reference names the stack — `of stack card field
+            // "name"` (GaW loader) — so keywords that start one skip the
+            // bareword join and parse as an expression below.
+            let objectStarters: Set<String> = ["card", "cd", "bg", "bkgnd", "bkgd", "background",
+                                               "field", "fld", "button", "btn", "the"]
             if case .identifier(let first) = current.kind, isGoNameWord(first),
+               !objectStarters.contains(first),
                let second = peekIdentifier(1), isGoNameWord(second), second != "a" {
                 var words: [String] = []
                 while case .identifier(let w) = current.kind, isGoNameWord(w),
@@ -3544,6 +3570,14 @@ struct Parser {
         // btn`, `the moon`); the dispatch words (`me`, `the target`) above are
         // already handled.
         _ = consumeWord("the")
+        // A doubled article — `the number of the this card` (Geoglossary):
+        // the `this` branch above ran before the article was consumed, so
+        // check again here.
+        if consumeWord("this") {
+            if consumeCardWord() { return try scopeCardObject(.thisCard) }
+            if consumeBackgroundWord() { return .thisBackground }
+            if consumeWord("stack") { return .thisStack }
+        }
         func isPartKind(_ word: String?) -> Bool {
             guard let word else { return false }
             return Self.partKindSynonyms[word] != nil
@@ -3779,7 +3813,9 @@ struct Parser {
             if case .symbol(let sym) = current.kind, sym != "(" {
                 return .thisCard
             }
-            return try scopeCardObject(.card(try parsePrimary()))
+            // Additive, so `cd i-1 of bg story` (storyboard) computes the
+            // index before the background scope.
+            return try scopeCardObject(.card(try parseAdditive()))
         }
         // `stack "X"` / `stack <expr>` — a named stack (`this stack` is handled
         // above). A bare `stack` with nothing after is the current stack.
@@ -4282,7 +4318,8 @@ struct Parser {
                 // a card of that background (best effort: its current one).
                 _ = consumeWord("id")
                 var backgroundName: Expr?
-                if current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "to" {
+                if !isThis, current.kind != .newline, current.kind != .endOfScript,
+                   !["to", "then", "is", "and", "or", "into"].contains(peekIdentifier() ?? "") {
                     backgroundName = try? parsePrimary()
                 }
                 cardScope = .inBackground(cardScope ?? .current, background: backgroundName)
