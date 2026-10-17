@@ -1636,7 +1636,10 @@ struct Parser {
         else if peekIdentifier() == "in", peekIdentifier(1) != nil {
             // `put "…" in background field "message"` (Adventstation) — `in`
             // as a destination word. Only when a container plausibly follows.
+            // `in to` split across words too (HyperHome's `put the long date
+            // in to card field "date"`).
             advance()
+            _ = consumeWord("to")
             mode = .into
         }
 
@@ -2695,12 +2698,15 @@ struct Parser {
         } else if consumeWord("previous") || consumeWord("prev") {
             if consumeBackgroundWord() { target = .relativeBackground(forward: false) }
             else { _ = consumeCardWord(); target = .previous }
-        } else if consumeWord("first") {
+        } else if peekIdentifier() == "first" || peekIdentifier() == "last",
+                  !(Self.chunkKinds[peekIdentifier(1) ?? ""] != nil
+                    && (peekIdentifier(2) == "of" || peekIdentifier(2) == "in")) {
+            // Not when a chunk follows: `go to last line of parentCard`
+            // (HyperGASP) is an expression destination, handled below.
+            let w = peekIdentifier()!
+            advance()
             _ = consumeCardWord()
-            target = .first
-        } else if consumeWord("last") {
-            _ = consumeCardWord()
-            target = .last
+            target = w == "first" ? .first : .last
         } else if consumeWord("home") {
             _ = consumeCardWord() // `go to home card` (Flying box)
             target = .home
@@ -3313,7 +3319,7 @@ struct Parser {
             // a parameter) — otherwise the word names the field (`field From
             // & return` — AOL Mail Reader).
             case .symbol(let sym): bails = sym != "("
-            case .identifier(let n) where n == "then": bails = true
+            case .identifier(let n) where n == "then" || n == "is": bails = true
             case .identifier(let n) where Self.expressionConnectors.contains(n):
                 if case .identifier = tokens[index + 2].kind { bails = true } else { bails = false }
             default: bails = false
@@ -4110,7 +4116,7 @@ struct Parser {
         // pseudo-kind as a wildcard over buttons and fields.
         "part": "part",
     ]
-    static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg"]
+    static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg", "bkg"]
     static let cardWords: Set<String> = ["card", "cd"]
     /// Qualifiers HyperCard allows before `window`: `card window`, `tool
     /// window`, `pattern window`, `scroll window`, `fatbits window`. (`message
@@ -4528,9 +4534,9 @@ struct Parser {
                 throw ScriptError(line: line, message: "This '(' is missing its closing ')'.")
             }
             return inner
-        case .identifier("field"), .identifier("fld"),
+        case .identifier("field"), .identifier("fld"), .identifier("part"),
              .identifier("card"), .identifier("cd"),
-             .identifier("background"), .identifier("bkgnd"), .identifier("bkgd"), .identifier("bg"),
+             .identifier("background"), .identifier("bkgnd"), .identifier("bkgd"), .identifier("bg"), .identifier("bkg"),
              .identifier("button"), .identifier("btn"):
             if let fieldRef = try parseFieldRefIfPresent() {
                 return .field(fieldRef)
@@ -4964,6 +4970,13 @@ struct Parser {
                 if Self.chunkKinds[peekIdentifier() ?? ""] != nil {
                     return .chunkProperty(word.lowercased(), try parseContainer(line: line))
                 }
+                // A property of a NAME expression — `visible of name of cd
+                // btn t` (HyperPiece's inspector report) — resolves the
+                // object the inner name describes.
+                if peekIdentifier() == "name", peekIdentifier(1) == "of" {
+                    advance(); advance()
+                    return .property(word.lowercased(), .indirect(.property("name", try parseObjectExpr())))
+                }
                 return .property(word.lowercased(), try parseObjectExpr())
             }
             // `selectedChunk()` / `selectedLine()` / `clickLine()` — the
@@ -5014,7 +5027,8 @@ struct Parser {
             // `DelimitedChunk(…, #, false)` (Dartmouth XCMD's). Operators
             // and brackets keep their meaning; only inert marks read as text.
             if case .symbol(let sym) = current.kind,
-               ["?", "%", "$", "#", ".", ":", "\u{2022}", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
+               ["?", "%", "$", "#", ".", ":", "\u{2022}", "\u{00A1}", "\u{2122}", "\u{00AE}",
+                "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
                 advance()
                 // A run of the same mark is one literal — `put #########
                 // into BEEPERNUM` (PAGER PROG#1).

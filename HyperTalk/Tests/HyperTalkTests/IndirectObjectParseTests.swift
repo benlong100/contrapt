@@ -551,3 +551,19 @@ private func parses(_ line: String) -> Bool {
     // HyperHome: version numbers join unquoted stack names in qualifiers.
     #expect(parses("go to card id 11751 in stack HyperHome v1.4"))
 }
+
+@Test func batchNineRoundTwo() {
+    // Hyper Expert: bkg as a background word.
+    #expect(parses("get line theLineNumber of bkg fld \"Scripts\""))
+    // HyperHome: `in to` split across words reads as into.
+    #expect(parses("put the long date in to card field \"date\""))
+    // HyperGASP: an ordinal chunk as a bare go destination.
+    #expect(parses("go to last line of parentCard"))
+    #expect(parses("go to last card"))
+    // HyperGatekeeper: inverted/trademark marks as inert literals.
+    #expect(parses("put (¡) ≠ word 3 of line bSig of BS into item 1 of yup"))
+    // HyperPiece: a property of a name expression resolves indirectly.
+    #expect(parses("put TMP & return & \"x\" & visible of name of cd btn t into TMP"))
+    // FrankUnSchtein: part stays a variable in comparisons.
+    #expect(parses("if part is \"A\" then beep"))
+}
