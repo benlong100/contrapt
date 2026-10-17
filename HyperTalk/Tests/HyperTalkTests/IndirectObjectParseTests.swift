@@ -442,3 +442,19 @@ private func parses(_ line: String) -> Bool {
     // StackInfo / Deacon Access: • as an inert literal.
     #expect(parses("put • into line 2 of cd fld pref"))
 }
+
+@Test func batchSevenRoundTwo() {
+    // 9wordsFrench: a loose-text ask default.
+    #expect(parses("ask \"What word do you want to find?\" with Type word and enter return."))
+    // Frog Mania!: `of the last card` part owner.
+    #expect(parses("show cd fld \"aboutFM\" of the last card"))
+    // GRANT WRITER: unquoted dotted file names.
+    #expect(parses("open file GRANT.TEXT"))
+    #expect(parses("write \"SUMMARY\" to file GRANT.TEXT"))
+    // Apple ::e File Decoder: return with a command-style call.
+    #expect(parses("return EightBitToSixteenBit lo,hi"))
+    // Inline-if returns keep their else.
+    #expect(parses("if x then return true else return false"))
+    // ADMIN: the selectedLine of an explicit field as a destination.
+    #expect(parses("put x into the selectedline of bg fld \"Entries\""))
+}

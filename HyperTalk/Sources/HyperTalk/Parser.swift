@@ -425,8 +425,17 @@ struct Parser {
             return Stmt(kind: .declareGlobals(names), line: line)
         case "return":
             advance()
-            let value: Expr? = (current.kind == .newline || current.kind == .endOfScript)
+            var value: Expr? = (current.kind == .newline || current.kind == .endOfScript)
                 ? nil : try parseExpression()
+            // `return EightBitToSixteenBit lo,hi` (Apple ::e File Decoder)
+            // — a command-style call: the bare name plus comma args.
+            if case .variable(let fn) = value,
+               current.kind != .newline, current.kind != .endOfScript,
+               peekIdentifier() != "else" {
+                var args: [Expr] = [try parseExpression()]
+                while consumeSymbol(",") { args.append(try parseExpression()) }
+                value = .call(fn, args)
+            }
             try expectNewline()
             return Stmt(kind: .returnStatement(value), line: line)
         case "beep":
@@ -550,7 +559,16 @@ struct Parser {
                     return Stmt(kind: .askAI(prompt), line: line)
                 }
                 index = beforeWith
-                initialAnswer = try parseExpression()
+                // A loose-text default — `with Type word and enter return.`
+                // (9wordsFrench) — reads verbatim when it isn't a clean
+                // expression, as HyperCard's dialogs did.
+                if let value = try? parseExpression(),
+                   current.kind == .newline || current.kind == .endOfScript {
+                    initialAnswer = value
+                } else {
+                    index = beforeWith
+                    initialAnswer = captureRestOfLineAsText()
+                }
             }
             try expectNewline()
             return Stmt(kind: .ask(prompt, initialAnswer: initialAnswer), line: line)
@@ -783,7 +801,7 @@ struct Parser {
             // are accepted and ignored.
             advance()
             if consumeWord("file") {
-                let path = try parseExpression()
+                let path = try parseFilePath()
                 try expectNewline()
                 return Stmt(kind: .openFile(path), line: line)
             }
@@ -801,7 +819,7 @@ struct Parser {
             // session; `close window …` no-ops.
             advance()
             if consumeWord("file") {
-                let path = try parseExpression()
+                let path = try parseFilePath()
                 try expectNewline()
                 return Stmt(kind: .closeFile(path), line: line)
             }
@@ -829,7 +847,7 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .noOp, line: line)
             }
-            let path = try parseExpression()
+            let path = try parseFilePath()
             // `read from file f at <pos> until <d> / for <n>` — a seek
             // offset before the span (Cloze Text). 1-based like HyperCard
             // (0 and 1 both mean the start).
@@ -850,7 +868,7 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .noOp, line: line)
             }
-            let path = try parseExpression()
+            let path = try parseFilePath()
             var atEOF = false
             var at: Expr? = nil
             if consumeWord("at") {
@@ -1465,6 +1483,18 @@ struct Parser {
         return .stringLiteral(pieces.joined(separator: " "))
     }
 
+    /// A file path that may be an unquoted dotted name — `open file
+    /// GRANT.TEXT` (GRANT WRITER) reads as "GRANT.TEXT".
+    private mutating func parseFilePath() throws -> Expr {
+        var path = try parseExpression()
+        while case .symbol(".") = current.kind {
+            guard case .identifier(let piece) = tokens[index + 1].kind else { break }
+            advance(); advance()
+            path = .binary(.concat, path, .stringLiteral(".\(piece)"))
+        }
+        return path
+    }
+
     private mutating func parseSetValue() throws -> Expr {
         // A multi-word unquoted text value — `set the cursor to browse tool`
         // (College Savings Plus), `set textFont of fld 1 to New York` —
@@ -1782,6 +1812,13 @@ struct Parser {
             if peekIdentifier() == "of" {
                 if peekIdentifier(1) == "me" { advance(); advance() }
                 else if peekIdentifier(1) == "the", peekIdentifier(2) == "target" { advance(); advance(); advance() }
+                else {
+                    // `… of bg fld "Entries"` (ADMIN) — the descriptor
+                    // already names its field; consume the explicit one.
+                    let savedTail = index
+                    advance() // of
+                    if (try? parseObjectExpr()) == nil { index = savedTail }
+                }
             }
             return .selectedLine
         }
@@ -4184,6 +4221,7 @@ struct Parser {
             // a bare `in` that isn't a card scope from being consumed.
             guard consumeWord("of") || consumeWord("in") else { return cardScope }
             let isThis = consumeWord("this")
+            _ = consumeWord("the") // `of the last card` (Frog Mania!)
             var ordinal: String?
             if let w = peekIdentifier(),
                w == "first" || w == "last" || w == "middle" || w == "any" || Self.ordinals[w] != nil {
