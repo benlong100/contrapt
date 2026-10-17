@@ -531,3 +531,11 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("if it = 3 then go HyperTerm 1.7"))
     #expect(parses("if it = 12 then go to Great Scott!"))
 }
+
+@Test func batchEightRoundFour() {
+    // Roland / Caliban / HS Grouper: lines of only inert punctuation no-op.
+    #expect(parses("."))
+    #expect(parses("..."))
+    // Japanese waffle sequel: the selection reader names a field.
+    #expect(parses("put cd fld selectedtext of me into cd fld \"x\""))
+}

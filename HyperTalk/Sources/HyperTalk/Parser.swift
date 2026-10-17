@@ -344,6 +344,22 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .send(quoted, arguments), line: line)
         }
+        // A line of only inert punctuation — `.` (Roland), `...` (Caliban
+        // XCMDs, HS Grouper's "add your code here" markers) — is a no-op.
+        do {
+            var probe = index
+            var sawMark = false
+            while case .symbol(let sym) = tokens[probe].kind,
+                  ["?", "%", "$", "#", ".", ":", "\u{2022}", "`", "'"].contains(String(sym)) {
+                sawMark = true
+                probe += 1
+            }
+            if sawMark, tokens[probe].kind == .newline || tokens[probe].kind == .endOfScript {
+                index = probe
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
+        }
         // A lone number as a statement is a message send, like any unknown
         // word — ColorPaint's pro-check marker handlers hold just `111`
         // (Compiler Data, ColorPaint EMaker).
@@ -4889,6 +4905,13 @@ struct Parser {
             // Issues) uses it as a chunk index. (The general suppression
             // exists for names like `Ln` that shadow functions; `param` as a
             // variable followed by `of` has no sane reading.)
+            // `cd fld selectedtext of me` (Japanese waffle sequel) — the
+            // selection reader names the field; `of me` is its usual tail.
+            if suppressBarePropertyOf, let component = Self.selectionFields[word.lowercased()],
+               peekIdentifier() == "of", peekIdentifier(1) == "me" {
+                advance(); advance()
+                return .selected(component)
+            }
             if suppressBarePropertyOf, ["param", "length", "trunc"].contains(word.lowercased()), peekIdentifier() == "of" {
                 // `length` too: `char x to length of me of me` (Help Stack
                 // Builder) — the range end is length(me), then the base.
