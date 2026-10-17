@@ -491,3 +491,16 @@ private func parses(_ line: String) -> Bool {
     // Plain property-of comparisons stay intact.
     #expect(parses("if x is the name of this card then beep"))
 }
+
+@Test func batchEightRoundOne() {
+    // Groovy Pad / HyperDecisionTree: a bare Split is a custom message.
+    #expect(parses("Split"))
+    // HyperBucks: a two-word message name echoed in exit.
+    #expect((try? Parser.parse("on new card\nanswer \"no\"\nexit new card\nend new card")) != nil)
+    // DataBase Engine: show with a text chunk (marquee shim) is ignored.
+    #expect(parses("show item i of theItems"))
+    // Roland: a cursor resource sourced from a named stack.
+    #expect(parses("set cursor to Hand from stack \"Roland\""))
+    // Another Organizer: a doubled domain qualifier reads as its first word.
+    #expect(parses("put the ID of bkgnd card button \"List\" into x"))
+}

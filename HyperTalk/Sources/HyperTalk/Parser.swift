@@ -382,6 +382,9 @@ struct Parser {
                 return Stmt(kind: .exitToHyperCard, line: line)
             }
             if consumeWord(handlerName) {
+                // `exit new card` inside `on new card` (HyperBucks) — the
+                // two-word message name echoes, like `end <name> <extra>`.
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
                 try expectNewline()
                 return Stmt(kind: .exitHandler, line: line)
             }
@@ -1234,6 +1237,11 @@ struct Parser {
         case "split", "combine":
             // `split <container> by <delim>` / `combine <container> by <delim>`
             // — text ↔ associative array (delimiter defaults to comma).
+            // A bare `Split` (Groovy Pad, HyperDecisionTree) is a custom
+            // message, not the array verb.
+            if tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+                return try parseMessageSend(word: word, line: line)
+            }
             let splitting = word == "split"
             advance()
             let container = try parseContainer(line: line)
@@ -1433,6 +1441,16 @@ struct Parser {
                 return Stmt(kind: .set(property: property.lowercased(), object: object, value: value), line: line)
             }
             index = savedObject
+            // `set cursor to Hand from stack "Roland"` — a resource sourced
+            // from a named stack; the tail is consumed (one resource space).
+            if ["cursor"].contains(property.lowercased()), consumeWord("to") {
+                let value = try parseSetValue()
+                if peekIdentifier() == "from" {
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                }
+                try expectNewline()
+                return Stmt(kind: .setGlobalProperty("cursor", value), line: line)
+            }
             // Object-less property: `set the itemDelimiter to ";"`.
             guard consumeWord("to") else {
                 throw ScriptError(line: line, message: "Expected 'of <object> to …' or 'to …' after 'set the \(property)'.")
@@ -2471,6 +2489,13 @@ struct Parser {
                                            value: .stringLiteral(visible ? "true" : "false")), line: line)
                 }
             }
+        }
+        // `show item i of theItems` (DataBase Engine) — showing a TEXT chunk
+        // (an old marquee XCMD shim); accepted and ignored.
+        if let w = peekIdentifier(), Self.chunkKinds[w] != nil, peekIdentifier(1) != "of" {
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
         }
         // Ignorable targets.
         let ignorable = ["menubar", "menu", "titlebar", "message", "msg", "tool",
@@ -3768,7 +3793,9 @@ struct Parser {
             }
         }
 
-        // Domain qualifier: `card field 1` / `bkgnd button "OK"`.
+        // Domain qualifier: `card field 1` / `bkgnd button "OK"`. A DOUBLED
+        // qualifier — `bkgnd card button "List"` (Another Organizer) — reads
+        // as its first word.
         var domain = HyperTalkObject.PartDomain.any
         if let w = peekIdentifier(), Self.cardWords.contains(w), isPartKind(peekIdentifier(1)) {
             advance()
@@ -3776,6 +3803,13 @@ struct Parser {
         } else if let w = peekIdentifier(), Self.backgroundWords.contains(w), isPartKind(peekIdentifier(1)) {
             advance()
             domain = .background
+        } else if let w = peekIdentifier(),
+                  Self.cardWords.contains(w) || Self.backgroundWords.contains(w),
+                  let second = peekIdentifier(1),
+                  Self.cardWords.contains(second) || Self.backgroundWords.contains(second),
+                  isPartKind(peekIdentifier(2)) {
+            advance(); advance()
+            domain = Self.backgroundWords.contains(w) ? .background : .card
         }
 
         if let word = peekIdentifier(), let kind = Self.partKindSynonyms[word] {
