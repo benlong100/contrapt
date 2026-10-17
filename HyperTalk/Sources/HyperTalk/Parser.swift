@@ -733,6 +733,7 @@ struct Parser {
             }
             var object: ObjectExpr = .thisCard
             if consumeWord("to") {
+                _ = consumeWord("to") // `send mouseUp to to button "Help"` (HyperReference)
                 // `send <expr> to program <app> [with/without reply]` — an
                 // AppleEvent to another application. Contrapt can't reach other
                 // apps, so the whole line is accepted and no-op'd.
@@ -2556,6 +2557,12 @@ struct Parser {
         // `show 10 cards` / `show (number of cards) cards` — the flip-through
         // animation (a count expression before `cards`). Contrapt doesn't
         // animate; accept and no-op. `show all cards` is caught by the list above.
+        // A quoted count works too — `show "65" cards` (Lucky Penny).
+        if case .string = current.kind, peekIdentifier(1) == "cards" {
+            advance(); advance()
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
+        }
         if case .number = current.kind {} else if case .symbol("(") = current.kind {} else {
             // not a count — fall through to the object case below
             return try finishShowHide(visible: visible, line: line)
@@ -2740,18 +2747,33 @@ struct Parser {
                       case .identifier = tokens[index + 2].kind else { return false }
                 return true
             }()
+            let numberJoins: Bool = { if case .number = tokens[index + 1].kind { return true }; return false }()
             if case .identifier(let first) = current.kind, isGoNameWord(first),
-               (peekIdentifier(1).map(isGoNameWord) ?? false) || hyphenJoins {
+               (peekIdentifier(1).map(isGoNameWord) ?? false) || hyphenJoins || numberJoins {
                 var words: [String] = []
-                while case .identifier(let w) = current.kind, isGoNameWord(w) {
-                    var piece = w
-                    advance()
-                    while case .symbol("-") = current.kind,
-                          case .identifier(let nw) = tokens[index + 1].kind, isGoNameWord(nw) {
-                        piece += "-" + nw
-                        advance(); advance()
+                loop: while true {
+                    switch current.kind {
+                    case .identifier(let w) where isGoNameWord(w):
+                        var piece = w
+                        advance()
+                        while case .symbol("-") = current.kind,
+                              case .identifier(let nw) = tokens[index + 1].kind, isGoNameWord(nw) {
+                            piece += "-" + nw
+                            advance(); advance()
+                        }
+                        words.append(piece)
+                    case .number(let n):
+                        // `go HyperTerm 1.7` (hyperDesktop II) — a version
+                        // number joins the name.
+                        words.append(Value.string(from: n))
+                        advance()
+                    case .symbol("!"):
+                        // `go to Great Scott!` — the bang sticks to its word.
+                        if var last = words.popLast() { last += "!"; words.append(last) }
+                        advance()
+                    default:
+                        break loop
                     }
-                    words.append(piece)
                 }
                 target = .inStack(name: .stringLiteral(words.joined(separator: " ")), card: nil)
             } else {
@@ -4867,7 +4889,7 @@ struct Parser {
             // Issues) uses it as a chunk index. (The general suppression
             // exists for names like `Ln` that shadow functions; `param` as a
             // variable followed by `of` has no sane reading.)
-            if suppressBarePropertyOf, ["param", "length"].contains(word.lowercased()), peekIdentifier() == "of" {
+            if suppressBarePropertyOf, ["param", "length", "trunc"].contains(word.lowercased()), peekIdentifier() == "of" {
                 // `length` too: `char x to length of me of me` (Help Stack
                 // Builder) — the range end is length(me), then the base.
                 advance() // of

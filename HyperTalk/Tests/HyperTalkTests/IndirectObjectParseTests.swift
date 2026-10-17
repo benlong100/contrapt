@@ -519,3 +519,15 @@ private func parses(_ line: String) -> Bool {
     // HAN / Apple ::e: BASIC-style assignments read as put-into.
     #expect(parses("x = x + 1"))
 }
+
+@Test func batchEightRoundThree() {
+    // Japanese waffle game: trunc-of as a chunk index under suppression.
+    #expect(parses("put \"A\" into char trunc of(YOKO/32+2) of line trunc of((trunc of(TATE/32)*2+2) + 25*(GAMEN-1)) of MAP"))
+    // Lucky Penny: a quoted flip-through count.
+    #expect(parses("show \"65\" cards"))
+    // HyperReference: a doubled to in send.
+    #expect(parses("send mouseUp to to button \"Help\""))
+    // hyperDesktop II: version numbers and bangs join go names.
+    #expect(parses("if it = 3 then go HyperTerm 1.7"))
+    #expect(parses("if it = 12 then go to Great Scott!"))
+}
