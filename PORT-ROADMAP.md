@@ -344,12 +344,15 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**IA corpus sweep - batches 1-9 DONE 2026-10-17.**
-Corpus 302 -> 2,664 stacks / 82,339 scripts via Scripts/ia-fetch-stacks.py
-(~1,900 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
+**IA corpus sweep - batches 1-10 DONE 2026-10-17.**
+Corpus 302 -> 2,880 stacks / 90,647 scripts via Scripts/ia-fetch-stacks.py
+(~1,700 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
 Parse errors per batch: b1 99->54, b2 126->90, b3 164->132, b4 253->165,
-b5 265->230, b6 340->266, b7 385->332, b8 410->377, b9 434->412 - each
-batch yields 15-25 real language gaps before its author-bug floor.
+b5 265->230, b6 340->266, b7 385->332, b8 410->377, b9 434->412,
+b10 488->447 - each batch yields 15-25 real language gaps before its
+author-bug floor. Batch 10 highlights: play the (KARATEstack's 22 kiai
+scripts), implied put-into, of-bg stop words, not-in membership, fields
+named with keywords (fld to), decorated handler names, go-stack joiner.
 Batch 9 highlights: bkg synonym, part containers, this-vs-ordinal-card
 ids, positional menus, disk/program existence, ordinal fields with card
 scopes, selection readers under suppression, juxtaposed answer buttons. Batch 8

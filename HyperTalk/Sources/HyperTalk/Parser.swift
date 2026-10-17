@@ -2474,6 +2474,7 @@ struct Parser {
             return Stmt(kind: .sortContainer(items: sortItems, container: container,
                                              ascending: ascending, numeric: numeric, key: key), line: line)
         }
+        _ = consumeWord("the") // `sort the cards of this stack` (MacChef)
         _ = consumeWord("this"); _ = consumeWord("stack")
         _ = consumeWord("marked")
         _ = consumeCardWord()

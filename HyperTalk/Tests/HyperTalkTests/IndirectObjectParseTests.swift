@@ -613,3 +613,8 @@ private func parses(_ line: String) -> Bool {
     // LOGO POWER: unquoted multiword names after go-to-stack.
     #expect(parses("go to stack Address Book"))
 }
+
+@Test func batchTenRoundThree() {
+    // MacChef: sort the cards of this stack.
+    #expect(parses("sort the cards of this stack by bg field \"Recipe Title\""))
+}
