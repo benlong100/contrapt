@@ -658,3 +658,11 @@ private func parses(_ line: String) -> Bool {
     // Nuclear Power: a menuMsg-prefixed put value.
     #expect(parses("put menuMsg createMenuMsgs() into menu \"Contents\""))
 }
+
+@Test func batchTwelveRoundTwo() {
+    // Nutrition Demo / OhmsLaw: bare go and click do nothing.
+    #expect(parses("go"))
+    #expect(parses("click"))
+    // Payroll Calculator: the fraction slash as an inert literal.
+    #expect(parses("if which = ⁄ then beep"))
+}

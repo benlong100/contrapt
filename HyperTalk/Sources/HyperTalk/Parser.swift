@@ -1223,6 +1223,11 @@ struct Parser {
                                    value: .stringLiteral(enabled ? "true" : "false")), line: line)
         case "click":
             advance()
+            // A bare `click` (OhmsLaw) does nothing rather than failing.
+            if current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
             _ = consumeWord("at")
             let h = try parseExpression()
             let v = consumeSymbol(",") ? try parseExpression() : nil
@@ -2883,7 +2888,9 @@ struct Parser {
                 target = .expression(try parseExpression())
             }
         } else {
-            throw ScriptError(line: line, message: "Expected a destination after 'go', like 'next card' or 'card 3'.")
+            // A bare `go` (Nutrition Demo) goes nowhere rather than failing.
+            try expectNewline()
+            return Stmt(kind: .noOp, line: line)
         }
         // Trailing qualifiers compose innermost-first, as HyperCard writes them:
         // `go cd X of bkgnd "Paths" of stack "Home"` = (card X in background
@@ -5190,7 +5197,7 @@ struct Parser {
             // and brackets keep their meaning; only inert marks read as text.
             if case .symbol(let sym) = current.kind,
                ["?", "%", "$", "#", ".", ":", "\u{2022}", "\u{00A1}", "\u{2122}", "\u{00AE}",
-                "@", "\u{00AF}", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
+                "@", "\u{00AF}", "\u{2044}", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
                 advance()
                 // A run of the same mark is one literal — `put #########
                 // into BEEPERNUM` (PAGER PROG#1).
