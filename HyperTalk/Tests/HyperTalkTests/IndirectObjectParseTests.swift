@@ -618,3 +618,18 @@ private func parses(_ line: String) -> Bool {
     // MacChef: sort the cards of this stack.
     #expect(parses("sort the cards of this stack by bg field \"Recipe Title\""))
 }
+
+@Test func batchElevenRoundOne() {
+    // Mask It!: button() is a zero-arg call, not a part reference.
+    #expect(parses("if not button() then exit repeat"))
+    // Maya Calendar: from as a field-owner word.
+    #expect(parses("get card field id 11 from card id 17454"))
+    // Meetingsreference: a promptless ask password still asks.
+    #expect(parses("ask password"))
+    // MegaHome II: of fileType as the answer-file type word.
+    #expect(parses("answer file \"Choose a stack to compact.\" of fileType \"STAK\""))
+    // Mouse Melodies: an ellipsis continues an identifier (About…).
+    #expect(parses("set the name of button ID 3 to About…"))
+    // Card names stay at additive level so surrounding concats survive.
+    #expect(parses("put the number of card \"Shared\" & \",\" & the short name of card 1 of bg \"Second\" into message"))
+}

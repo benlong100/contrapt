@@ -526,7 +526,7 @@ struct Parser {
                 suppressBarePropertyOf = savedSuppress
                 var type: Expr?
                 if consumeWord("of") {
-                    _ = consumeWord("type")
+                    _ = consumeWord("type") || consumeWord("filetype") // `of fileType "STAK"` (MegaHome II)
                     type = try parseExpression()
                     // A type LIST — `of type "PICT","PNTG"` (ExtractIt!) —
                     // extra types consumed (the first wins, best effort).
@@ -605,6 +605,11 @@ struct Parser {
             // back in `it`, and the stack's own `if it is empty` guard copes.
             _ = consumeWord("file") || consumeWord("password")
             _ = consumeWord("clear")   // `ask password clear` — unencrypted result (EnDec)
+            // A promptless `ask password` (Meetingsreference) still asks.
+            if current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .ask(.stringLiteral(""), initialAnswer: nil), line: line)
+            }
             var prompt = try parseExpression()
             // Adjacent strings concatenate, as in answer — HomeWork! chains
             // its prompt across three continuations with no operator.
@@ -3512,9 +3517,10 @@ struct Parser {
         // (`put card field "chain" in card 81 into beer`). `into` is a distinct
         // word, so it isn't mistaken for `in`; the reset below undoes a bare
         // `in` that isn't a card scope.
-        guard peekIdentifier() == "of" || peekIdentifier() == "in" else { return nil }
+        // `from card id 17454` (Maya Calendar) reads like `of`.
+        guard peekIdentifier() == "of" || peekIdentifier() == "in" || peekIdentifier() == "from" else { return nil }
         let saved = index
-        advance() // of / in
+        advance() // of / in / from
         _ = consumeWord("the")
         // `bg field X of bg LocalMaps` (Apollo 11) — a field of ANOTHER
         // background resolves on that background's first card.
@@ -3624,7 +3630,8 @@ struct Parser {
     private mutating func parseOfBackground() throws -> BackgroundQualifier? {
         // `of bkgnd …` or, as HyperCard also allows, `in bkgnd …`
         // (`the first card in background "User Pictures"`).
-        guard peekIdentifier() == "of" || peekIdentifier() == "in" else { return nil }
+        guard peekIdentifier() == "of" || peekIdentifier() == "in" || peekIdentifier() == "from" else { return nil }
+        // `from card id 17454` (Maya Calendar) reads like `of`.
         // `of next bg` / `of previous bg` (EditCard's `cd n of next bg`) —
         // an adjacent-background owner isn't modeled distinctly; the current
         // background stands in (best effort).
@@ -4030,7 +4037,8 @@ struct Parser {
                 return .thisCard
             }
             // Additive, so `cd i-1 of bg story` (storyboard) computes the
-            // index before the background scope.
+            // index. NOT concatenation: `the number of card "Shared" & ","
+            // & …` must leave the concat to the surrounding expression.
             return try scopeCardObject(.card(try parseAdditive()))
         }
         // `stack "X"` / `stack <expr>` — a named stack (`this stack` is handled
@@ -4601,6 +4609,12 @@ struct Parser {
              .identifier("card"), .identifier("cd"),
              .identifier("background"), .identifier("bkgnd"), .identifier("bkgd"), .identifier("bg"), .identifier("bkg"),
              .identifier("button"), .identifier("btn"):
+            // `button()` (Mask It!'s XFCN poll) — a zero-arg call, not a ref.
+            if case .symbol("(") = tokens[index + 1].kind, case .symbol(")") = tokens[index + 2].kind,
+               case .identifier(let fn) = current.kind {
+                advance(); advance(); advance()
+                return .call(fn, [])
+            }
             if let fieldRef = try parseFieldRefIfPresent() {
                 return .field(fieldRef)
             }
