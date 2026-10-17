@@ -2969,6 +2969,13 @@ struct Parser {
             } else if peekIdentifier() == "contains" {
                 advance()
                 left = .binary(.contains, left, try parseConcatenation())
+            } else if peekIdentifier() == "doesn't", peekIdentifier(1) == "contain" {
+                advance(); advance()
+                left = .unary(.not, .binary(.contains, left, try parseConcatenation()))
+            } else if peekIdentifier() == "does", peekIdentifier(1) == "not", peekIdentifier(2) == "contain" {
+                // Both spellings appear in the wild (HyperCard Roundup).
+                advance(); advance(); advance()
+                left = .unary(.not, .binary(.contains, left, try parseConcatenation()))
             } else {
                 return left
             }
@@ -2978,10 +2985,19 @@ struct Parser {
     private mutating func parseConcatenation() throws -> Expr {
         var left = try parseAdditive()
         while true {
+            // A dangling `&` before `into` (or the line end) concatenates
+            // empty — `put return & into line 7 of data` (StackInfo), the
+            // `& ¬ <CR> into` continuation (AppleOrder, TimeBook). Three
+            // independent stacks ship it, so HyperCard accepted it.
+            func danglingRight() -> Expr? {
+                if current.kind == .newline || current.kind == .endOfScript { return .stringLiteral("") }
+                if peekIdentifier() == "into" { return .stringLiteral("") }
+                return nil
+            }
             if consumeSymbol("&&") {
-                left = .binary(.concatWithSpace, left, try parseAdditive())
+                left = .binary(.concatWithSpace, left, try danglingRight() ?? parseAdditive())
             } else if consumeSymbol("&") {
-                left = .binary(.concat, left, try parseAdditive())
+                left = .binary(.concat, left, try danglingRight() ?? parseAdditive())
             } else {
                 return left
             }
@@ -3790,6 +3806,9 @@ struct Parser {
                     advance()
                 }
             }
+            // A scope chain after the background — `bkgnd "strays" of cd 1
+            // of this bkgnd` (Gradebook) — is consumed; one bg context.
+            _ = parsePartScopeIfPresent()
             return .thisBackground
         }
         if let w = peekIdentifier(), Self.cardWords.contains(w) {

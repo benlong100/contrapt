@@ -184,7 +184,10 @@ struct Tokenizer {
     private mutating func identifier() -> Token {
         var text = ""
         while let character = current, character.isLetter || character.isNumber || character == "_" || character == "\u{2206}"
-                || character == "\u{00AE}" || character == "\u{2122}" || character == "\u{00A9}" {
+                || character == "\u{00AE}" || character == "\u{2122}" || character == "\u{00A9}"
+                // An apostrophe CONTINUES an identifier only when a letter
+                // follows (doesn't, isn't) — a trailing quote stays a symbol.
+                || ((character == "'" || character == "\u{2019}") && peekAhead?.isLetter == true) {
             text.append(character)
             advance()
         }

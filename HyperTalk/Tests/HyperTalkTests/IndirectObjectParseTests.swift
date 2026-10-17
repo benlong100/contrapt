@@ -474,3 +474,13 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("do showdialog 3, \"510\",  , ,\"Untitled\" , \"7\",,"))
     #expect(parses("do my_RTF format_record"))
 }
+
+@Test func batchSevenRoundFour() {
+    // HyperCard Roundup: both spellings of the negated contains.
+    #expect(parses("if fld 1 doesn't contain \"Roundup\" then print fld 1"))
+    #expect(parses("if fld 1 does not contain \"Roundup\" then print fld 1"))
+    // StackInfo / AppleOrder / TimeBook: a dangling & concatenates empty.
+    #expect(parses("put return & into line 7 of data"))
+    // Gradebook: a background object with a scope chain.
+    #expect(parses("send mouseUp to bkgnd \"strays\" of cd 1 of this bkgnd"))
+}

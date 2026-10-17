@@ -367,9 +367,9 @@ oracle questions:
  1. `find theType theText in theField` (Readymade Fields) — juxtaposed
     variables where the first may be a runtime style word. Ask the oracle
     whether real HC accepts it before implementing.
- 2. `put "…" & ¬ <CR> into field …` (AppleOrder BugReporter) — a dangling
-    concat before the continuation joins `into`. Oracle: does HC treat the
-    trailing & as concat-with-empty?
+ 2. RESOLVED BY EVIDENCE 2026-10-17: the dangling `&` before `into`
+    concatenates empty — three independent stacks ship it (AppleOrder,
+    TimeBook, StackInfo). Implemented in parseConcatenation.
  (Former #3, the nested chunk-range `of` chain, was parser greed — fixed
  in 60b6907. The former clickChunk deferral SHIPPED 2026-10-15 in 2c07645:
  app hit test + web bridge both record the clicked word's chunk
