@@ -273,6 +273,9 @@ struct Parser {
             if !consumeSymbol(",") { break }
         }
         if parenthesized { _ = consumeSymbol(")") }
+        // Trailing decoration — `on AddBlanks...MM` (InvoiceMaker Plus)
+        // suffixes every handler; the matching `end` line tolerates it too.
+        while current.kind != .newline, current.kind != .endOfScript { advance() }
         try expectNewline()
 
         let body = try parseStatements(handlerName: name, stopBefore: [["end", name]], blockDescription: "handler '\(name)'", blockLine: startLine)
@@ -531,6 +534,11 @@ struct Parser {
                 }
                 try expectNewline()
                 return Stmt(kind: .answerFile(prompt, type: type), line: line)
+            }
+            // A bare `answer` (Ivory Towers) does nothing.
+            if current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
             }
             // `answer folder <prompt>` — a folder-choose dialog (HC 2.2+;
             // the Elektra tool stacks). No folder is reachable here, so it
@@ -1215,6 +1223,14 @@ struct Parser {
             if consumeWord("stop") {
                 try expectNewline()
                 return Stmt(kind: .playStop, line: line)
+            }
+            // A sound literally named "the" — `play the` (KARATEstack's
+            // word-by-word kiai lines).
+            if peekIdentifier() == "the",
+               tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+                advance()
+                try expectNewline()
+                return Stmt(kind: .play(voice: .stringLiteral("the"), tempo: nil, notes: nil), line: line)
             }
             let voice = try parsePrimary()
             var tempo: Expr?
@@ -3591,7 +3607,8 @@ struct Parser {
             advance() // of / in
             advance() // background word
             _ = consumeWord("id") // `of bg id 9036` — id matched as a name, best effort
-            guard current.kind != .newline, current.kind != .endOfScript, peekIdentifier() != "into" else {
+            guard current.kind != .newline, current.kind != .endOfScript,
+                  !["into", "then", "is", "and", "or", "to", "with", "without"].contains(peekIdentifier() ?? "") else {
                 return .current // bare `of bkgnd` — the current background
             }
             return .named(try parsePrimary()) // the background name/number

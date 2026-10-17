@@ -582,3 +582,14 @@ private func parses(_ line: String) -> Bool {
     // ICL3.1: adjacent strings separate answer buttons.
     #expect(parses("answer \"Print All Labels?\" with \"Yes\" \"cancel\""))
 }
+
+@Test func batchTenRoundOne() {
+    // KARATEstack: a sound literally named "the" (22 kiai scripts).
+    #expect(parses("play the"))
+    // Ivory Towers: a bare answer does nothing.
+    #expect(parses("answer"))
+    // Learn Kana: a bare of-bg scope stops before then.
+    #expect(parses("if it is the number of first card of bg then beep"))
+    // InvoiceMaker Plus: decorated handler names (on AddBlanks...MM).
+    #expect((try? Parser.parse("on AddBlanks...MM\nbeep\nend AddBlanks...MM")) != nil)
+}
