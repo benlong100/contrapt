@@ -344,12 +344,15 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**IA corpus sweep - batches 1-6 DONE 2026-10-15.**
-Corpus 302 -> 1,811 stacks / 56,394 scripts via Scripts/ia-fetch-stacks.py
-(~2,500 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
+**IA corpus sweep - batches 1-7 DONE 2026-10-17.**
+Corpus 302 -> 2,100 stacks / 63,245 scripts via Scripts/ia-fetch-stacks.py
+(~2,300 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
 Parse errors per batch: b1 99->54, b2 126->90, b3 164->132, b4 253->165,
-b5 265->230, b6 340->266 - each batch yields 15-25 real language gaps
-before its author-bug floor. Batch 6 highlights: quoted pass/handler
+b5 265->230, b6 340->266, b7 385->332 - each batch yields 15-25 real
+language gaps before its author-bug floor. Batch 7 highlights: doesn't/
+does-not contain, dangling-& resolved by evidence, any-part existence,
+script-of containers, pop variants, loose ask defaults, dotted file
+names, return command-calls, do dispatch, is-of membership. Batch 6 highlights: quoted pass/handler
 params, answer folder, answer juxtaposition, put-into-name renames,
 computed visual names, trailing play tempo, is-before-operator,
 unmark marked cd, print geometry tails. Batch 5 highlights: bare punctuation literals, ordinal

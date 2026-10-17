@@ -2945,6 +2945,17 @@ struct Parser {
                     // `A is [not] in B` == B [does not] contains A.
                     let contains = Expr.binary(.contains, try parseConcatenation(), left)
                     left = negated ? .unary(.not, contains) : contains
+                } else if peekIdentifier() == "of",
+                          let next = peekIdentifier(1),
+                          Self.backgroundWords.contains(next) || Self.cardWords.contains(next)
+                            || ["field", "fld"].contains(next) {
+                    // `me is not of bg field "listado"` (¡0h! Esp — 20 bg
+                    // closeField handlers that ran in HyperCard) — `of` as
+                    // the membership word, like `in`. Gated on an object
+                    // keyword following so plain property-of stays intact.
+                    advance()
+                    let contains = Expr.binary(.contains, try parseConcatenation(), left)
+                    left = negated ? .unary(.not, contains) : contains
                 } else if consumeWord("within") {
                     // `point is [not] within rect` — point-in-rectangle test.
                     let test = Expr.binary(.within, left, try parseConcatenation())

@@ -484,3 +484,10 @@ private func parses(_ line: String) -> Bool {
     // Gradebook: a background object with a scope chain.
     #expect(parses("send mouseUp to bkgnd \"strays\" of cd 1 of this bkgnd"))
 }
+
+@Test func batchSevenRoundFive() {
+    // ¡0h! (Esp): `is [not] of <field>` as membership, like `is in`.
+    #expect(parses("if me is not of bg field \"listado\" then beep"))
+    // Plain property-of comparisons stay intact.
+    #expect(parses("if x is the name of this card then beep"))
+}
