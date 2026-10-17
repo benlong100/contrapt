@@ -449,7 +449,7 @@ struct Parser {
                 }
                 if !consumeSymbol(",") { break }
             }
-            guard !names.isEmpty else {
+            guard !names.isEmpty, current.kind == .newline || current.kind == .endOfScript else {
                 // Dynamic or garbled global names — `global the short name of
                 // the target` (novice typist), `global (crdname & "mil")`
                 // (Auto), `global *NOA*` (AnimatedIcons) — are consumed; the
