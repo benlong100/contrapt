@@ -450,7 +450,13 @@ struct Parser {
                 if !consumeSymbol(",") { break }
             }
             guard !names.isEmpty else {
-                throw ScriptError(line: line, message: "Expected one or more variable names after 'global'.")
+                // Dynamic or garbled global names — `global the short name of
+                // the target` (novice typist), `global (crdname & "mil")`
+                // (Auto), `global *NOA*` (AnimatedIcons) — are consumed; the
+                // names resolve as plain variables at run time.
+                while current.kind != .newline, current.kind != .endOfScript { advance() }
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
             }
             try expectNewline()
             return Stmt(kind: .declareGlobals(names), line: line)
@@ -779,7 +785,13 @@ struct Parser {
                     try expectNewline()
                     return Stmt(kind: .noOp, line: line)
                 }
-                object = try parseObjectExpr()
+                // `send "Update" to line i of me` (MVC simulation) — a chunk
+                // isn't a message target; the card stands in, best effort.
+                if let w = peekIdentifier(), Self.chunkKinds[w] != nil {
+                    _ = try? parseContainer(line: line)
+                } else {
+                    object = try parseObjectExpr()
+                }
             }
             if consumeWord("in") {
                 let amount = try parseExpression()
@@ -1644,6 +1656,13 @@ struct Parser {
     }
 
     private mutating func parsePut(line: Int) throws -> Stmt {
+        // `put menuMsg createMenuMsgs() into menu "Contents"` (Nuclear
+        // Power) — the prefix labels the value; the call's result is what
+        // lands in the menu.
+        if let w = peekIdentifier(), ["menumsg", "menumessage", "menumsgs", "menumessages"].contains(w),
+           case .identifier = tokens[index + 1].kind {
+            advance()
+        }
         // A bare `put` (everything after was a comment — `then put --da icon
         // in button`, Developer Stack) does nothing.
         if current.kind == .newline || current.kind == .endOfScript {
@@ -2304,6 +2323,12 @@ struct Parser {
                 // of me` and finds within it.
                 field = FieldRef(domain: .any, isID: false, expr: try parsePrimary(),
                                  isIndirectDescriptor: true)
+                // `find string whichShift in var in marked cards` (FireWorx)
+                // — the marked-cards restriction is consumed (search-all).
+                if peekIdentifier() == "in" || peekIdentifier() == "of", peekIdentifier(1) == "marked" {
+                    advance(); advance()
+                    _ = consumeCardWord() || consumeWord("cards") || consumeWord("cds")
+                }
             } else {
                 throw ScriptError(line: line, message: "Expected a field after 'in', like: find \"x\" in field \"Notes\".")
             }
@@ -2787,6 +2812,7 @@ struct Parser {
                 target = (current.kind == .newline || current.kind == .endOfScript)
                     ? .current : .idExpression(try parseExpression())
             } else {
+                _ = consumeWord("number") // `go card number 4` (FireWorx)
                 target = .expression(try parseExpression())
             }
         } else if consumeBackgroundWord() {
@@ -3557,7 +3583,10 @@ struct Parser {
         // `bg field X of bg LocalMaps` (Apollo 11) — a field of ANOTHER
         // background resolves on that background's first card.
         if let w = peekIdentifier(), Self.backgroundWords.contains(w),
-           let next = peekIdentifier(1), !["field", "fld", "button", "btn"].contains(next) {
+           !["field", "fld", "button", "btn", "part"].contains(peekIdentifier(1) ?? ""),
+           !(tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript) {
+            // The name may be quoted — `of bkgnd "Music Card Catalog"`
+            // (Music Library) — or a bareword/number.
             advance() // background word
             _ = consumeWord("id")
             if current.kind == .newline || current.kind == .endOfScript {

@@ -643,3 +643,18 @@ private func parses(_ line: String) -> Bool {
     // Movies 6.1: this marked card is the card just navigated to.
     #expect(parses("put id of this marked card into firstMarked"))
 }
+
+@Test func batchTwelveRoundOne() {
+    // Music Library: a quoted background owner on a sort key field.
+    #expect(parses("sort by first line of bkgnd field \"Date\" of bkgnd \"Music Card Catalog\""))
+    // MVC simulation: a chunk send-target falls back to the card.
+    #expect(parses("send \"Update\" to line i of me"))
+    // FireWorx: find in a variable with a marked-cards restriction.
+    #expect(parses("find string whichShift in var in marked cards"))
+    // FireWorx: go card number N.
+    #expect(parses("if the number of this card is 1 then go card number 4"))
+    // novice typist / Auto: dynamic global names are consumed.
+    #expect(parses("global the short name of the target"))
+    // Nuclear Power: a menuMsg-prefixed put value.
+    #expect(parses("put menuMsg createMenuMsgs() into menu \"Contents\""))
+}
