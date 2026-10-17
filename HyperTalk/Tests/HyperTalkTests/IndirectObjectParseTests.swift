@@ -504,3 +504,18 @@ private func parses(_ line: String) -> Bool {
     // Another Organizer: a doubled domain qualifier reads as its first word.
     #expect(parses("put the ID of bkgnd card button \"List\" into x"))
 }
+
+@Test func batchEightRoundTwo() {
+    // Help Stack Builder: length-of as a chunk-range end under suppression.
+    #expect(parses("get char offset(\">\",me)+2 to length of me of me"))
+    // Apple's Home card: a dangling find does nothing.
+    #expect(parses("find string"))
+    // HomeWork!: adjacent ask-prompt strings concatenate.
+    #expect(parses("ask \"How many?\" \"Note: stuff.\" \"ie: more.\""))
+    // House of Multiplication Horror: computed effect name AND speed.
+    #expect(parses("visual effect thisEffect thisSpeed to thisImage"))
+    // HB LIBRARY: pass tolerates trailing junk.
+    #expect(parses("pass closeCard cd btn \"HyperField\""))
+    // HAN / Apple ::e: BASIC-style assignments read as put-into.
+    #expect(parses("x = x + 1"))
+}

@@ -356,6 +356,15 @@ struct Parser {
         guard let word = peekIdentifier() else {
             throw ScriptError(line: line, message: "Expected a command here, but found \(describe(current)).")
         }
+        // A BASIC-style assignment — `x = x + 1` (HAN), `lo=INT(b/256)`
+        // (Apple ::e File Decoder) — reads as put-into.
+        if case .symbol("=") = tokens[index + 1].kind {
+            advance() // the variable
+            advance() // =
+            let value = try parseExpression()
+            try expectNewline()
+            return Stmt(kind: .put(value, .into, .variable(word)), line: line)
+        }
         switch word {
         case "put":
             advance()
@@ -564,7 +573,12 @@ struct Parser {
             // back in `it`, and the stack's own `if it is empty` guard copes.
             _ = consumeWord("file") || consumeWord("password")
             _ = consumeWord("clear")   // `ask password clear` — unencrypted result (EnDec)
-            let prompt = try parseExpression()
+            var prompt = try parseExpression()
+            // Adjacent strings concatenate, as in answer — HomeWork! chains
+            // its prompt across three continuations with no operator.
+            while case .string = current.kind {
+                prompt = .binary(.concat, prompt, try parsePrimary())
+            }
             var initialAnswer: Expr?
             if consumeWord("with") {
                 // `ask <prompt> with ai` — the AI gathering form (reply in
@@ -695,9 +709,11 @@ struct Parser {
             advance()
             // `pass <messageName>` — the name (usually the handler's own) is
             // accepted; the current message is what continues down the path.
-            // Quoted too: `pass "opencard"` (Exploring Multimedia).
+            // Quoted too: `pass "opencard"` (Exploring Multimedia). Trailing
+            // junk is tolerated — `pass closeCard cd btn "X"` (HB LIBRARY).
             if peekIdentifier() != nil { advance() }
             else if case .string = current.kind { advance() }
+            while current.kind != .newline, current.kind != .endOfScript { advance() }
             try expectNewline()
             return Stmt(kind: .passMessage, line: line)
         case "send":
@@ -2112,6 +2128,14 @@ struct Parser {
                 advance(); advance()
                 _ = try? parsePrimary()
             }
+            // A computed speed after a computed name — `visual effect
+            // thisEffect thisSpeed to thisImage` (House of Multiplication
+            // Horror); the direction/speed/to tail parses below.
+            if let w = peekIdentifier(), w != "to",
+               ScreenEffect.Direction(rawValue: w) == nil,
+               !["very", "fast", "slow", "slowly"].contains(w) {
+                advance()
+            }
             kind = .dissolve
         }
 
@@ -2143,6 +2167,20 @@ struct Parser {
     }
 
     private mutating func parseFind(line: Int) throws -> Stmt {
+        // A dangling `find` / `find string` with no text (Apple's Home card)
+        // does nothing rather than failing the handler.
+        do {
+            var probe = index
+            while case .identifier(let w) = tokens[probe].kind,
+                  ["international", "normal", "chars", "characters", "char", "word", "words", "whole", "string"].contains(w) {
+                probe += 1
+            }
+            if tokens[probe].kind == .newline || tokens[probe].kind == .endOfScript {
+                index = probe
+                try expectNewline()
+                return Stmt(kind: .noOp, line: line)
+            }
+        }
         // `find [international|normal] [chars|word|whole|string] <text> [in <field>]`.
         if peekIdentifier() == "international" || peekIdentifier() == "normal" { advance() }
         var mode: FindMode = .wordPrefix
@@ -4829,7 +4867,9 @@ struct Parser {
             // Issues) uses it as a chunk index. (The general suppression
             // exists for names like `Ln` that shadow functions; `param` as a
             // variable followed by `of` has no sane reading.)
-            if suppressBarePropertyOf, word.lowercased() == "param", peekIdentifier() == "of" {
+            if suppressBarePropertyOf, ["param", "length"].contains(word.lowercased()), peekIdentifier() == "of" {
+                // `length` too: `char x to length of me of me` (Help Stack
+                // Builder) — the range end is length(me), then the base.
                 advance() // of
                 return .call(word, [try parsePrimary()])
             }
