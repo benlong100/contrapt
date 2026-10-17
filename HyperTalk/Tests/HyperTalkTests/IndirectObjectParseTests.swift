@@ -430,3 +430,15 @@ private func parses(_ line: String) -> Bool {
     // Font Shower: a bare colon as a set value.
     #expect(parses("set the ItemDelimiter to :"))
 }
+
+@Test func batchSevenRoundOne() {
+    // HyperCard Roundup (a script-library stack full of real idioms):
+    #expect(parses("if there is a background button then beep"))
+    #expect(parses("put \"opencard\" into line 2 of the script of card button \"Try Me!\""))
+    #expect(parses("pop this card into msg"))
+    #expect(parses("pop background"))
+    #expect(parses("mark all cards where \"Pizza\" is is in field \"Favorite Foods\""))
+    #expect(parses("sort this stack by fld 1 ascending"))
+    // StackInfo / Deacon Access: • as an inert literal.
+    #expect(parses("put • into line 2 of cd fld pref"))
+}

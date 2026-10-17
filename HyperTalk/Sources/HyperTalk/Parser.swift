@@ -1305,7 +1305,11 @@ struct Parser {
             return Stmt(kind: .pushCard, line: line)
         case "pop":
             advance()
+            // `pop this card into msg`, `pop background` (HyperCard Roundup)
+            // — this/bg qualifiers read like the plain pop.
+            _ = consumeWord("this")
             _ = consumeWord("card") || consumeWord("cd")
+                || consumeWord("background") || consumeWord("bkgnd") || consumeWord("bg")
             var container: Container?
             if consumeWord("into") { container = try parseContainer(line: line) }
             try expectNewline()
@@ -1818,6 +1822,19 @@ struct Parser {
                 }
             }
         }
+        // `[the] script of <object>` as a container base — `put "opencard"
+        // into line 2 of the script of card button "Try Me!"` (HyperCard
+        // Roundup). Reads evaluate; writes are a runtime error (scripts
+        // aren't editable from scripts here), but the handler parses.
+        do {
+            let savedScript = index
+            _ = consumeWord("the")
+            if consumeWord("script"), consumeWord("of"),
+               let object = try? parseObjectExpr() {
+                return .expressionValue(.property("script", object))
+            }
+            index = savedScript
+        }
         // `theFields()` — a function call as a read-only source: a chunk of
         // its RESULT names an object or value (`the textHeight of item 1 of
         // theFields()`, Power Tools). Writing to it is a runtime error.
@@ -2171,7 +2188,13 @@ struct Parser {
     private mutating func parseMark(mark: Bool, line: Int) throws -> Stmt {
         _ = consumeWord("the")
         if consumeWord("all") {
-            _ = consumeCardWord()
+            _ = consumeCardWord() || consumeWord("cards") || consumeWord("cds")
+            // `mark all cards where <condition>` (HyperCard Roundup).
+            if consumeWord("where") {
+                let condition = try parseExpression()
+                try expectNewline()
+                return Stmt(kind: .setMarked(mark: mark, .cardsWhere(condition)), line: line)
+            }
             try expectNewline()
             return Stmt(kind: .setMarked(mark: mark, .allCards), line: line)
         }
@@ -2314,6 +2337,15 @@ struct Parser {
                         || consumeWord("datetime") || consumeWord("date") { numeric = false }
         }
         let key = try parseExpression()
+        // … and TRAIL the key — `sort this stack by fld 1 ascending`
+        // (HyperCard Roundup).
+        for _ in 0..<2 {
+            if consumeWord("ascending") { ascending = true }
+            else if consumeWord("descending") { ascending = false }
+            else if consumeWord("numeric") { numeric = true }
+            else if consumeWord("text") || consumeWord("international")
+                        || consumeWord("datetime") || consumeWord("date") { numeric = false }
+        }
         try expectNewline()
         return Stmt(kind: .sortCards(ascending: ascending, numeric: numeric, key: key), line: line)
     }
@@ -2826,6 +2858,12 @@ struct Parser {
                 left = .binary(.greater, left, try parseConcatenation())
             } else if peekIdentifier() == "is" {
                 advance()
+                // A doubled `is` — `"Pizza" is is in field …` (HyperCard
+                // Roundup's example library) — reads as one.
+                if peekIdentifier() == "is",
+                   let next = peekIdentifier(1), ["in", "within", "not", "a", "an"].contains(next) {
+                    advance()
+                }
                 // `is <` / `is >=` — a redundant `is` before an operator
                 // (`IF the userlevel is < 5` — Cool Address Book): the
                 // operator wins; loop again to pick it up.
@@ -3647,6 +3685,12 @@ struct Parser {
             if consumeWord("id") {
                 let id = try parsePrimary()
                 return .partByID(kind: kind, domain: domain, id: id, card: parsePartScopeIfPresent())
+            }
+            // No name at all — `if there is a background button then`
+            // (HyperCard Roundup) asks whether ANY such part exists; the
+            // first one stands in (exists ⇔ count ≥ 1).
+            if current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "then" {
+                return .part(kind: kind, domain: domain, name: .numberLiteral(1), card: nil)
             }
             let name = try parsePrimary()
             return .part(kind: kind, domain: domain, name: name, card: parsePartScopeIfPresent())
@@ -4706,7 +4750,7 @@ struct Parser {
             // `DelimitedChunk(…, #, false)` (Dartmouth XCMD's). Operators
             // and brackets keep their meaning; only inert marks read as text.
             if case .symbol(let sym) = current.kind,
-               ["?", "%", "$", "#", ".", ":", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
+               ["?", "%", "$", "#", ".", ":", "\u{2022}", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
                 advance()
                 // A run of the same mark is one literal — `put #########
                 // into BEEPERNUM` (PAGER PROG#1).
