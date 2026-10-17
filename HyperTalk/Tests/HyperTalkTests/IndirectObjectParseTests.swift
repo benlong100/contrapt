@@ -539,3 +539,15 @@ private func parses(_ line: String) -> Bool {
     // Japanese waffle sequel: the selection reader names a field.
     #expect(parses("put cd fld selectedtext of me into cd fld \"x\""))
 }
+
+@Test func batchNineRoundOne() {
+    // Hypertype / Sampletype: bare this vs an ordinal card, compared by id.
+    #expect(parses("if this is the first card then beep"))
+    // Intercom: a menu by position in a menuItem read.
+    #expect(parses("if menuItem 1 of last menu contains hyperName then exit repeat"))
+    // Apple ::e File Decoder: part as a field-or-button container word.
+    #expect(parses("put cccc into card part 1"))
+    #expect(parses("repeat with x=1 to the number of words in card part prtNm\nend repeat"))
+    // HyperHome: version numbers join unquoted stack names in qualifiers.
+    #expect(parses("go to card id 11751 in stack HyperHome v1.4"))
+}

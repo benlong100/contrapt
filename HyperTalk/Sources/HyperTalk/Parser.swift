@@ -2823,9 +2823,16 @@ struct Parser {
                !objectStarters.contains(first),
                let second = peekIdentifier(1), isGoNameWord(second), second != "a" {
                 var words: [String] = []
-                while case .identifier(let w) = current.kind, isGoNameWord(w),
-                      !(w == "in" || w == "without") {
-                    words.append(w); advance()
+                loop: while true {
+                    switch current.kind {
+                    case .identifier(let w) where isGoNameWord(w) && w != "in" && w != "without":
+                        words.append(w); advance()
+                    case .number(let n):
+                        // `in stack HyperHome v1.4` (HyperHome) — versions join.
+                        words.append(Value.string(from: n)); advance()
+                    default:
+                        break loop
+                    }
                 }
                 target = .inStack(name: .stringLiteral(words.joined(separator: " ")), card: target)
             } else {
@@ -3260,7 +3267,10 @@ struct Parser {
     }
 
     private mutating func parseFieldRefIfPresent() throws -> FieldRef? {
-        let fieldWords: Set<String> = ["field", "fld"]
+        // `part` addresses a field-or-button by part number; writes resolve
+        // as fields, best effort (`put cccc into card part 1` — Apple ::e
+        // File Decoder).
+        let fieldWords: Set<String> = ["field", "fld", "part"]
         // An optional leading article: `the field "X"`, `the card field 1`. Undo
         // the `the` if what follows isn't actually a field reference.
         let saved = index
@@ -4750,6 +4760,26 @@ struct Parser {
                 _ = consumeWord("a") || consumeWord("an")
                 return .exists(try parseObjectExpr(), negated: negated)
             }
+            // `[the] first card` as a value — its id, comparable with the
+            // bare `this` below (`if this is the first card` — Hypertype).
+            // Reached with the article already stripped, so the ordinal is
+            // this word itself.
+            if Self.ordinals[word] != nil || word == "last",
+               let cw = peekIdentifier(), Self.cardWords.contains(cw),
+               peekIdentifier(1) != "of", peekIdentifier(1) != "in" {
+                advance() // card word
+                if let n = Self.ordinals[word] {
+                    return .property("id", .card(.numberLiteral(Double(n))))
+                }
+                return .property("id", .cardByOrdinal(.last))
+            }
+            // A bare `this` compares as the current card — `if this is the
+            // first card then` (Hypertype, Sampletype). With a card word
+            // following it stays an object reference for the caller.
+            if word == "this", let n = peekIdentifier(),
+               !Self.cardWords.contains(n), !Self.backgroundWords.contains(n), n != "stack" {
+                return .property("id", .thisCard)
+            }
             // `me` / `target` on their own → the object's name (HyperTalk
             // reserves both words for dispatch identity).
             if word == "me" { return .meValue }
@@ -4790,9 +4820,19 @@ struct Parser {
                 suppressBarePropertyOf = true
                 let selector = try? parseAdditive()
                 suppressBarePropertyOf = savedSuppress
-                if let selector, consumeWord("of") || consumeWord("in"), consumeWord("menu"),
-                   let menuName = try? parsePrimary() {
-                    return .property("name", .menuItem(.expr(selector), menu: menuName))
+                if let selector, consumeWord("of") || consumeWord("in") {
+                    _ = consumeWord("the")
+                    // `of last menu` (Intercom) — a menu by position; keyword
+                    // ordinals fall back to the first (best effort).
+                    if let ow = peekIdentifier(), Self.ordinals[ow] != nil || Self.ordinalKeyword(ow) != nil,
+                       peekIdentifier(1) == "menu" {
+                        let n = Self.ordinals[ow] ?? 1
+                        advance(); advance()
+                        return .property("name", .menuItem(.expr(selector), menu: .numberLiteral(Double(n))))
+                    }
+                    if consumeWord("menu"), let menuName = try? parsePrimary() {
+                        return .property("name", .menuItem(.expr(selector), menu: menuName))
+                    }
                 }
                 index = saved
                 if case .number = current.kind { advance() }
