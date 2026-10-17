@@ -2933,6 +2933,38 @@ struct Parser {
             skipNewlines()
             if peekIdentifier() != "then" { index = saved }
         }
+        // A statement wedged between the condition and its next-line `then` —
+        //   if <cond>
+        //   wait 5 seconds
+        //   then set the style of me to "opaque"
+        // (Map Skills ×4, Fly Dude, Text Writer). HyperCard ran the wedged
+        // statement as part of the then-branch; mirror that.
+        if current.kind == .newline, peekIdentifier() != "then" {
+            let saved = index
+            // Scan: one statement line, then a line starting with `then`.
+            var probe = index + 1
+            while tokens[probe].kind != .newline, tokens[probe].kind != .endOfScript { probe += 1 }
+            while tokens[probe].kind == .newline { probe += 1 }
+            if case .identifier("then") = tokens[probe].kind {
+                advance() // the newline after the condition
+                let wedged = try parseStatement(handlerName: handlerName)
+                skipNewlines()
+                guard consumeWord("then") else {
+                    throw ScriptError(line: line, message: "Expected 'then' after the condition of 'if'.")
+                }
+                let thenBody = [wedged, try parseStatement(handlerName: handlerName)]
+                var elseBody: [Stmt] = []
+                let savedElse = index
+                skipNewlines()
+                if consumeWord("else") {
+                    elseBody = try parseElse(handlerName: handlerName, line: line)
+                } else {
+                    index = savedElse
+                }
+                return Stmt(kind: .ifThen(condition: condition, then: thenBody, otherwise: elseBody), line: line)
+            }
+            index = saved
+        }
         guard consumeWord("then") else {
             throw ScriptError(line: line, message: "Expected 'then' after the condition of 'if'.")
         }
@@ -3696,6 +3728,8 @@ struct Parser {
             // `this card` may carry a background scope: `the number of this
             // card in this background` (Car Care's page counter) numbers the
             // card within its background, not the stack.
+            // `this marked card` (Movies 6.1) — the card just navigated to.
+            _ = consumeWord("marked")
             if consumeCardWord() { return try scopeCardObject(.thisCard) }
             if consumeBackgroundWord() { return .thisBackground }
             if consumeWord("stack") { return .thisStack }

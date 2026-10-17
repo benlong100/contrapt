@@ -633,3 +633,13 @@ private func parses(_ line: String) -> Bool {
     // Card names stay at additive level so surrounding concats survive.
     #expect(parses("put the number of card \"Shared\" & \",\" & the short name of card 1 of bg \"Second\" into message"))
 }
+
+@Test func batchElevenRoundTwo() {
+    // Map Skills / Fly Dude / Text Writer: a statement wedged between the
+    // condition and its next-line then joins the then-branch.
+    #expect(parses("if style of me is \"transparent\"\nwait 5 seconds\nthen set the style of me to \"opaque\""))
+    // The plain next-line then still parses.
+    #expect(parses("if x\nthen beep"))
+    // Movies 6.1: this marked card is the card just navigated to.
+    #expect(parses("put id of this marked card into firstMarked"))
+}
