@@ -567,3 +567,18 @@ private func parses(_ line: String) -> Bool {
     // FrankUnSchtein: part stays a variable in comparisons.
     #expect(parses("if part is \"A\" then beep"))
 }
+
+@Test func batchNineRoundThree() {
+    // HyperScience: strings ride along in loose set values.
+    #expect(parses("set cursor to loc \"0,0\""))
+    // HyperSherlock: an ordinal field with a card scope, in a chunk base.
+    #expect(parses("put char 1 to 50 of first field of this card into summary"))
+    // HyperTalk e-Book: a selection reader's `of` stays with the outer chunk
+    // under suppression.
+    #expect(parses("put line 1 to the selectedText of cd btn \"a\" of cd \"b\" of bg btn \"c\" into bg btn \"c\""))
+    // Japanese launcher / HyperXchange: disk and program existence kinds.
+    #expect(parses("if there is not a disk theDisk then beep"))
+    #expect(parses("if there is a program otherHC then beep"))
+    // ICL3.1: adjacent strings separate answer buttons.
+    #expect(parses("answer \"Print All Labels?\" with \"Yes\" \"cancel\""))
+}

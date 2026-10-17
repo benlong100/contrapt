@@ -577,7 +577,15 @@ struct Parser {
                 // swallowed as the boolean operator); some stacks use commas
                 // instead (`answer "…" with "No","Yes"`).
                 buttons.append(try parseConcatenation())
-                while consumeWord("or") || consumeSymbol(",") { buttons.append(try parseConcatenation()) }
+                while true {
+                    if consumeWord("or") || consumeSymbol(",") {
+                        buttons.append(try parseConcatenation())
+                    } else if case .string = current.kind {
+                        // `with "Yes" "cancel"` (ICL3.1) — adjacency separates
+                        // buttons after `with`.
+                        buttons.append(try parsePrimary())
+                    } else { break }
+                }
             }
             try expectNewline()
             return Stmt(kind: .answer(prompt, buttons: buttons), line: line)
@@ -1584,6 +1592,8 @@ struct Parser {
         while tokens[i].kind != .newline, tokens[i].kind != .endOfScript {
             switch tokens[i].kind {
             case .identifier, .number: wordCount += 1
+            // `set cursor to loc "0,0"` (HyperScience) — strings ride along.
+            case .string: wordCount += 1
             default: allWords = false
             }
             i += 1
@@ -3302,7 +3312,9 @@ struct Parser {
                 for _ in 0..<consumed { advance() }
                 let exact = Self.ordinals[ordinalWord].map { Expr.numberLiteral(Double($0)) }
                 return FieldRef(domain: ordinalDomain, isID: false,
-                                expr: exact ?? .numberLiteral(0), ordinal: exact == nil ? ordinal : nil)
+                                expr: exact ?? .numberLiteral(0),
+                                card: try parseFieldCardRef(),
+                                ordinal: exact == nil ? ordinal : nil)
             }
         }
         let domain: HyperTalkObject.PartDomain
@@ -3776,7 +3788,8 @@ struct Parser {
         // HyperCard's synonym for file (`there is a document "intromid"` —
         // box monitor), and `folder`/`directory` check the same way (`there
         // is not a folder pPath` — CCVSF.ORG).
-        if ["file", "application", "document", "folder", "directory"].contains(peekIdentifier() ?? "") {
+        if ["file", "application", "document", "folder", "directory",
+            "disk", "volume", "program"].contains(peekIdentifier() ?? "") {
             advance()
             let path: Expr = current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "to"
                 ? .stringLiteral("") : try parsePrimary()
@@ -4577,7 +4590,11 @@ struct Parser {
             }
             // `the selectedLine` / `selectedText` / `selectedChunk` /
             // `selectedField` / `the selection`.
-            if let component = Self.selectionFields[peekIdentifier() ?? ""], peekIdentifier(1) != "of" {
+            if let component = Self.selectionFields[peekIdentifier() ?? ""],
+               peekIdentifier(1) != "of" || suppressBarePropertyOf {
+                // Under suppression (a chunk index/range), a following `of`
+                // belongs to the surrounding chunk — `line 1 to the
+                // selectedText of cd btn …` (HyperTalk e-Book).
                 advance()
                 return .selected(component)
             }
@@ -4765,6 +4782,18 @@ struct Parser {
                 let negated = consumeWord("no") || consumeWord("not")
                 _ = consumeWord("a") || consumeWord("an")
                 return .exists(try parseObjectExpr(), negated: negated)
+            }
+            // `first field of this card` as a value (HyperSherlock) — an
+            // ordinal part is a field reference; rewind to its parser.
+            if Self.ordinals[word] != nil || Self.ordinalKeyword(word) != nil,
+               let fw = peekIdentifier(), ["field", "fld", "part"].contains(fw)
+                || (Self.cardWords.contains(fw) || Self.backgroundWords.contains(fw))
+                    && ["field", "fld", "part"].contains(peekIdentifier(1) ?? "") {
+                index -= 1
+                if let fieldRef = try parseFieldRefIfPresent() {
+                    return .field(fieldRef)
+                }
+                advance()
             }
             // `[the] first card` as a value — its id, comparable with the
             // bare `this` below (`if this is the first card` — Hypertype).
