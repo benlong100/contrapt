@@ -666,3 +666,23 @@ private func parses(_ line: String) -> Bool {
     // Payroll Calculator: the fraction slash as an inert literal.
     #expect(parses("if which = ⁄ then beep"))
 }
+
+@Test func batchThirteenRoundOne() {
+    // PETCARE / plants: loose send targets fall back to the card.
+    #expect(parses("send \"mouseUp\" to Woof!"))
+    // Phil's Database: a trailing whole-stack scope on a bg card count.
+    #expect(parses("repeat with x = 2 to the number of cards in bg \"data\" in this stack\nend repeat"))
+    // PhilTea: unquoted multiword card names (but expressions keep their of).
+    #expect(parses("go to card Tea tasting"))
+    // PIMPIM: glued domain+kind words; menuItem renames via set.
+    #expect(parses("show bkgbtn ShowTabFld"))
+    #expect(parses("if menuitem 6 of menu \"Page\" is \"Show Margin\" then set menuitem 6 of menu \"Page\" to \"Hide Margin\""))
+    // PowerNotes: version numbers join go-stack names.
+    #expect(parses("go stack PowerNotes 1.0"))
+    // PowerPalettes: the short name of a chunk resolves indirectly.
+    #expect(parses("put the short name of item 2 of L into theItem"))
+    // Proposal Factory: a baseless line count counts me.
+    #expect(parses("put the number of lines into counter"))
+    // QuickTime Text Tracks: send to a named window.
+    #expect(parses("send \"PreRoll\" to window currMovie"))
+}

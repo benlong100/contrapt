@@ -790,7 +790,18 @@ struct Parser {
                 if let w = peekIdentifier(), Self.chunkKinds[w] != nil {
                     _ = try? parseContainer(line: line)
                 } else {
-                    object = try parseObjectExpr()
+                    // Unquoted loose names — `send "mouseUp" to Woof!`
+                    // (PETCARE), `to Plant notes` (plants) — fall back to the
+                    // card when no object parses.
+                    let savedObj = index
+                    if let parsed = try? parseObjectExpr(),
+                       current.kind == .newline || current.kind == .endOfScript || peekIdentifier() == "in" {
+                        object = parsed
+                    } else {
+                        index = savedObj
+                        while current.kind != .newline, current.kind != .endOfScript,
+                              peekIdentifier() != "in" { advance() }
+                    }
                 }
             }
             if consumeWord("in") {
@@ -1454,6 +1465,20 @@ struct Parser {
                 return Stmt(kind: .noOp, line: line)
             }
             advance()
+            // `set menuitem 6 of menu "Page" to "Hide Margin"` (PIMPIM) —
+            // renaming the item, like `set the name of menuItem …`.
+            if property.lowercased() == "menuitem" || property.lowercased() == "menuItem".lowercased() {
+                let savedItem = index
+                if let selector = try? parseAdditive(), consumeWord("of"), consumeWord("menu"),
+                   let menuName = try? parsePrimary(), consumeWord("to"),
+                   let value = try? parseSetValue() {
+                    try expectNewline()
+                    return Stmt(kind: .set(property: "name",
+                                           object: .menuItem(.expr(selector), menu: menuName),
+                                           value: value), line: line)
+                }
+                index = savedItem
+            }
             if consumeWord("of") {
                 // A modeled object target (`set loc of btn "X" to …`). If it
                 // parses cleanly up to `to`, keep it.
@@ -2818,7 +2843,29 @@ struct Parser {
                     ? .current : .idExpression(try parseExpression())
             } else {
                 _ = consumeWord("number") // `go card number 4` (FireWorx)
-                target = .expression(try parseExpression())
+                // `go to card Tea tasting` (PhilTea) — unquoted multiword
+                // card names join like the stack shorthand. NOT when the run
+                // ends at `of` (`go cd short name of target` is an
+                // expression).
+                var runEndsAtOf = false
+                do {
+                    var probe = index
+                    while case .identifier(let w) = tokens[probe].kind, isGoNameWord(w),
+                          !(w == "of" || w == "in" || w == "without") { probe += 1 }
+                    if case .identifier(let w) = tokens[probe].kind, w == "of" || w == "in" { runEndsAtOf = true }
+                }
+                if case .identifier(let first) = current.kind, isGoNameWord(first), !runEndsAtOf,
+                   let second = peekIdentifier(1), isGoNameWord(second),
+                   !["of", "in"].contains(second) {
+                    var words: [String] = []
+                    while case .identifier(let w) = current.kind, isGoNameWord(w),
+                          !(w == "of" || w == "in" || w == "without") {
+                        words.append(w); advance()
+                    }
+                    target = .expression(.stringLiteral(words.joined(separator: " ")))
+                } else {
+                    target = .expression(try parseExpression())
+                }
             }
         } else if consumeBackgroundWord() {
             // `go [to] bg <name>` — the first card of that background, as in
@@ -2830,12 +2877,18 @@ struct Parser {
             // `go [to] stack "X"` — another stack (opens at its first card).
             // Unquoted multiword names join (`go to stack Address Book` —
             // LOGO POWER), like the stack shorthand.
+            let stackNumberJoins: Bool = { if case .number = tokens[index + 1].kind { return true }; return false }()
             if case .identifier(let first) = current.kind, isGoNameWord(first),
-               let second = peekIdentifier(1), isGoNameWord(second), second != "a" {
+               (peekIdentifier(1).map { isGoNameWord($0) && $0 != "a" } ?? false) || stackNumberJoins {
                 var words: [String] = []
-                while case .identifier(let w) = current.kind, isGoNameWord(w),
-                      !(w == "in" || w == "without") {
-                    words.append(w); advance()
+                loop: while true {
+                    switch current.kind {
+                    case .identifier(let w) where isGoNameWord(w) && w != "in" && w != "without":
+                        words.append(w); advance()
+                    case .number(let n): // `go stack PowerNotes 1.0`
+                        words.append(Value.string(from: n)); advance()
+                    default: break loop
+                    }
                 }
                 target = .inStack(name: .stringLiteral(words.joined(separator: " ")), card: nil)
             } else {
@@ -4253,6 +4306,10 @@ struct Parser {
         // `the rect of cd part i`, `last cd part`. The host treats the "part"
         // pseudo-kind as a wildcard over buttons and fields.
         "part": "part",
+        // Glued domain+kind words — `show bkgbtn ShowTabFld` (PIMPIM). The
+        // domain is lost (any), which resolves fine in practice.
+        "bkgbtn": "button", "bgbtn": "button", "cdbtn": "button",
+        "bkgfld": "field", "bgfld": "field", "cdfld": "field",
     ]
     static let backgroundWords: Set<String> = ["background", "bkgnd", "bkgd", "bg", "bkg"]
     static let cardWords: Set<String> = ["card", "cd"]
@@ -4464,6 +4521,12 @@ struct Parser {
                     if case .symbol("(") = current.kind { named = true }
                     if named {
                         let background = try parsePrimary()
+                        // `… in bg "data" in this stack` (Phil's Database) —
+                        // the whole-stack scope is the default; consumed.
+                        if peekIdentifier() == "of" || peekIdentifier() == "in",
+                           peekIdentifier(1) == "this", peekIdentifier(2) == "stack" {
+                            advance(); advance(); advance()
+                        }
                         return .cardCountInBackground(background)
                     }
                 }
@@ -4481,6 +4544,14 @@ struct Parser {
     /// consumed and ignored as before. Restores the cursor if what follows
     /// isn't actually a card/background scope.
     private mutating func applyCountScopeIfPresent(to countable: Countable) -> Countable {
+        defer {
+            // A trailing whole-stack scope — `in bg "data" in this stack`
+            // (Phil's Database) — is the default; consumed.
+            if peekIdentifier() == "of" || peekIdentifier() == "in",
+               peekIdentifier(1) == "this", peekIdentifier(2) == "stack" {
+                advance(); advance(); advance()
+            }
+        }
         let saved = index
         guard consumeWord("of") || consumeWord("in") else { return countable }
         let isThis = consumeWord("this")
@@ -4809,6 +4880,12 @@ struct Parser {
                 advance() // of
                 advance() // kind
                 guard consumeWord("of") || consumeWord("in") else {
+                    // `the number of lines` with no base (Proposal Factory's
+                    // openField) counts the handler's own object.
+                    if current.kind == .newline || current.kind == .endOfScript
+                        || peekIdentifier() == "into" {
+                        return .chunkCount(kind, .meValue)
+                    }
                     throw ScriptError(line: line, message: "Expected 'of' after 'the number of \(kindWord)'.")
                 }
                 return .chunkCount(kind, try parsePrimary())
@@ -4851,6 +4928,11 @@ struct Parser {
                 advance() // of
                 let long = adjective == "long"
                 let property = noun == "name" ? (long ? "longname" : "name") : (long ? "longid" : "id")
+                // `the short name of item 2 of L` (PowerPalettes) — the chunk
+                // VALUE names the object; resolve indirectly.
+                if Self.chunkKinds[peekIdentifier() ?? ""] != nil {
+                    return .property(property, .indirect(try parsePrimary()))
+                }
                 return .property(property, try parseObjectExpr())
             }
             // `the <property> of <object>`; otherwise "the" is a noise
@@ -5092,6 +5174,11 @@ struct Parser {
                 advance() // of
                 let long = word == "long"
                 let property = noun == "name" ? (long ? "longname" : "name") : (long ? "longid" : "id")
+                // `the short name of item 2 of L` (PowerPalettes) — the chunk
+                // VALUE names the object; resolve indirectly.
+                if Self.chunkKinds[peekIdentifier() ?? ""] != nil {
+                    return .property(property, .indirect(try parsePrimary()))
+                }
                 return .property(property, try parseObjectExpr())
             }
             // An adjective before any OTHER property is tolerated, as in
