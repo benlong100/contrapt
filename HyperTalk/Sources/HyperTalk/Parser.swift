@@ -3768,6 +3768,15 @@ struct Parser {
         // (`put card field "chain" in card 81 into beer`). `into` is a distinct
         // word, so it isn't mistaken for `in`; the reset below undoes a bare
         // `in` that isn't a card scope.
+        // A terminal `of me` after a field reference is the field itself —
+        // consumed so reader-named fields (`cd fld selectedtext of me`)
+        // close cleanly.
+        if peekIdentifier() == "of", peekIdentifier(1) == "me",
+           tokens[index + 2].kind == .newline || tokens[index + 2].kind == .endOfScript
+            || peekIdentifier(2) == "into" {
+            advance(); advance()
+            return nil
+        }
         // `from card id 17454` (Maya Calendar) reads like `of` — but ONLY
         // before a card word, so `subtract fld "x" from mileage` keeps its
         // from for the command.
@@ -5434,11 +5443,23 @@ struct Parser {
             // Issues) uses it as a chunk index. (The general suppression
             // exists for names like `Ln` that shadow functions; `param` as a
             // variable followed by `of` has no sane reading.)
-            // `cd fld selectedtext of me` (Japanese waffle sequel) — the
-            // selection reader names the field; `of me` is its usual tail.
+            // A selection reader before `of me` in a suppressed position.
+            // Whose `of me` is it? When ANOTHER `of` follows on the line
+            // (`word 2 of selectedLine of me + 1 of me` — HyperTalk e-Book),
+            // the reader owns it; when it's the LAST (`line selectedLine of
+            // me` — Waldo), the surrounding chunk needs it as its base.
             if suppressBarePropertyOf, let component = Self.selectionFields[word.lowercased()],
                peekIdentifier() == "of", peekIdentifier(1) == "me" {
-                advance(); advance()
+                var laterOf = false
+                var probe = index + 2
+                while tokens[probe].kind != .newline, tokens[probe].kind != .endOfScript {
+                    if case .identifier(let w) = tokens[probe].kind {
+                        if w == "into" || w == "after" || w == "before" { break }
+                        if w == "of" { laterOf = true; break }
+                    }
+                    probe += 1
+                }
+                if laterOf { advance(); advance() }
                 return .selected(component)
             }
             if suppressBarePropertyOf, ["param", "length", "trunc"].contains(word.lowercased()), peekIdentifier() == "of" {
@@ -5533,6 +5554,16 @@ struct Parser {
                 while case .symbol(let next) = current.kind, next == sym {
                     text.append(next)
                     advance()
+                }
+                // A dotted extension literal — `& .txt. into tfilename`
+                // (Rinaldi's X-Tools family) — glues the word and any
+                // closing dot.
+                if sym == ".", case .identifier(let w) = current.kind,
+                   !["with", "into", "after", "before", "and", "or", "then",
+                     "of", "in", "to", "is", "from", "until", "for"].contains(w) {
+                    text.append(w)
+                    advance()
+                    if case .symbol(".") = current.kind { text.append("."); advance() }
                 }
                 return .stringLiteral(text)
             }

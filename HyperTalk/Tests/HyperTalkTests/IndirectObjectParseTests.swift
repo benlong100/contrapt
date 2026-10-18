@@ -773,3 +773,16 @@ private func parses(_ line: String) -> Bool {
     // simulator family: dotted unquoted stack names.
     #expect(parses("go to stack simul.main"))
 }
+
+@Test func batchEighteenRoundOne() {
+    // Rinaldi's X-Tools family: dotted extension literals.
+    #expect(parses("put the short name of this card & .txt. into tfilename"))
+    // Star Trek / Song Maker keep their structure words after a lone dot.
+    #expect(parses("put . after last char of card field id 9"))
+    // Waldo: a selection reader as a chunk index keeps the chunk's of-me.
+    #expect(parses("put (word one of line selectedLine of me)&\" \"&it into line selectedLine of me"))
+    // HyperTalk e-Book: the reader owns its of-me when another of follows.
+    #expect(parses("put line word 2 of selectedLine of me + 1 of me into nextWord"))
+    // The waffle sequel still parses.
+    #expect(parses("put cd fld selectedtext of me into cd fld \"x\""))
+}
