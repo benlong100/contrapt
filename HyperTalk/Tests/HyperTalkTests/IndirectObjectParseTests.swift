@@ -686,3 +686,14 @@ private func parses(_ line: String) -> Bool {
     // QuickTime Text Tracks: send to a named window.
     #expect(parses("send \"PreRoll\" to window currMovie"))
 }
+
+@Test func batchThirteenRoundTwo() {
+    // Dracula / Pop-up Notes / Auto: object keywords stay expressions in go
+    // card destinations.
+    #expect(parses("go to card bg fld \"page\""))
+    #expect(parses("go to card bg field \"id\" of bg \"maintenance schedule\""))
+    // Organizer: inline else survives the go-name joiner.
+    #expect(parses("IF YEARNUMBER =\"2001\" THEN go to cd Q ELSE GO TO CD 1"))
+    // PowerPalettes: raw option-key glyphs before into are literals.
+    #expect(parses("if char 1 of what = B then put \u{02D9} into Px"))
+}

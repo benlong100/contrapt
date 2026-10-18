@@ -2854,7 +2854,10 @@ struct Parser {
                           !(w == "of" || w == "in" || w == "without") { probe += 1 }
                     if case .identifier(let w) = tokens[probe].kind, w == "of" || w == "in" { runEndsAtOf = true }
                 }
+                let cardNameStarters: Set<String> = ["card", "cd", "bg", "bkgnd", "bkgd", "bkg", "background",
+                                                     "field", "fld", "button", "btn", "part"]
                 if case .identifier(let first) = current.kind, isGoNameWord(first), !runEndsAtOf,
+                   !cardNameStarters.contains(first),
                    let second = peekIdentifier(1), isGoNameWord(second),
                    !["of", "in"].contains(second) {
                     var words: [String] = []
@@ -3745,7 +3748,7 @@ struct Parser {
     /// name (`File Index`) rather than a trailing qualifier. Stops the name at
     /// the qualifier keywords HyperCard uses after a destination.
     private func isGoNameWord(_ word: String) -> Bool {
-        !["of", "in", "without", "the"].contains(word)
+        !["of", "in", "without", "the", "else", "then"].contains(word)
     }
 
     private mutating func parseOfBackground() throws -> BackgroundQualifier? {
@@ -5282,6 +5285,20 @@ struct Parser {
             // `put % into char x of cd fld decoder` (Bunny-Coder),
             // `DelimitedChunk(…, #, false)` (Dartmouth XCMD's). Operators
             // and brackets keep their meaning; only inert marks read as text.
+            if case .symbol(let sym) = current.kind,
+               tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript
+                || peekIdentifier(1) == "into" {
+                // Any lone mark directly before `into`/the line end is a
+                // literal — PowerPalettes pastes raw option-key glyphs
+                // (`put \u{F8FF} into Px`).
+                advance()
+                var text = String(sym)
+                while case .symbol(let next) = current.kind, next == sym {
+                    text.append(next)
+                    advance()
+                }
+                return .stringLiteral(text)
+            }
             if case .symbol(let sym) = current.kind,
                ["?", "%", "$", "#", ".", ":", "\u{2022}", "\u{00A1}", "\u{2122}", "\u{00AE}",
                 "@", "\u{00AF}", "\u{2044}", "\\", "\u{02DA}", "\u{221A}", "`", "'"].contains(String(sym)) {
