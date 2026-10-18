@@ -355,6 +355,11 @@ indirect enum Container {
     /// (`put "• " before the clickLine`, FontIndexer). Resolved at run time by
     /// re-parsing the click descriptor ("line 3 of card field id 12").
     case clickLine
+    /// `the value of <expr>` as a container — the DESCRIPTOR the value
+    /// names is the real container (`put p into the value of vPageVar` —
+    /// WineBin Master's computed page globals). Resolved at run time by
+    /// re-parsing the evaluated descriptor.
+    case indirect(Expr)
     /// `[the] clipboard` as a container — the system pasteboard (`put
     /// theList into the clipboard`, HyperCard 10th Anniversary; budgetBoss).
     case clipboard

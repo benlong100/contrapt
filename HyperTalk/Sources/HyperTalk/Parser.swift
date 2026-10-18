@@ -1271,6 +1271,13 @@ struct Parser {
                 try expectNewline()
                 return Stmt(kind: .playStop, line: line)
             }
+            // A bare `play` dispatches to a custom handler — `else play`
+            // (Trampchess defines on play). The keyword is already consumed
+            // here, so bare means the line already ended.
+            if current.kind == .newline || current.kind == .endOfScript {
+                try expectNewline()
+                return Stmt(kind: .send("play", []), line: line)
+            }
             // A sound literally named "the" — `play the` (KARATEstack's
             // word-by-word kiai lines).
             if peekIdentifier() == "the",
@@ -1467,7 +1474,7 @@ struct Parser {
         case "set":
             advance()
             _ = consumeWord("the")
-            guard let property = peekIdentifier() else {
+            guard var property = peekIdentifier() else {
                 // A dynamic property name — `set (TheProperty) of window X to …`
                 // / `set "thePercent" of window X to …` (QuickTime Tools, Movie
                 // Nudes): the property to set is computed. Contrapt doesn't model
@@ -1479,6 +1486,14 @@ struct Parser {
                 return Stmt(kind: .noOp, line: line)
             }
             advance()
+            // `set the lock text of …` (TwinPeaksTrivia) — the split spelling
+            // of lockText; merge the pair.
+            if property.lowercased() == "lock",
+               let glued = peekIdentifier(),
+               ["text", "screen", "messages", "recent", "errordialogs"].contains(glued) {
+                advance()
+                property = "lock\(glued)"
+            }
             // `set menuitem 6 of menu "Page" to "Hide Margin"` (PIMPIM) —
             // renaming the item, like `set the name of menuItem …`.
             if property.lowercased() == "menuitem" || property.lowercased() == "menuItem".lowercased() {
@@ -1671,8 +1686,9 @@ struct Parser {
             case .identifier, .number: wordCount += 1
             // `set cursor to loc "0,0"` (HyperScience) — strings ride along.
             case .string: wordCount += 1
-            // `set the icon of card button 1 to punk!` (Sticky Button).
-            case .symbol("!"): wordCount += 1
+            // `set the icon of card button 1 to punk!` (Sticky Button);
+            // `set cursor to busy¨` (trueConvert) — glued stray marks.
+            case .symbol("!"), .symbol("\u{00A8}"): wordCount += 1
             default: allWords = false
             }
             i += 1
@@ -1946,6 +1962,14 @@ struct Parser {
             if selectionOffset == 1 { advance() } // the
             advance() // selection
             return .selection
+        }
+        // `the value of <var>` as a destination — the named container
+        // (`put p into the value of vPageVar` — WineBin Master).
+        if peekIdentifier(selectionOffset) == "value", peekIdentifier(selectionOffset + 1) == "of" {
+            if selectionOffset == 1 { advance() } // the
+            advance() // value
+            advance() // of
+            return .indirect(try parsePrimary())
         }
         // `[the] clipboard` as a destination/source — `put theList into the
         // clipboard` (HyperCard 10th Anniversary, budgetBoss, cs timers).
@@ -2656,6 +2680,15 @@ struct Parser {
         // card 1`, `show picture of this card` — a real property write
         // (Adventures of Sean toggles card pictures for its dark rooms).
         if let w = peekIdentifier(), w == "picture" || w == "pict" {
+            // `show picture "TheGround"` (Crazy Hyperfloor) — the XCMD's
+            // window, absent here.
+            if case .string = tokens[index + 1].kind {
+                advance()
+                let name = try parsePrimary()
+                try expectNewline()
+                return Stmt(kind: .set(property: "visible", object: .window(name),
+                                       value: .stringLiteral(visible ? "true" : "false")), line: line)
+            }
             advance()
             let object: ObjectExpr
             if consumeWord("of") || consumeWord("in") {
@@ -2954,7 +2987,12 @@ struct Parser {
             // `go [to] stack "X"` — another stack (opens at its first card).
             // Unquoted multiword names join (`go to stack Address Book` —
             // LOGO POWER), like the stack shorthand.
-            let stackNumberJoins: Bool = { if case .number = tokens[index + 1].kind { return true }; return false }()
+            let stackNumberJoins: Bool = {
+                if case .number = tokens[index + 1].kind { return true }
+                if case .symbol(".") = tokens[index + 1].kind,
+                   case .identifier = tokens[index + 2].kind { return true } // simul.main
+                return false
+            }()
             if case .identifier(let first) = current.kind, isGoNameWord(first),
                (peekIdentifier(1).map { isGoNameWord($0) && $0 != "a" } ?? false) || stackNumberJoins {
                 var words: [String] = []
@@ -2964,6 +3002,15 @@ struct Parser {
                         words.append(w); advance()
                     case .number(let n): // `go stack PowerNotes 1.0`
                         words.append(Value.string(from: n)); advance()
+                    case .symbol("."): // `go to stack simul.main` (simulator)
+                        if case .identifier(let nw) = tokens[index + 1].kind,
+                           var last = words.popLast() {
+                            last += ".\(nw)"
+                            words.append(last)
+                            advance(); advance()
+                        } else {
+                            break loop
+                        }
                     default: break loop
                     }
                 }
@@ -3129,6 +3176,13 @@ struct Parser {
             index = saved
         }
         guard consumeWord("then") else {
+            // A then-less inline if — `if islocked exit mouseUp` (US
+            // Timeline) — the rest of the line is the then-branch.
+            if current.kind != .newline, current.kind != .endOfScript,
+               peekIdentifier() != nil {
+                let thenBody = [try parseStatement(handlerName: handlerName)]
+                return Stmt(kind: .ifThen(condition: condition, then: thenBody, otherwise: []), line: line)
+            }
             throw ScriptError(line: line, message: "Expected 'then' after the condition of 'if'.")
         }
 
@@ -3930,6 +3984,15 @@ struct Parser {
         // without `the` further below; this handles the article.
         if peekIdentifier() == "the",
            let w = peekIdentifier(1), ["next", "previous", "prev"].contains(w),
+           peekIdentifier(2) == "marked",
+           let c = peekIdentifier(3), Self.cardWords.contains(c) {
+            // `the prev marked card` (URL Database) — approximated by the
+            // plain relative card.
+            advance(); advance(); advance(); advance()
+            return .cardRelative(w == "next" ? .next : .previous)
+        }
+        if peekIdentifier() == "the",
+           let w = peekIdentifier(1), ["next", "previous", "prev"].contains(w),
            let c = peekIdentifier(2), Self.cardWords.contains(c) {
             advance(); advance(); advance()
             // `the next cd of this bg` (Sticky Buttons, Regions) — the
@@ -4105,6 +4168,12 @@ struct Parser {
         // the card's. Checked before the part handling so `card picture` isn't
         // read as a card named "picture".
         if let w = peekIdentifier(), w == "picture" || w == "pict" {
+            // `picture "TheGround"` — the Picture XCMD's named WINDOW
+            // (Crazy Hyperfloor sets its loc); an absent window here.
+            if case .string = tokens[index + 1].kind {
+                advance()
+                return .window(try parsePrimary())
+            }
             advance()
             // `show picture of card "card " & theCounter` (Mitosis ×7,
             // Periodic Table Help) — the of-card tail is consumed; one paint
@@ -5170,16 +5239,24 @@ struct Parser {
             // A bare `this` compares as the current card — `if this is the
             // first card then` (Hypertype, Sampletype). With a card word
             // following it stays an object reference for the caller.
-            if word == "this", let n = peekIdentifier(),
-               !Self.cardWords.contains(n), !Self.backgroundWords.contains(n), n != "stack" {
-                // `word 4 of this command` (TeleFix) — the split spelling of
-                // the global `thiscommand`; join it back.
-                if !["is", "then", "and", "or", "into", "of", "in", "to"].contains(n),
-                   case .identifier = current.kind {
-                    advance()
-                    return .variable("this\(n)")
+            if word == "this" {
+                let n = peekIdentifier()
+                if let n, !Self.cardWords.contains(n), !Self.backgroundWords.contains(n), n != "stack" {
+                    // `word 4 of this command` (TeleFix) — the split spelling
+                    // of the global `thiscommand`; join it back. Structure
+                    // words stay unglued (`read from file this for 15000` —
+                    // Art-HTB).
+                    if !["is", "then", "and", "or", "into", "of", "in", "to",
+                         "for", "from", "at", "with", "until", "by"].contains(n),
+                       case .identifier = current.kind {
+                        advance()
+                        return .variable("this\(n)")
+                    }
+                    // Comparing — `if this is the first card` (Hypertype).
+                    if n == "is" { return .property("id", .thisCard) }
                 }
-                return .property("id", .thisCard)
+                // A plain variable named this (`open file this` — Art-HTB).
+                return .variable("this")
             }
             // `me` / `target` on their own → the object's name (HyperTalk
             // reserves both words for dispatch identity).

@@ -1516,6 +1516,11 @@ final class Runtime {
             return try await containerValue(resolved, line: line)
         case .clipboard:
             return host.clipboardContents()
+        case .indirect(let expression):
+            // Evaluate the descriptor and read the container it names.
+            let descriptor = try await evaluate(expression, line: line)
+            guard let resolved = Parser.parseSoleContainer(descriptor) else { return descriptor }
+            return try await containerValue(resolved, line: line)
         case .buttonContents(let buttonRef):
             // A button's contents (HC 2.x) — read via the contents property.
             let (reference, domain, card) = try await resolveButtonRef(buttonRef, line: line)
@@ -1632,6 +1637,12 @@ final class Runtime {
             try await setContainer(resolved, to: value, line: line)
         case .clipboard:
             host.setClipboardContents(value)
+        case .indirect(let expression):
+            // `put p into the value of vPageVar` (WineBin) — the variable's
+            // text names the real container.
+            let descriptor = try await evaluate(expression, line: line)
+            guard let resolved = Parser.parseSoleContainer(descriptor) else { return }
+            try await setContainer(resolved, to: value, line: line)
         case .buttonContents(let buttonRef):
             // `put x into btn "X"` — write the button's contents (HC 2.x).
             let (reference, domain, card) = try await resolveButtonRef(buttonRef, line: line)
@@ -1940,6 +1951,10 @@ final class Runtime {
             return try await fieldAndRange(of: resolved, line: line)
         case .clipboard:
             return nil
+        case .indirect(let expression):
+            let descriptor = try await evaluate(expression, line: line)
+            guard let resolved = Parser.parseSoleContainer(descriptor) else { return nil }
+            return try await fieldAndRange(of: resolved, line: line)
         case .buttonContents:
             // Button contents aren't a text-selectable field range (`select
             // line … of bkgnd btn` no-ops gracefully, like old paint selects).
@@ -1969,7 +1984,7 @@ final class Runtime {
         case .variable: return true
         case .chunk(_, _, let base): return isVariableContainer(base)
         case .element(_, let base): return isVariableContainer(base)
-        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .clickChunk, .selectedLine, .selectedField, .foundLine, .clipboard: return false
+        case .field, .messageBox, .me, .target, .selection, .foundChunk, .url, .persistent, .expressionValue, .buttonContents, .clickLine, .clickChunk, .selectedLine, .selectedField, .foundLine, .clipboard, .indirect: return false
         }
     }
 

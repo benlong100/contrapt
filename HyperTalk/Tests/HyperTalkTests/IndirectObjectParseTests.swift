@@ -752,3 +752,24 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("send \"mouseUp\" to How to type in a wordlist"))
     #expect(parses("if word 4 of this command = \"player1\" then beep"))
 }
+
+@Test func batchSeventeenRoundOne() {
+    // Art-HTB: a file (and variable) literally named this.
+    #expect(parses("read from file this for 15000"))
+    #expect(parses("open file this"))
+    // Crazy Hyperfloor: the Picture XCMD's named windows.
+    #expect(parses("show picture \"TheGround\""))
+    #expect(parses("set loc of picture \"TheGround\" to -14,-21"))
+    // US Timeline: a then-less inline if.
+    #expect((try? Parser.parse("on mouseUp\nif islocked exit mouseUp\nend mouseUp")) != nil)
+    // Trampchess: a bare play dispatches to its custom handler.
+    #expect((try? Parser.parse("on mouseUp\nif x then put 1 into y\nelse play\nend mouseUp")) != nil)
+    // TwinPeaksTrivia: the split lock text property.
+    #expect(parses("set the lock text of bg fld solution to false"))
+    // URL Database: relative marked cards as objects.
+    #expect(parses("if the number of the prev marked card < the number of this card\nthen beep"))
+    // WineBin: the value of a variable as an indirect container.
+    #expect(parses("put p into the value of vPageVar"))
+    // simulator family: dotted unquoted stack names.
+    #expect(parses("go to stack simul.main"))
+}

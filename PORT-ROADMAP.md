@@ -344,14 +344,14 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**IA corpus sweep - batches 1-16 DONE 2026-10-18.**
-Corpus 302 -> 4,279 stacks / 137,172 scripts via Scripts/ia-fetch-stacks.py
-(~500 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
-Parse errors per batch: b1 99->54 ... b14 597->569, b15 611->601,
-b16 710->697. Batch 16 highlights: scoped find suppression (marked-
-scope lines only), convert expression fallback, additive mark indexes,
-call-guard in the go joiner, glued this-variables (this command),
-loose icon values (punk!), doubled-& continuations.
+**IA corpus sweep - batches 1-17 DONE 2026-10-18.**
+Corpus 302 -> 4,517 stacks / 146,689 scripts via Scripts/ia-fetch-stacks.py
+(~300 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
+Parse errors per batch: b1 99->54 ... b15 611->601, b16 710->697,
+b17 738->720. Batch 17 highlights: indirect containers (put into the
+value of <var>), then-less inline ifs, Picture-XCMD windows, variables
+named this, split lock properties, dotted stack names, relative marked
+cards, bare play dispatch.
 Batch 9 highlights: bkg synonym, part containers, this-vs-ordinal-card
 ids, positional menus, disk/program existence, ordinal fields with card
 scopes, selection readers under suppression, juxtaposed answer buttons. Batch 8
