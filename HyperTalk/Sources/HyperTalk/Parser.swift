@@ -375,6 +375,12 @@ struct Parser {
         guard let word = peekIdentifier() else {
             throw ScriptError(line: line, message: "Expected a command here, but found \(describe(current)).")
         }
+        // A bare arithmetic verb is a custom message — `divide` alone starts
+        // recursion engine's fractal pass (like the bare `Split` before it).
+        if ["add", "subtract", "multiply", "divide"].contains(word),
+           tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+            return try parseMessageSend(word: word, line: line)
+        }
         // A BASIC-style assignment — `x = x + 1` (HAN), `lo=INT(b/256)`
         // (Apple ::e File Decoder) — reads as put-into.
         if case .symbol("=") = tokens[index + 1].kind {
@@ -2239,7 +2245,7 @@ struct Parser {
             // rendered as the closest modeled effect (a zoom close/open); the
             // position word is consumed and ignored.
             _ = consumeWord("to") || consumeWord("from")
-            if let w = peekIdentifier(), w == "top" || w == "center" || w == "bottom" { advance() }
+            if let w = peekIdentifier(), ["top", "center", "centre", "middle", "bottom"].contains(w) { advance() }
             kind = .zoom
             return try finishVisualEffect(kind: kind, direction: first == "shrink" ? .close : .open)
         default:
@@ -3705,6 +3711,13 @@ struct Parser {
         }
         else if consumeWord("this") { _ = consumeCardWord() || consumeBackgroundWord(); ref = .current }
         else if consumeWord("recent") { _ = consumeCardWord(); ref = .previous } // most recent ≈ previous
+        else if peekIdentifier() == "back",
+                tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript
+                 || peekIdentifier(1) == "into" {
+            // `cd fld 2 of back` (Roman Mythology) — the recent card.
+            advance()
+            ref = .previous
+        }
         else if consumeWord("marked") {
             _ = consumeCardWord()
             // `find … in fld "notes" in marked cards` (Caesar) — a bare
@@ -3849,6 +3862,13 @@ struct Parser {
            let w = peekIdentifier(1), ["next", "previous", "prev"].contains(w),
            let c = peekIdentifier(2), Self.cardWords.contains(c) {
             advance(); advance(); advance()
+            // `the next cd of this bg` (Sticky Buttons, Regions) — the
+            // background scope is consumed, best effort.
+            if peekIdentifier() == "of" || peekIdentifier() == "in",
+               peekIdentifier(1) == "this",
+               Self.backgroundWords.contains(peekIdentifier(2) ?? "") {
+                advance(); advance(); advance()
+            }
             return .cardRelative(w == "next" ? .next : .previous)
         }
         if consumeWord("this") {

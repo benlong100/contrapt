@@ -709,3 +709,14 @@ private func parses(_ line: String) -> Bool {
     // Mitosis / Periodic Table Help: concat card names in show picture.
     #expect(parses("show picture of card \"card \" & theCounter"))
 }
+
+@Test func batchFourteenRoundTwo() {
+    // recursion engine: a bare arithmetic verb is a custom message.
+    #expect(parses("divide"))
+    // Sticky Buttons / Regions: relative cards carry a this-bg scope.
+    #expect(parses("put the number of the next cd of this bg into tg"))
+    // Rites Introduction: British centre in shrink effects.
+    #expect(parses("visual effect shrink to centre very slowly to card"))
+    // Roman Mythology: of back as a field owner (the recent card).
+    #expect(parses("put line (Reference) of cd fld 2 of back into bg fld 4"))
+}
