@@ -735,3 +735,20 @@ private func parses(_ line: String) -> Bool {
     #expect(parses("subtract bg field \"odometer\" from mileage"))
     #expect(parses("get card field id 11 from card id 17454"))
 }
+
+@Test func batchSixteenRoundOne() {
+    // Stack Enhancers: fieldless find whose line ends in the marked scope.
+    #expect(parses("find string texttosearch of marked cards"))
+    // MouseUp1.5-style property-of find texts stay intact.
+    #expect(parses("find the name of me in fld 1"))
+    // StackSmith: a call after the go-card words is an expression.
+    #expect(parses("go to card line clickline() of me"))
+    // StackTools: additive mark indexes.
+    #expect(parses("mark card it + 1"))
+    // StackTrivia: convert falls back to the expression form.
+    #expect(parses("convert the last item of the version of this stack to date and time"))
+    // Sticky Button / Teacher Worksheet / Textbausteine / TeleFix:
+    #expect(parses("set the icon of card button 1 to punk!"))
+    #expect(parses("send \"mouseUp\" to How to type in a wordlist"))
+    #expect(parses("if word 4 of this command = \"player1\" then beep"))
+}

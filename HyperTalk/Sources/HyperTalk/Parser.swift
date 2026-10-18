@@ -811,8 +811,10 @@ struct Parser {
                         object = parsed
                     } else {
                         index = savedObj
-                        while current.kind != .newline, current.kind != .endOfScript,
-                              peekIdentifier() != "in" { advance() }
+                        // The whole tail is the loose name — `to How to type
+                        // in a wordlist` (Teacher Worksheet Maker) keeps its
+                        // `in`.
+                        while current.kind != .newline, current.kind != .endOfScript { advance() }
                     }
                 }
             }
@@ -1669,6 +1671,8 @@ struct Parser {
             case .identifier, .number: wordCount += 1
             // `set cursor to loc "0,0"` (HyperScience) — strings ride along.
             case .string: wordCount += 1
+            // `set the icon of card button 1 to punk!` (Sticky Button).
+            case .symbol("!"): wordCount += 1
             default: allWords = false
             }
             i += 1
@@ -2112,7 +2116,15 @@ struct Parser {
     /// expression whose result lands in `it`.
     private mutating func parseConvertTarget(line: Int) throws -> ConvertTarget {
         if startsConvertContainer() {
-            return .container(try parseContainer(line: line))
+            // The container parse must land on from/to — otherwise the base
+            // was an expression after all (`the last item of the version of
+            // this stack` — StackTrivia) and the value form takes over.
+            let saved = index
+            if let container = try? parseContainer(line: line),
+               peekIdentifier() == "to" || peekIdentifier() == "from" {
+                return .container(container)
+            }
+            index = saved
         }
         return .expression(try parseExpression())
     }
@@ -2355,7 +2367,25 @@ struct Parser {
            }() {
             advance()
         }
+        // `find string texttosearch of marked cards` (Stack Enhancers) — when
+        // the line ends in the marked-cards scope, suppress property-of so the
+        // text doesn't eat it. Other finds keep property-of texts
+        // (`find the name of me in …` — MouseUp1.5).
+        var endsInMarkedScope = false
+        do {
+            var probe = index
+            while tokens[probe].kind != .newline, tokens[probe].kind != .endOfScript { probe += 1 }
+            if probe >= index + 3,
+               case .identifier(let a) = tokens[probe - 3].kind, a == "of" || a == "in",
+               case .identifier(let b) = tokens[probe - 2].kind, b == "marked",
+               case .identifier(let c) = tokens[probe - 1].kind, ["cards", "cds", "card", "cd"].contains(c) {
+                endsInMarkedScope = true
+            }
+        }
+        let savedSuppress = suppressBarePropertyOf
+        if endsInMarkedScope { suppressBarePropertyOf = true }
         let text = try parseExpression()
+        suppressBarePropertyOf = savedSuppress
         var field: FieldRef?
         if consumeWord("in") {
             // `find X in the foundField` / `… the selectedField` — restrict to
@@ -2501,9 +2531,10 @@ struct Parser {
         if current.kind == .newline || current.kind == .endOfScript {
             cardRef = nil // `mark card` / `mark this card` → the current card
         } else if consumeWord("id") {
-            cardRef = .idExpression(try parsePrimary())
+            cardRef = .idExpression(try parseAdditive())
         } else {
-            cardRef = .expression(try parsePrimary())
+            // Additive: `mark card it + 1` (StackTools Menu Help).
+            cardRef = .expression(try parseAdditive())
         }
         // `unmark card "Template" of bg "Users"` (Cindy's FC HyperAnalyzer)
         // — the background owner is consumed (cards are stack-global here).
@@ -2893,6 +2924,9 @@ struct Parser {
                     while case .identifier(let w) = tokens[probe].kind, isGoNameWord(w),
                           !(w == "of" || w == "in" || w == "without") { probe += 1 }
                     if case .identifier(let w) = tokens[probe].kind, w == "of" || w == "in" { runEndsAtOf = true }
+                    // A call — `go to card line clickline() of me`
+                    // (StackSmith) — is an expression, not a name.
+                    if case .symbol("(") = tokens[probe].kind { runEndsAtOf = true }
                 }
                 let cardNameStarters: Set<String> = ["card", "cd", "bg", "bkgnd", "bkgd", "bkg", "background",
                                                      "field", "fld", "button", "btn", "part"]
@@ -3341,8 +3375,10 @@ struct Parser {
                 return nil
             }
             if consumeSymbol("&&") {
+                _ = consumeSymbol("&") || consumeSymbol("&&") // `&¬&` (Textbausteine)
                 left = .binary(.concatWithSpace, left, try danglingRight() ?? parseAdditive())
             } else if consumeSymbol("&") {
+                _ = consumeSymbol("&") // doubled across a continuation
                 left = .binary(.concat, left, try danglingRight() ?? parseAdditive())
             } else {
                 return left
@@ -5136,6 +5172,13 @@ struct Parser {
             // following it stays an object reference for the caller.
             if word == "this", let n = peekIdentifier(),
                !Self.cardWords.contains(n), !Self.backgroundWords.contains(n), n != "stack" {
+                // `word 4 of this command` (TeleFix) — the split spelling of
+                // the global `thiscommand`; join it back.
+                if !["is", "then", "and", "or", "into", "of", "in", "to"].contains(n),
+                   case .identifier = current.kind {
+                    advance()
+                    return .variable("this\(n)")
+                }
                 return .property("id", .thisCard)
             }
             // `me` / `target` on their own → the object's name (HyperTalk
