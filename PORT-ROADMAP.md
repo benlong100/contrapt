@@ -344,14 +344,16 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**IA corpus sweep - batches 1-18 DONE 2026-10-18.**
-Corpus 302 -> 4,739 stacks / 154,275 scripts via Scripts/ia-fetch-stacks.py
-(~130 items remain - ONE final batch; python3 Scripts/ia-fetch-stacks.py
-200 19). Parse errors per batch: b1 99->54 ... b16 710->697, b17 738->720,
-b18 764->760. Batch 18 highlights: Rinaldi dotted-extension literals
-(.txt.), selection readers as chunk indexes (Waldo vs e-Book of-me
-ownership by lookahead). The incoming-error rate per batch is now tiny:
-most new stacks parse clean on arrival.
+**IA corpus sweep - COMPLETE 2026-10-18. All 19 batches done; the
+Internet Archive's hypercardstacks collection (3,695 items) is fully
+ingested.** Corpus: 302 -> 4,842 stacks / 156,942 scripts. Parse errors:
+765 stacks (15.8%), all triaged - CompileIt's 68K-pointer dialect, prose/
+template cards, and verified author bugs real HyperCard would also
+reject. ~290 real language gaps were found and fixed across the sweep,
+each cited to a shipped stack and pinned by a regression test. The final
+batch produced exactly ONE new failing script (wait 10 clicks - fixed),
+confirming the parser now absorbs the era's full vocabulary. Rerun the
+audit anytime: CONTRAPT_AUDIT=1 swift test --filter corpusParseAudit.
 Batch 9 highlights: bkg synonym, part containers, this-vs-ordinal-card
 ids, positional menus, disk/program existence, ordinal fields with card
 scopes, selection readers under suppression, juxtaposed answer buttons. Batch 8

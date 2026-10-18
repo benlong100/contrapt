@@ -693,7 +693,9 @@ struct Parser {
                 var unit: WaitUnit = .ticks // bare number is ticks, as in HyperCard
                 if consumeWord("seconds") || consumeWord("second") || consumeWord("secs") || consumeWord("sec") {
                     unit = .seconds
-                } else if consumeWord("ticks") || consumeWord("tick") {
+                } else if consumeWord("ticks") || consumeWord("tick")
+                            || consumeWord("clicks") || consumeWord("click") {
+                    // `wait 10 clicks` (The Dairy Debate) — ticks misspelled.
                     unit = .ticks
                 } else if consumeWord("minutes") || consumeWord("minute") || consumeWord("mins") || consumeWord("min") {
                     unit = .minutes // Contrapt addition, matching timed send
@@ -823,7 +825,9 @@ struct Parser {
                 var unit: WaitUnit = .seconds // the readable default for a delay
                 if consumeWord("seconds") || consumeWord("second") || consumeWord("secs") || consumeWord("sec") {
                     unit = .seconds
-                } else if consumeWord("ticks") || consumeWord("tick") {
+                } else if consumeWord("ticks") || consumeWord("tick")
+                            || consumeWord("clicks") || consumeWord("click") {
+                    // `wait 10 clicks` (The Dairy Debate) — ticks misspelled.
                     unit = .ticks
                 } else if consumeWord("minutes") || consumeWord("minute") || consumeWord("mins") || consumeWord("min") {
                     unit = .minutes

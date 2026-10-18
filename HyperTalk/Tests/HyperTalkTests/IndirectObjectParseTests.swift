@@ -786,3 +786,8 @@ private func parses(_ line: String) -> Bool {
     // The waffle sequel still parses.
     #expect(parses("put cd fld selectedtext of me into cd fld \"x\""))
 }
+
+@Test func batchNineteenRoundOne() {
+    // The Dairy Debate — the final stack of the final batch: clicks = ticks.
+    #expect(parses("wait 10 clicks"))
+}
