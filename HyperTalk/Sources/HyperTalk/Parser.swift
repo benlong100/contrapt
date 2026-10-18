@@ -1699,7 +1699,7 @@ struct Parser {
             try expectNewline()
             return Stmt(kind: .noOp, line: line)
         }
-        let value = try parseExpression()
+        var value = try parseExpression()
         // `put <expr> to program <app> [without reply]` — an AppleEvent to
         // another application (HyperBattleship's networked play). Contrapt can't
         // reach other apps, so accept and no-op the whole line.
@@ -1709,6 +1709,22 @@ struct Parser {
             return Stmt(kind: .noOp, line: line)
         }
 
+        // A missing & before a text constant — `fld "Split Amounts" return
+        // after indexVar` (InvestmentsRecorder), `"EngDistractors" tab & …`
+        // (RJDVStack) — concatenates, as HyperCard's adjacency did.
+        while let w = peekIdentifier(), ["return", "tab", "space", "quote", "comma"].contains(w),
+              ["into", "after", "before"].contains(peekIdentifier(1) ?? "")
+                || { if case .symbol("&") = tokens[index + 1].kind { return true }
+                     if case .symbol("&&") = tokens[index + 1].kind { return true }
+                     return false }() {
+            advance()
+            value = .binary(.concat, value, .variable(w))
+            if consumeSymbol("&") {
+                value = .binary(.concat, value, try parseConcatenation())
+            } else if consumeSymbol("&&") {
+                value = .binary(.concatWithSpace, value, try parseConcatenation())
+            }
+        }
         var mode: PutMode?
         if consumeWord("into") { mode = .into }
         else if consumeWord("after") { mode = .after }
@@ -2363,6 +2379,12 @@ struct Parser {
                 throw ScriptError(line: line, message: "Expected a field after 'in', like: find \"x\" in field \"Notes\".")
             }
         }
+        // `find (…) of marked cards` (Recipe 2.0b) — a marked-cards
+        // restriction with no field target; consumed (search-all).
+        if peekIdentifier() == "of" || peekIdentifier() == "in", peekIdentifier(1) == "marked" {
+            advance(); advance()
+            _ = consumeCardWord() || consumeWord("cards") || consumeWord("cds")
+        }
         try expectNewline()
         return Stmt(kind: .find(mode, text: text, inField: field), line: line)
     }
@@ -2595,6 +2617,12 @@ struct Parser {
             let object: ObjectExpr
             if consumeWord("of") || consumeWord("in") {
                 object = try parseObjectExpr()
+                // A concat card name — `show picture of card "card " &
+                // theCounter` (Mitosis ×7) — the tail is consumed; the
+                // script shows the card it just navigated to.
+                if case .symbol("&") = current.kind {
+                    while current.kind != .newline, current.kind != .endOfScript { advance() }
+                }
             } else {
                 object = .thisCard
             }
@@ -3646,6 +3674,13 @@ struct Parser {
         // `bg field X of bg LocalMaps` (Apollo 11) — a field of ANOTHER
         // background resolves on that background's first card.
         if let w = peekIdentifier(), Self.backgroundWords.contains(w),
+           tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+            // Bare `of background` at the line end — `sort by first line of
+            // field author of background` (HyperReferencer) — the current one.
+            advance()
+            return nil
+        }
+        if let w = peekIdentifier(), Self.backgroundWords.contains(w),
            !["field", "fld", "button", "btn", "part"].contains(peekIdentifier(1) ?? ""),
            !(tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript) {
             // The name may be quoted — `of bkgnd "Music Card Catalog"`
@@ -3981,6 +4016,21 @@ struct Parser {
         // read as a card named "picture".
         if let w = peekIdentifier(), w == "picture" || w == "pict" {
             advance()
+            // `show picture of card "card " & theCounter` (Mitosis ×7,
+            // Periodic Table Help) — the of-card tail is consumed; one paint
+            // layer per card context, the current card stands in.
+            if peekIdentifier() == "of" {
+                let savedPict = index
+                advance()
+                if consumeCardWord() {
+                    _ = try? parseConcatenation()
+                } else if consumeBackgroundWord() {
+                    _ = try? parseConcatenation()
+                    return .picture(background: true)
+                } else {
+                    index = savedPict
+                }
+            }
             return .picture(background: false)
         }
         if let w = peekIdentifier(),

@@ -697,3 +697,15 @@ private func parses(_ line: String) -> Bool {
     // PowerPalettes: raw option-key glyphs before into are literals.
     #expect(parses("if char 1 of what = B then put \u{02D9} into Px"))
 }
+
+@Test func batchFourteenRoundOne() {
+    // Recipe 2.0b: find with a marked-cards restriction and no field.
+    #expect(parses("find (cd fld \"Key Word2\" of cd Browse) of marked cards"))
+    // HyperReferencer: a bare of-background owner at the line end.
+    #expect(parses("sort by first line of field author of background"))
+    // InvestmentsRecorder / RJDVStack: adjacency before text constants.
+    #expect(parses("put fld \"Name\" && \"$\" & fld \"Split Amounts\" return after indexVar"))
+    #expect(parses("put line x of fld \"EngDistractors\" tab & line x of fld \"exampleList\" & return after theItems"))
+    // Mitosis / Periodic Table Help: concat card names in show picture.
+    #expect(parses("show picture of card \"card \" & theCounter"))
+}
