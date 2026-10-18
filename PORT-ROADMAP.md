@@ -344,16 +344,15 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
-**IA corpus sweep - batches 1-14 DONE 2026-10-18.**
-Corpus 302 -> 3,817 stacks / 123,834 scripts via Scripts/ia-fetch-stacks.py
-(~900 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
+**IA corpus sweep - batches 1-15 DONE 2026-10-18.**
+Corpus 302 -> 4,036 stacks / 129,429 scripts via Scripts/ia-fetch-stacks.py
+(~700 items remain; python3 Scripts/ia-fetch-stacks.py 200 <page>).
 Parse errors per batch: b1 99->54, b2 126->90, b3 164->132, b4 253->165,
 b5 265->230, b6 340->266, b7 385->332, b8 410->377, b9 434->412,
-b10 488->447, b11 490->479, b12 518->507, b13 558->540, b14 597->569.
-Batch 14 highlights: constant adjacency (missing & before return/tab),
-show-picture concat names (Mitosis x7), fieldless find scopes, bare
-of-background owners, relative cards with bg scopes, bare math verbs,
-British centre, of-back owners.
+b10 488->447, b11 490->479, b12 518->507, b13 558->540, b14 597->569,
+b15 611->601. Batch 15 highlights: answer-into, trailing button commas,
+go last bg, bareword card owners, nbsp whitespace; also caught and
+narrowed a from-owner greed bug that had inflated counts since b11.
 Batch 9 highlights: bkg synonym, part containers, this-vs-ordinal-card
 ids, positional menus, disk/program existence, ordinal fields with card
 scopes, selection readers under suppression, juxtaposed answer buttons. Batch 8

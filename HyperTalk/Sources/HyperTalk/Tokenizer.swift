@@ -121,7 +121,7 @@ struct Tokenizer {
 
     private mutating func skipSpacesAndComments() {
         while let character = current {
-            if character == " " || character == "\t" {
+            if character == " " || character == "\t" || character == "\u{00A0}" {
                 advance()
             } else if Self.startsComment(character, next: peekAhead) {
                 while let c = current, c != "\n" { advance() }

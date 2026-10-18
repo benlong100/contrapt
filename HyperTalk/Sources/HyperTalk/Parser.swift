@@ -599,6 +599,9 @@ struct Parser {
                 buttons.append(try parseConcatenation())
                 while true {
                     if consumeWord("or") || consumeSymbol(",") {
+                        // A trailing comma — `with "Cancel", "Get", "Post",`
+                        // (Simple HTML Editor) — ends the list.
+                        if current.kind == .newline || current.kind == .endOfScript { break }
                         buttons.append(try parseConcatenation())
                     } else if case .string = current.kind {
                         // `with "Yes" "cancel"` (ICL3.1) — adjacency separates
@@ -607,6 +610,9 @@ struct Parser {
                     } else { break }
                 }
             }
+            // `answer "…" into theData` (SendAEData) — the reply names a
+            // container; consumed (the reply still lands in `it`).
+            if consumeWord("into") { _ = try? parseContainer(line: line) }
             try expectNewline()
             return Stmt(kind: .answer(prompt, buttons: buttons), line: line)
         case "ask":
@@ -2837,7 +2843,7 @@ struct Parser {
             // (HyperGASP) is an expression destination, handled below.
             let w = peekIdentifier()!
             advance()
-            _ = consumeCardWord()
+            _ = consumeCardWord() || consumeBackgroundWord() // `go last bg` (SizzleSwitch)
             target = w == "first" ? .first : .last
         } else if consumeWord("home") {
             _ = consumeCardWord() // `go to home card` (Flying box)
@@ -3672,8 +3678,12 @@ struct Parser {
         // (`put card field "chain" in card 81 into beer`). `into` is a distinct
         // word, so it isn't mistaken for `in`; the reset below undoes a bare
         // `in` that isn't a card scope.
-        // `from card id 17454` (Maya Calendar) reads like `of`.
-        guard peekIdentifier() == "of" || peekIdentifier() == "in" || peekIdentifier() == "from" else { return nil }
+        // `from card id 17454` (Maya Calendar) reads like `of` — but ONLY
+        // before a card word, so `subtract fld "x" from mileage` keeps its
+        // from for the command.
+        let fromIsOwner = peekIdentifier() == "from"
+            && (Self.cardWords.contains(peekIdentifier(1) ?? "") || peekIdentifier(1) == "the")
+        guard peekIdentifier() == "of" || peekIdentifier() == "in" || fromIsOwner else { return nil }
         let saved = index
         advance() // of / in / from
         _ = consumeWord("the")
@@ -3755,7 +3765,31 @@ struct Parser {
             // Concatenation level, so `of card "analysis" & i` (Beauty for
             // All) and `of card laPremiere + x - 1` (Archivist) compute —
             // but comparisons stay outside (`if fld 1 of card n is empty`).
-            ref = consumeWord("id") ? .idExpression(try parseConcatenation()) : .expression(try parseConcatenation())
+            // A BAREWORD name before a relative-bg qualifier (`of cd i of
+            // previous bg` — SizzleSwitch) stops at the name so the
+            // qualifier parses; richer names keep the full expression.
+            let isID = consumeWord("id")
+            var name: Expr
+            if case .identifier(let w) = current.kind,
+               peekIdentifier(1) == "of" || peekIdentifier(1) == "in",
+               ["next", "previous", "prev", "this"].contains(peekIdentifier(2) ?? ""),
+               Self.backgroundWords.contains(peekIdentifier(3) ?? "") {
+                advance()
+                name = .variable(w)
+            } else {
+                name = try parseConcatenation()
+            }
+            ref = isID ? .idExpression(name) : .expression(name)
+        } else if let n = peekIdentifier(),
+                  !["me", "target", "the", "this", "it"].contains(n),
+                  case .identifier = current.kind,
+                  peekIdentifier(1) == "into" || tokens[index + 1].kind == .newline
+                    || tokens[index + 1].kind == .endOfScript {
+            // A bareword VARIABLE names the owner card — `field whitefish of
+            // lasteditorcard` (Softcourse editor). Only in terminal position
+            // so `fld 1 of the target`-style readers stay untouched.
+            advance()
+            ref = .expression(.variable(n))
         } else {
             index = saved // not a card owner (e.g. `field "x" of the target`)
             return nil

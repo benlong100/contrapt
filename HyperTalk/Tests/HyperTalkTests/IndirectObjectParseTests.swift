@@ -720,3 +720,18 @@ private func parses(_ line: String) -> Bool {
     // Roman Mythology: of back as a field owner (the recent card).
     #expect(parses("put line (Reference) of cd fld 2 of back into bg fld 4"))
 }
+
+@Test func batchFifteenRoundOne() {
+    // SendAEData: answer with a trailing into-container.
+    #expect(parses("answer \"You must specify a target program!\" into theData"))
+    // Simple HTML Editor: a trailing button comma ends the list.
+    #expect(parses("answer \"What is the method for this form?\" with \"Cancel\", \"Get\", \"Post\","))
+    // SizzleSwitch: go last bg; bareword names before relative-bg qualifiers.
+    #expect(parses("go last bg"))
+    #expect(parses("put fld \"colName\" of cd i of previous bg into fld \"colname\""))
+    // Softcourse editor: a bareword variable as the owner card.
+    #expect(parses("put field whitefish of lasteditorcard into booger"))
+    // The from-owner stays narrow: subtract keeps its from.
+    #expect(parses("subtract bg field \"odometer\" from mileage"))
+    #expect(parses("get card field id 11 from card id 17454"))
+}
