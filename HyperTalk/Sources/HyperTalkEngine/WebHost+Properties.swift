@@ -607,7 +607,9 @@ extension WebHost {
     }
 
     private func number(_ value: String, for property: String) throws -> Double {
-        guard let n = Double(value.trimmingCharacters(in: .whitespaces)), n.isFinite else {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return 0 } // empty reads as zero, as HyperCard coerced it
+        guard let n = Double(trimmed), n.isFinite else {
             throw HostError("The \(property) property needs a number, not \"\(value)\".")
         }
         return n

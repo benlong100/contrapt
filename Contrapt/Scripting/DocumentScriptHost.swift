@@ -2482,6 +2482,8 @@ final class DocumentScriptHost: HyperTalkHost {
             case "dontsearch": stackBinding.wrappedValue.backgrounds[index].dontSearch = try boolean(value, for: property)
             case "showpict", "showbgpict":
                 stackBinding.wrappedValue.backgrounds[index].showPicture = try boolean(value, for: property)
+            case "script":
+                stackBinding.wrappedValue.backgrounds[index].script = value
             default: throw Self.noSuchProperty(property, of: "this background")
             }
         case .thisStack:
@@ -2517,6 +2519,17 @@ final class DocumentScriptHost: HyperTalkHost {
         case "loc", "location":
             return [part.frame.x + part.frame.width / 2, part.frame.y + part.frame.height / 2]
                 .map(numberText).joined(separator: ",")
+        case "topleft":
+            return [part.frame.x, part.frame.y].map(numberText).joined(separator: ",")
+        case "botright", "bottomright":
+            return [part.frame.x + part.frame.width, part.frame.y + part.frame.height]
+                .map(numberText).joined(separator: ",")
+        case "selectedtext":
+            // A popup button's chosen item — its contents' first line stands
+            // in (no popup state is tracked yet). Fields read their selection
+            // via the selection machinery, not here.
+            guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
+            return properties.contents.components(separatedBy: "\n").first ?? ""
         case "title":
             guard case .button(let properties) = part.kind else { throw Self.noSuchProperty(property, of: kind) }
             return properties.title
@@ -3117,7 +3130,11 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     private func number(_ value: String, for property: String) throws -> Double {
-        guard let number = Double(value.trimmingCharacters(in: .whitespaces)), number.isFinite else {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        // Empty reads as zero, as HyperCard coerced it — `set the scroll of
+        // fld 1 to line 2 of pos` with a blank line (12 runtime-sweep hits).
+        if trimmed.isEmpty { return 0 }
+        guard let number = Double(trimmed), number.isFinite else {
             throw HostError("The \(property) property needs a number, not \"\(value)\".")
         }
         return number
