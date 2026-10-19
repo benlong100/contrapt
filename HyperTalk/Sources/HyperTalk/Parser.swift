@@ -25,7 +25,11 @@ struct Parser {
     // — e.g. a 96-level block-form if/else time dispatcher (BMUG's
     // AppointmentMaster) — so the limit is generous; it only trips on clearly
     // pathological input. (Parsing runs on a normal 8MB stack in the app.)
-    private static let maxExpressionDepth = 500
+    // Shared by the statement/if/expression guards. Low enough that the
+    // worst case (~11 parser frames per expression level) fits the 512 KB
+    // Swift-concurrency pool stacks the runtime sweep parses on; the full
+    // 157k-script corpus parses identically at this depth.
+    private static let maxExpressionDepth = 128
 
     init(tokens: [Token]) {
         self.tokens = tokens
@@ -4936,6 +4940,15 @@ struct Parser {
     /// `data["a"]["b"]`. `[` binds tighter than every operator (it's postfix on
     /// the atom). HyperCard never used `[`, so this is unambiguous.
     private mutating func parsePrimary() throws -> Expr {
+        // The statement/if guards don't cover the primary chain — a garbage
+        // "script" (binary data in a part's script slot) can nest thousands
+        // of primaries and blow the thread stack (SIGBUS in the runtime
+        // sweep). Throwing here turns it into an ordinary parse error.
+        expressionDepth += 1
+        defer { expressionDepth -= 1 }
+        guard expressionDepth <= Self.maxExpressionDepth else {
+            throw ScriptError(line: current.line, message: "This expression is nested too deeply.")
+        }
         var expr = try parsePrimaryAtom()
         while consumeSymbol("[") {
             let key = try parseExpression()

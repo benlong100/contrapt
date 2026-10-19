@@ -1207,9 +1207,10 @@ import HyperTalk
 
 @MainActor
 @Test func corpusRuntimeAudit() async throws {
-    // Gated on a sentinel file (xcodebuild doesn't pass shell env to the test
-    // runner): `touch /tmp/contrapt-runtime-audit` to enable.
-    guard FileManager.default.fileExists(atPath: "/tmp/contrapt-runtime-audit") else { return }
+    // Gated on an env var — xcodebuild forwards TEST_RUNNER_-prefixed vars:
+    //   TEST_RUNNER_CONTRAPT_RUNTIME=1 xcodebuild test -scheme ContraptTests …
+    // (A /tmp sentinel can't work: the sandboxed runner sees its own /tmp.)
+    guard ProcessInfo.processInfo.environment["CONTRAPT_RUNTIME"] != nil else { return }
     let root = "/Users/wanderer/Desktop/Homemade Apps/HyperPad"
     // The app test runs sandboxed; the project folder isn't writable. Write the
     // report to the temp dir (and print it) instead.
@@ -1217,8 +1218,11 @@ import HyperTalk
 
     let files = classicStackFiles(under: root)
     var all: [RuntimeAudit.Finding] = []
-    for file in files {
+    for (i, file) in files.enumerated() {
         let name = (file as NSString).lastPathComponent
+        // Progress marker: on a crash, the log's last RTA line names the
+        // culprit stack.
+        print("RTA \(i + 1)/\(files.count): \(file)")
         all.append(contentsOf: await RuntimeAudit.run(classicStackAt: file, name: name))
     }
 

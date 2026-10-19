@@ -565,9 +565,24 @@ final class Runtime {
         // In-use auxiliary stacks parse leniently (handler-by-handler), so a big
         // shared library stays usable even if some of its handlers use
         // constructs Contrapt doesn't support — HyperCard's per-handler compile.
-        let parsed = index >= usingLayerStart
-            ? Parser.parseLenient(path[index].source)
-            : try Parser.parse(path[index].source)
+        // The parse runs on a dedicated 16 MB thread: recursive descent over a
+        // long else-if chain (FLUX Spring 93's openStack) outgrows the 512 KB
+        // Swift-concurrency pool stacks and would SIGBUS the process. The spin
+        // is bounded — scripts compile in milliseconds — and the result is
+        // cached per layer.
+        let source = path[index].source
+        let lenient = index >= usingLayerStart
+        nonisolated(unsafe) var outcome: Result<ParsedScript, Error> = .failure(
+            ScriptError(line: 1, message: "The script could not be compiled."))
+        let thread = Thread {
+            outcome = Result {
+                lenient ? Parser.parseLenient(source) : try Parser.parse(source)
+            }
+        }
+        thread.stackSize = 16 << 20
+        thread.start()
+        while !thread.isFinished { usleep(200) }
+        let parsed = try outcome.get()
         parsedLayers[index] = parsed
         return parsed
     }
