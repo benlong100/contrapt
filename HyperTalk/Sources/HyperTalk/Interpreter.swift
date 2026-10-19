@@ -572,6 +572,11 @@ final class Runtime {
         // cached per layer.
         let source = path[index].source
         let lenient = index >= usingLayerStart
+        let parsed: ParsedScript
+        #if os(WASI)
+        // No threads on WASI; the wasm linker configures its own stack.
+        parsed = lenient ? Parser.parseLenient(source) : try Parser.parse(source)
+        #else
         nonisolated(unsafe) var outcome: Result<ParsedScript, Error> = .failure(
             ScriptError(line: 1, message: "The script could not be compiled."))
         let thread = Thread {
@@ -582,7 +587,8 @@ final class Runtime {
         thread.stackSize = 16 << 20
         thread.start()
         while !thread.isFinished { usleep(200) }
-        let parsed = try outcome.get()
+        parsed = try outcome.get()
+        #endif
         parsedLayers[index] = parsed
         return parsed
     }
