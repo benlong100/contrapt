@@ -193,7 +193,9 @@ enum LegacyStackImporter {
 
         // Card order comes from the PAGE block(s); fall back to file order.
         let cardBlocks = blocks.filter { $0.type == "CARD" }
-        let cardByID = Dictionary(uniqueKeysWithValues: cardBlocks.map { ($0.id, $0) })
+        // Tolerate duplicate CARD ids (Apple Service Source ships one) —
+        // the first block wins, matching file order.
+        let cardByID = Dictionary(cardBlocks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let order = reader.cardOrder(pageBlocks: blocks.filter { $0.type == "PAGE" },
                                      knownIDs: Set(cardBlocks.map(\.id)))
         let orderedCardBlocks = order.isEmpty ? cardBlocks : order.compactMap { cardByID[$0] }

@@ -1223,7 +1223,11 @@ import HyperTalk
         // Progress marker: on a crash, the log's last RTA line names the
         // culprit stack.
         print("RTA \(i + 1)/\(files.count): \(file)")
-        all.append(contentsOf: await RuntimeAudit.run(classicStackAt: file, name: name))
+        let findings = await RuntimeAudit.run(classicStackAt: file, name: name)
+        // Findings stream to the log as they land, so a crash late in the
+        // sweep doesn't lose the earlier results.
+        for f in findings { print("RTF\t\(f.stack)\t\(f.context)\t\(f.message)") }
+        all.append(contentsOf: findings)
     }
 
     // Rank by message (strip the specific quoted token so e.g. all
