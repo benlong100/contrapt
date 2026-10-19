@@ -3059,6 +3059,24 @@ final class DocumentScriptHost: HyperTalkHost {
                 return bg.showPicture ? "true" : "false"
             }
             return "true"
+        // Card geometry — the card occupies the whole card window, so these
+        // derive from the stack's card size (the runtime sweep found 20+
+        // reads: `the rect of this card`, `the width of card`…).
+        case "rect", "rectangle":
+            return "0,0,\(Int(stack.cardSize.width)),\(Int(stack.cardSize.height))"
+        case "width": return String(Int(stack.cardSize.width))
+        case "height": return String(Int(stack.cardSize.height))
+        case "topleft": return "0,0"
+        case "botright", "bottomright":
+            return "\(Int(stack.cardSize.width)),\(Int(stack.cardSize.height))"
+        case "loc", "location":
+            return "\(Int(stack.cardSize.width) / 2),\(Int(stack.cardSize.height) / 2)"
+        case "top", "left": return "0"
+        case "right": return String(Int(stack.cardSize.width))
+        case "bottom": return String(Int(stack.cardSize.height))
+        // `the cantModify of this card` — a stack property authors scope to
+        // the card; never modifiable-locked here.
+        case "cantmodify": return "false"
         default: throw Self.noSuchProperty(property, of: "a card")
         }
     }
@@ -3073,6 +3091,7 @@ final class DocumentScriptHost: HyperTalkHost {
         }
         switch property {
         case "name": stackBinding.wrappedValue.cards[index].name = value
+        case "cantmodify": _ = try? flag() // stack-level in HC; accepted, no card state
         case "marked": stackBinding.wrappedValue.cards[index].isMarked = try flag()
         case "cantdelete": stackBinding.wrappedValue.cards[index].cantDelete = try flag()
         case "dontsearch": stackBinding.wrappedValue.cards[index].dontSearch = try flag()

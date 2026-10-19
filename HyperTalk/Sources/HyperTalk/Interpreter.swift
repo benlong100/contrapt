@@ -518,7 +518,11 @@ final class Runtime {
     }
 
     /// Externals bundled inside the HyperCard application itself.
-    static let hyperCardExternals: Set<String> = ["palette", "picture", "flash"]
+    /// AddColor is HyperCard 2.3's color story; ColorizeHC and ShowBookmark
+    /// ride along in the same installed-in-Home class — the runtime sweep
+    /// found 150+ bare calls across color-era stacks.
+    static let hyperCardExternals: Set<String> = ["palette", "picture", "flash",
+                                                  "addcolor", "colorizehc", "showbookmark"]
 
     /// HyperCard's auto-sent system messages. These are recognized keywords, so
     /// sending one that no handler catches is a silent no-op (not "Can't
