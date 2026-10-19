@@ -791,3 +791,8 @@ private func parses(_ line: String) -> Bool {
     // The Dairy Debate — the final stack of the final batch: clicks = ticks.
     #expect(parses("wait 10 clicks"))
 }
+
+@Test func runtimeSweepParseShapes() {
+    // Bare back navigates (14 runtime-sweep hits).
+    #expect(parses("back"))
+}

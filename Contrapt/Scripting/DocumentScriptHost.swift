@@ -2505,6 +2505,17 @@ final class DocumentScriptHost: HyperTalkHost {
         case "longname": return "\(kind) \"\(part.name)\""
         case "longid": return "\(kind) id \(part.scriptID)"
         case "id": return String(part.scriptID)
+        case "partnumber":
+            // The part's 1-based position among its layer's parts — `the
+            // partNumber of fld "x"` (WWW.Where's z-order bookkeeping).
+            if let i = stack.cards[cardIndex].parts.firstIndex(where: { $0.id == part.id }) {
+                return String(i + 1)
+            }
+            if let bg = stack.backgrounds.first(where: { $0.id == stack.cards[cardIndex].backgroundID }),
+               let i = bg.parts.firstIndex(where: { $0.id == part.id }) {
+                return String(i + 1)
+            }
+            return "1"
         case "script": return part.script
         case "visible": return part.isVisible ? "true" : "false"
         case "width": return numberText(part.frame.width)

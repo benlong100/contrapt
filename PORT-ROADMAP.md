@@ -344,6 +344,22 @@ selectedButtonOfFamily/familyExists; app split: CardView hilites the
 clicked member, ContentView clears siblings. 6 FamilyTests; suite 781;
 sweep 48. NEEDS RE-IMPORT for old stacks' families to appear.
 
+**Runtime sweep (Tool #4) — FIRST FULL PASS 2026-10-18.** All 4,842
+stacks imported and their openStack/openCard handlers run headlessly:
+2,076 runtime errors, 248 distinct classes (full report:
+corpus-runtime-sweep.log; rerun with TEST_RUNNER_CONTRAPT_RUNTIME=1
+xcodebuild test -scheme ContraptTests). Fixed from the first pass:
+AddColor/ColorizeHC/ShowBookmark/ServiceSource XCMD shims (~520 hits),
+card geometry properties (~107), popup selectedText + part
+topleft/partNumber (~70), screenRect() function form, bare back,
+empty-to-zero property coercion, bg script setter, cantModify-of-card.
+Also fixed en route: a SIGBUS on deep else-if chains (script compilation
+now runs on a 16 MB thread — a real app crash, FLUX Spring 93), importer
+duplicate-CARD-id trap (Apple Service Source), parsePrimary joins the
+depth guard. Top remaining classes are poll-loop timeouts (424, benign),
+author parse bugs surfacing at run time, and long-tail one-offs —
+re-sweep to re-rank after these fixes land.
+
 **IA corpus sweep - COMPLETE 2026-10-18. All 19 batches done; the
 Internet Archive's hypercardstacks collection (3,695 items) is fully
 ingested.** Corpus: 302 -> 4,842 stacks / 156,942 scripts. Parse errors:

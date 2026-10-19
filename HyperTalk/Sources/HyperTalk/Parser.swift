@@ -379,6 +379,13 @@ struct Parser {
         guard let word = peekIdentifier() else {
             throw ScriptError(line: line, message: "Expected a command here, but found \(describe(current)).")
         }
+        // A bare `back` navigates like `go back` (14 runtime-sweep hits).
+        if word == "back",
+           tokens[index + 1].kind == .newline || tokens[index + 1].kind == .endOfScript {
+            advance()
+            try expectNewline()
+            return Stmt(kind: .go(.back), line: line)
+        }
         // A bare arithmetic verb is a custom message — `divide` alone starts
         // recursion engine's fractal pass (like the bare `Split` before it).
         if ["add", "subtract", "multiply", "divide"].contains(word),

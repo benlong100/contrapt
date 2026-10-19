@@ -507,6 +507,11 @@ final class Runtime {
             if let value = try await host.callExternal(name, arguments: arguments) { return value }
             return ""
         }
+        // A readable global property in FUNCTION form — `screenRect()` (18
+        // runtime-sweep hits; VersionNumber XCMD's demo card and friends).
+        if arguments.isEmpty, Parser.readableGlobalProperties.contains(name.lowercased()) {
+            return try await evaluate(.globalProperty(name.lowercased()), line: line)
+        }
         throw ScriptError(line: line, message: "Can't find a function named '\(name)'.")
     }
 
@@ -523,7 +528,10 @@ final class Runtime {
     /// found 150+ bare calls across color-era stacks.
     static let hyperCardExternals: Set<String> = ["palette", "picture", "flash",
                                                   "addcolor", "colorizehc", "chccolorize",
-                                                  "chcuncolorize", "showbookmark", "cardnumber"]
+                                                  "chcuncolorize", "showbookmark", "cardnumber",
+                                                  // Apple Service Source's shared XCMD family
+                                                  // (183 sweep hits across its stacks).
+                                                  "sslistopen", "ssopencard", "sslistclose"]
 
     /// HyperCard's auto-sent system messages. These are recognized keywords, so
     /// sending one that no handler catches is a silent no-op (not "Can't
