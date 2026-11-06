@@ -1216,7 +1216,12 @@ import HyperTalk
     // report to the temp dir (and print it) instead.
     let outPath = NSTemporaryDirectory() + "corpus-runtime-audit.txt"
 
-    let files = classicStackFiles(under: root)
+    // CONTRAPT_RUNTIME_FILTER narrows the sweep to paths containing the
+    // substring — the fast way to re-run one crashing stack in isolation.
+    var files = classicStackFiles(under: root)
+    if let filter = ProcessInfo.processInfo.environment["CONTRAPT_RUNTIME_FILTER"] {
+        files = files.filter { $0.localizedCaseInsensitiveContains(filter) }
+    }
     var all: [RuntimeAudit.Finding] = []
     for (i, file) in files.enumerated() {
         let name = (file as NSString).lastPathComponent

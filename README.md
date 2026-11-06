@@ -61,6 +61,12 @@ interpreter is the sandbox. Design decisions and their reasons live in
 and how it differs from projects like LiveCode — lives in
 [PHILOSOPHY.md](PHILOSOPHY.md).
 
+Importing classic HyperCard stacks: what's supported, what's missing,
+and what's known broken — measured against 4,842 real stacks and real
+HyperCard in an emulator — lives in [COMPATIBILITY.md](COMPATIBILITY.md).
+The modern language additions are catalogued in
+[EXTENSIONS.md](EXTENSIONS.md).
+
 ## Building
 
 Open `Contrapt.xcodeproj` in Xcode 26+ and run on an iPad (or iPad
@@ -69,8 +75,7 @@ command line: `cd HyperTalk && swift test`.
 
 ## Status
 
-Pre-release, under active development. Planned: sound assets, a native
-macOS app, and an importer for original HyperCard stacks.
+Pre-release, under active development.
 
 ## License
 

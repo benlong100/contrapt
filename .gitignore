@@ -15,6 +15,7 @@ Word Companion
 
 # Generated reports & exported artifacts
 corpus-audit.txt
+corpus-runtime-sweep.log
 Web Site/Screenshots/
 
 # Wasm web engine: build artifacts (rebuild with Scripts/build-web-engine.sh)
