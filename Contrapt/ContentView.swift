@@ -171,7 +171,16 @@ struct ContentView: View {
         let pad: CGFloat = document.stack.presentAtActualSize ? 6 : 16
         let size = cardWindowViewport ?? CGSize(width: document.stack.cardSize.width,
                                                 height: document.stack.cardSize.height)
-        return CGSize(width: size.width + pad * 2, height: size.height + pad * 2)
+        var width = size.width + pad * 2
+        // An actual-size window makes room for the inspector column rather
+        // than squeezing the card; the toggle re-fires the hug task, growing
+        // the window on open and shrinking it back on close. (Scaled windows
+        // are wide enough already — and must not snap back after the user
+        // resizes by hand.)
+        if document.stack.presentAtActualSize && isInspectorPresented {
+            width += inspectorRoom.ideal
+        }
+        return CGSize(width: width, height: size.height + pad * 2)
     }
     #endif
     /// Editing habit, not document data — persists across stacks.
@@ -874,15 +883,18 @@ struct ContentView: View {
             )
         )
         // Original-size stacks make the window content hug the card (with the
-        // scene's .windowResizability(.contentSize)); other stacks stay
+        // scene's .windowResizability(.contentSize)), but stay user-resizable
+        // upward — the card scales to fill. The open inspector reserves its
+        // own width ON TOP of the card's so presenting it widens the window
+        // instead of squeezing a small card into a sliver. Other stacks stay
         // flexible around a comfortable default.
         .frame(
-            minWidth: actualSizeWindow ? cardWindowSize.width : 900,
-            idealWidth: actualSizeWindow ? cardWindowSize.width : 1000,
-            maxWidth: actualSizeWindow ? cardWindowSize.width : .infinity,
+            minWidth: actualSizeWindow ? cardWindowSize.width + inspectorRoom.min : 900,
+            idealWidth: actualSizeWindow ? cardWindowSize.width + inspectorRoom.ideal : 1000,
+            maxWidth: .infinity,
             minHeight: actualSizeWindow ? cardWindowSize.height : 640,
             idealHeight: actualSizeWindow ? cardWindowSize.height : 700,
-            maxHeight: actualSizeWindow ? cardWindowSize.height : .infinity
+            maxHeight: .infinity
         )
         #else
         .overlay(alignment: .topTrailing) {
@@ -909,6 +921,13 @@ struct ContentView: View {
     /// full-screen (which owns the whole screen).
     private var actualSizeWindow: Bool {
         document.stack.presentAtActualSize && !isPresentingFullScreen
+    }
+
+    /// Extra width reserved for the open inspector on an actual-size window
+    /// (matching .inspectorColumnWidth), so presenting it widens the window
+    /// rather than carving the column out of a card-hugging frame.
+    private var inspectorRoom: (min: CGFloat, ideal: CGFloat) {
+        isInspectorPresented ? (300, 360) : (0, 0)
     }
 
     /// The window content size for an actual-size stack: the card plus a thin
