@@ -825,6 +825,7 @@ struct ContraptApp: App {
             HelpStackCommand(title: "How to Import HyperCard Stacks", resource: HelpStacks.importing)
             HelpStackCommand(title: "Updating a Legacy Stack", resource: HelpStacks.legacyUpdate)
             HelpStackCommand(title: "Language Additions", resource: HelpStacks.languageAdditions)
+            HelpStackCommand(title: "Feed Reader (Example Stack)", resource: HelpStacks.feedReader)
         }
         #endif
         CommandMenu("Go") {

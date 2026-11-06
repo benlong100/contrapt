@@ -23,6 +23,7 @@ nonisolated enum HelpStacks {
     /// simply no-op meanwhile).
     static let legacyUpdate = "Updating a Legacy Stack"
     static let languageAdditions = "Language Additions"
+    static let feedReader = "Feed Reader"
 
     /// A fresh, disposable copy of a bundled help stack, ready to open like
     /// any document. Nil when the resource is missing from the bundle.
