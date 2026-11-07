@@ -492,6 +492,9 @@ private struct RootView: View {
     @State private var pendingNew: StackDocument?
     @State private var pendingFilename = "Untitled"
     @State private var saveTask: Task<Void, Never>?
+    /// A legacy import in flight: cards started / total, for the progress
+    /// overlay. (0, 0) while reading the file, nil when no import is running.
+    @State private var importProgress: (done: Int, total: Int)?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -512,6 +515,26 @@ private struct RootView: View {
                 OpenedStackView(stack: opened, onClose: closeOpened,
                                 onOpenStack: { url in openExternal(url) },
                                 stackActions: stackActions)
+            }
+            // The import-in-progress veil: a classic stack can take a while
+            // (per-card art decoding), so the work runs off the main actor
+            // and this reports card N of M above whatever is showing.
+            if let progress = importProgress {
+                Color.black.opacity(0.35).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    if progress.total > 0 {
+                        ProgressView(value: Double(progress.done), total: Double(progress.total))
+                            .frame(width: 260)
+                        Text("Importing card \(progress.done) of \(progress.total)…")
+                            .font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        ProgressView()
+                        Text("Reading stack…")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(28)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
         }
         // One importer for all three pickers. Classic HyperCard stacks and apps
@@ -617,15 +640,31 @@ private struct RootView: View {
     }
 
     private func importLegacy(_ url: URL, presentAtActualSize: Bool) {
-        // A document-picker URL is sandboxed; claim access before reading it.
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let contrapt = try? LegacyStackImporter.importedContraptFile(
-            from: url, iconApp: HyperCardAppReference.url(), presentAtActualSize: presentAtActualSize) else { return }
-        // Register the imported stack's classic siblings so a multi-file game
-        // can cross-navigate (`go … of stack "X"`) room to room in place.
-        StackLibrary.shared.registerSiblings(of: url, actualSize: presentAtActualSize)
-        openExternal(contrapt)
+        importProgress = (0, 0)
+        let iconApp = HyperCardAppReference.url()
+        Task.detached(priority: .userInitiated) {
+            // A document-picker URL is sandboxed; claim access before reading it.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let contrapt = try? LegacyStackImporter.importedContraptFile(
+                from: url, iconApp: iconApp, presentAtActualSize: presentAtActualSize,
+                progress: { done, total in
+                    // Every ~2% plus the last card — enough motion without a
+                    // main-actor hop per card of a 2,000-card stack.
+                    guard done == total || done % max(1, total / 50) == 0 else { return }
+                    Task { @MainActor in importProgress = (done, total) }
+                })
+            await MainActor.run {
+                importProgress = nil
+                guard let contrapt else { return }
+                // Register the imported stack's classic siblings so a multi-file
+                // game can cross-navigate (`go … of stack "X"`) room to room in
+                // place. (Still inside the security scope — the defer above
+                // releases it when this closure returns.)
+                StackLibrary.shared.registerSiblings(of: url, actualSize: presentAtActualSize)
+                openExternal(contrapt)
+            }
+        }
     }
 
     /// Confirms, then replaces this device's Home with the picked stack — a

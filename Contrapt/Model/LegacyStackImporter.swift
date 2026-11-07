@@ -38,7 +38,7 @@ enum LegacyStackImporter {
     /// button ICON bitmaps the stack references — embedded per-use as assets.
     /// `presentAtActualSize` opens the card at its true point size (1:1, small,
     /// like classic HyperCard) rather than scaled to fill the window.
-    static func stack(from data: Data, name: String, iconFork: Data? = nil, stackFork: Data? = nil, homeFork: Data? = nil, presentAtActualSize: Bool = false) throws -> Imported {
+    static func stack(from data: Data, name: String, iconFork: Data? = nil, stackFork: Data? = nil, homeFork: Data? = nil, presentAtActualSize: Bool = false, progress: (@Sendable (Int, Int) -> Void)? = nil) throws -> Imported {
         var reader = Reader(data)
         guard reader.tag(at: 0) == "STAK" else {
             throw ImportError(message: "This doesn't look like a HyperCard stack (no STAK header). If it came as a .hqx or .sit, unpack it first.")
@@ -277,7 +277,12 @@ enum LegacyStackImporter {
             stack.backgrounds.append(background)
         }
 
+        var cardsStarted = 0
         for block in orderedCardBlocks {
+            // Cards dominate import time (per-card WOBA art and text runs),
+            // so "card N of M" is an honest progress measure.
+            cardsStarted += 1
+            progress?(cardsStarted, orderedCardBlocks.count)
             let parsed = reader.parseObject(block, knownFieldIDs: fieldIDs, knownPartIDs: partIDs)
             let bgID = parsed.ownerBackgroundID
             let backgroundUUID = bgUUIDByID[bgID] ?? stack.backgrounds[0].id
@@ -356,7 +361,7 @@ enum LegacyStackImporter {
     /// classic sibling into the live document in place (no temp file). `iconApp`,
     /// if given, is a HyperCard application whose ICON resources resolve the
     /// stack's button icons (embedded per-use; nothing Apple ships in Contrapt).
-    static func importedStack(from source: URL, iconApp: URL? = nil, presentAtActualSize: Bool = false) throws -> Imported {
+    static func importedStack(from source: URL, iconApp: URL? = nil, presentAtActualSize: Bool = false, progress: (@Sendable (Int, Int) -> Void)? = nil) throws -> Imported {
         let didAccess = source.startAccessingSecurityScopedResource()
         defer { if didAccess { source.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: source)
@@ -373,7 +378,7 @@ enum LegacyStackImporter {
             defer { if iconAccess { iconApp.stopAccessingSecurityScopedResource() } }
             iconFork = ResourceFork.forkData(of: iconApp)
         }
-        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, stackFork: stackFork, homeFork: homeFork, presentAtActualSize: presentAtActualSize)
+        let imported = try stack(from: data, name: name.isEmpty ? "Imported Stack" : name, iconFork: iconFork, stackFork: stackFork, homeFork: homeFork, presentAtActualSize: presentAtActualSize, progress: progress)
         var importedStack = imported.stack
         var importedAssets = imported.assets
         // Record the stack's XCMD/XFCN names so the interpreter can no-op
@@ -410,8 +415,8 @@ enum LegacyStackImporter {
     /// file in the temporary directory, returning that URL to open. `iconApp`,
     /// if given, is a HyperCard application whose ICON resources resolve the
     /// stack's button icons (embedded per-use; nothing Apple ships in Contrapt).
-    static func importedContraptFile(from source: URL, iconApp: URL? = nil, presentAtActualSize: Bool = false) throws -> URL {
-        let imported = try importedStack(from: source, iconApp: iconApp, presentAtActualSize: presentAtActualSize)
+    static func importedContraptFile(from source: URL, iconApp: URL? = nil, presentAtActualSize: Bool = false, progress: (@Sendable (Int, Int) -> Void)? = nil) throws -> URL {
+        let imported = try importedStack(from: source, iconApp: iconApp, presentAtActualSize: presentAtActualSize, progress: progress)
         var entries: [String: Data] = ["stack.json": try imported.stack.fileData()]
         for (assetName, bytes) in imported.assets { entries["assets/\(assetName)"] = bytes }
         let archive = ZipArchive.archive(entries)
