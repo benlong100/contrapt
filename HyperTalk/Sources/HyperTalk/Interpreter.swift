@@ -212,6 +212,12 @@ final class Runtime {
         /// The positional arguments this handler/function was called with, for
         /// `the param of N` / `the paramCount` / `the params`.
         var arguments: [String] = []
+        /// Message-box frames: undeclared variables read and write the host's
+        /// global store — HyperCard's contract (variables used in the Message
+        /// box are globals), and what lets `it` from one typed line (`answer
+        /// file ""`) survive to the next (`put it`), since each line runs in
+        /// a fresh Runtime.
+        var variablesAreGlobal = false
     }
 
     private var frames: [Frame] = []
@@ -561,14 +567,14 @@ final class Runtime {
     /// Runs loose statements (a message box line) in a fresh frame rooted
     /// at the first layer, so message sends search the whole path.
     func runLoose(_ statements: [Stmt]) async throws {
-        frames.append(Frame(variables: Self.constants, layerIndex: 0))
+        frames.append(Frame(variables: Self.constants, layerIndex: 0, variablesAreGlobal: true))
         defer { frames.removeLast() }
         _ = try await execute(statements)
     }
 
     /// Evaluates a bare expression (a message box line) in a fresh frame.
     func evaluateLoose(_ expression: Expr) async throws -> String {
-        frames.append(Frame(variables: Self.constants, layerIndex: 0))
+        frames.append(Frame(variables: Self.constants, layerIndex: 0, variablesAreGlobal: true))
         defer { frames.removeLast() }
         return try await evaluate(expression, line: 1)
     }
@@ -623,15 +629,26 @@ final class Runtime {
         if frames.last?.globalNames.contains(name) == true {
             return host.globalValue(name) ?? ""
         }
-        return frames.last?.variables[name]
+        if let local = frames.last?.variables[name] { return local }
+        // A message-box frame falls through to the global store; a truly
+        // unset name stays nil so it still evaluates to itself.
+        if frames.last?.variablesAreGlobal == true {
+            return host.globalValue(name)
+        }
+        return nil
     }
 
     private func setVariable(_ name: String, to value: String) {
         guard !frames.isEmpty else { return }
-        if frames[frames.count - 1].globalNames.contains(name) {
+        let last = frames.count - 1
+        if frames[last].globalNames.contains(name) {
+            host.setGlobalValue(name, to: value)
+        } else if frames[last].variablesAreGlobal, frames[last].variables[name] == nil {
+            // Message-box writes go to the global store — except the seeded
+            // constants, which stay what they are.
             host.setGlobalValue(name, to: value)
         } else {
-            frames[frames.count - 1].variables[name] = value
+            frames[last].variables[name] = value
         }
     }
 

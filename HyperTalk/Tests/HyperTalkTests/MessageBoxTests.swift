@@ -97,3 +97,44 @@ private func cardPath(card: String = "", stack: String = "") -> [ScriptLayer] {
     )
     #expect(host.fields["out"] == "ab")
 }
+
+@Test func messageBoxVariablesPersistAcrossLines() async throws {
+    // HyperCard's contract: variables used in the Message box are globals.
+    // Each typed line runs in a fresh Runtime, so without the global store
+    // a counter would reset between lines.
+    let host = MockHost()
+    _ = try await HyperTalk.execute(messageLine: "put 41 into counter", along: cardPath(), host: host)
+    _ = try await HyperTalk.execute(messageLine: "put counter + 1 into counter", along: cardPath(), host: host)
+    let shown = try await HyperTalk.execute(messageLine: "counter", along: cardPath(), host: host)
+    #expect(shown == "42")
+}
+
+@Test func itSurvivesToTheNextMessageBoxLine() async throws {
+    // The iPad hand-test that caught this: `answer file ""` then `put it`
+    // showed the literal word "it" — the chosen path had died with the
+    // first line's frame.
+    let host = MockHost()
+    host.answerFilePrompts = []
+    host.answerFileResponse = "Disk:Folder:Picked File"
+    _ = try await HyperTalk.execute(messageLine: "answer file \"\"", along: cardPath(), host: host)
+    _ = try await HyperTalk.execute(messageLine: "put it", along: cardPath(), host: host)
+    #expect(host.messages.last == "Disk:Folder:Picked File")
+}
+
+@Test func handlerLocalsStayLocalWhenRunFromTheMessageBox() async throws {
+    // The global fallback belongs to the loose frame only: a handler
+    // dispatched FROM the message box still gets ordinary local variables.
+    let host = MockHost()
+    host.globals["x"] = "global"
+    _ = try await HyperTalk.execute(
+        messageLine: "probe",
+        along: cardPath(card: """
+        on probe
+          put "local" into x
+          put x into the message box
+        end probe
+        """),
+        host: host
+    )
+    #expect(host.globals["x"] == "global")
+}
