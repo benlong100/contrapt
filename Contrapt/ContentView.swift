@@ -40,6 +40,10 @@ struct ContentView: View {
     /// a `.topBarLeading` item instead made the menu unselectable on iPad — the
     /// whole menu highlighted and no row fired.)
     var homeStackActions: HomeStackActions? = nil
+    /// iOS `go home`: save-and-close the opened stack, revealing Home beneath
+    /// (what OpenedStackView's Home button does). nil on macOS and on Home
+    /// itself, where `go home` has nowhere to return to.
+    var onGoHome: (() -> Void)? = nil
     @Environment(\.undoManager) private var undoManager
     @Environment(\.openURL) private var openURL
     #if os(macOS)
@@ -2355,13 +2359,15 @@ struct ContentView: View {
     private func goFirst() { currentCardIndex = 0 }
     private func goLast() { currentCardIndex = max(0, document.stack.cards.count - 1) }
 
-    /// Opens the Home stack (seeding it on first use) as a document.
-    /// macOS-only: SwiftUI's openDocument action isn't available on iOS,
-    /// where the document browser is the front door.
+    /// `go home`. macOS opens the Home stack as a document (seeding it on
+    /// first use); iOS saves and closes the opened stack, revealing Home
+    /// beneath — or does nothing when this already is Home.
     private func openHome() {
         #if os(macOS)
         let url = HomeStack.ensureSeeded()
         Task { try? await openDocument(at: url) }
+        #else
+        onGoHome?()
         #endif
     }
 

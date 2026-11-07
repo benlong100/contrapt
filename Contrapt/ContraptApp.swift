@@ -657,13 +657,12 @@ private struct OpenedStackView: View {
     var body: some View {
         NavigationStack {
             ContentView(document: stack.document, fileURL: stack.url,
-                        onOpenStackFile: { url, _ in onOpenStack(url) })
+                        onOpenStackFile: { url, _ in onOpenStack(url) },
+                        onGoHome: { saveAndClose() })
         }
         .overlay(alignment: .topLeading) {
             Button {
-                saveTask?.cancel()
-                stack.document.write(to: stack.url)
-                onClose()
+                saveAndClose()
             } label: {
                 Label("Home", systemImage: "house.fill")
                     .labelStyle(.iconOnly)
@@ -683,6 +682,13 @@ private struct OpenedStackView: View {
             guard !Task.isCancelled else { return }
             stack.document.write(to: stack.url)
         }
+    }
+
+    /// The Home button's action, also reached by a scripted `go home`.
+    private func saveAndClose() {
+        saveTask?.cancel()
+        stack.document.write(to: stack.url)
+        onClose()
     }
 }
 #endif
