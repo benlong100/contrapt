@@ -89,12 +89,19 @@ enum PrintService {
         operation.jobTitle = jobTitle
         operation.run()
         #elseif canImport(UIKit)
-        let controller = UIPrintInteractionController.shared
-        let printInfo = UIPrintInfo(dictionary: nil)
-        printInfo.jobName = jobTitle
-        controller.printInfo = printInfo
-        controller.printingItem = pdf
-        controller.present(animated: true)
+        // The interpreter invokes host print calls from its background
+        // executor (Swift 5 mode doesn't enforce this enum's @MainActor for
+        // those synchronous calls), and UIKit's print sheet asserts in its
+        // TextKit layout when presented off the main thread — `print card`
+        // crashed exactly there on the iPad. Hop explicitly.
+        DispatchQueue.main.async {
+            let controller = UIPrintInteractionController.shared
+            let printInfo = UIPrintInfo(dictionary: nil)
+            printInfo.jobName = jobTitle
+            controller.printInfo = printInfo
+            controller.printingItem = pdf
+            controller.present(animated: true)
+        }
         #endif
     }
 }
