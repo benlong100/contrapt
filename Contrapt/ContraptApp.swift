@@ -503,20 +503,15 @@ private struct RootView: View {
                 // ContentView, which builds the menu inside its own toolbar.
                 ContentView(document: home, fileURL: HomeStack.workingURL,
                             onOpenStackFile: { url, _ in openExternal(url) },
-                            homeStackActions: HomeStackActions(
-                                newStack: { startNew(.makeNew(), filename: "Untitled") },
-                                learnHyperTalk: { startNew(.tutorial(), filename: "Learn HyperTalk") },
-                                open: { importKind = .contraptStack; isPickerPresented = true },
-                                importLegacy: { importKind = .legacyStack; isPickerPresented = true },
-                                setIconApp: { importKind = .iconApp; isPickerPresented = true },
-                                replaceHome: { importKind = .homeStack; isPickerPresented = true }))
+                            homeStackActions: stackActions)
             }
             // An opened stack simply appears over Home (an opaque layer, not
             // a sliding sheet), so it feels like being on that stack rather
             // than a temporary modal.
             if let opened {
                 OpenedStackView(stack: opened, onClose: closeOpened,
-                                onOpenStack: { url in openExternal(url) })
+                                onOpenStack: { url in openExternal(url) },
+                                stackActions: stackActions)
             }
         }
         // One importer for all three pickers. Classic HyperCard stacks and apps
@@ -562,6 +557,19 @@ private struct RootView: View {
             if phase != .active { saveTask?.cancel(); home.write(to: HomeStack.workingURL) }
         }
         .onOpenURL { openExternal($0) }
+    }
+
+    /// The Stacks launcher menu's actions — shown on Home and inside any
+    /// opened stack (the pickers they present live on this view's ZStack,
+    /// which underlies both).
+    private var stackActions: HomeStackActions {
+        HomeStackActions(
+            newStack: { startNew(.makeNew(), filename: "Untitled") },
+            learnHyperTalk: { startNew(.tutorial(), filename: "Learn HyperTalk") },
+            open: { importKind = .contraptStack; isPickerPresented = true },
+            importLegacy: { importKind = .legacyStack; isPickerPresented = true },
+            setIconApp: { importKind = .iconApp; isPickerPresented = true },
+            replaceHome: { importKind = .homeStack; isPickerPresented = true })
     }
 
     /// Creates a stack in memory and presents the exporter to save it into
@@ -703,12 +711,17 @@ private struct OpenedStackView: View {
     var onClose: () -> Void
     /// Opening another stack from within this one (`go stack "X"`).
     var onOpenStack: (URL) -> Void = { _ in }
+    /// The Stacks launcher menu — the same actions Home shows, so New/Open/
+    /// Import aren't stranded behind a trip back to Home. The pickers these
+    /// trigger live on RootView's ZStack, which stays beneath this layer.
+    var stackActions: HomeStackActions? = nil
     @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             ContentView(document: stack.document, fileURL: stack.url,
                         onOpenStackFile: { url, _ in onOpenStack(url) },
+                        homeStackActions: stackActions,
                         onGoHome: { saveAndClose() })
         }
         .overlay(alignment: .topLeading) {
