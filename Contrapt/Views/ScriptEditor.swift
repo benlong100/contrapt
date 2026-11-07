@@ -237,29 +237,31 @@ struct ScriptFormSection: View {
             // One row of actions where the column is wide enough (the macOS
             // inspector); the narrow iPad column gets two rows — four
             // buttons squeezed into one line wrapped their labels mid-word
-            // ("Ex-plain").
+            // ("Ex-plain"). Every labeled button is fixedSize so a candidate
+            // reports its honest width: without that, the HStack "fits" any
+            // width by truncating its labels and ViewThatFits never falls
+            // through.
             ViewThatFits(in: .horizontal) {
                 HStack {
-                    checkButton
-                    ScriptExplainButton(objectLabel: title, script: script)
-                    ScriptWriteButton(objectLabel: title, script: $script)
+                    checkButton.fixedSize()
+                    ScriptExplainButton(objectLabel: title, script: script).fixedSize()
+                    ScriptWriteButton(objectLabel: title, script: $script).fixedSize()
                     Spacer()
                     expandButton
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        checkButton
+                        checkButton.fixedSize()
                         Spacer()
-                        ScriptExplainButton(objectLabel: title, script: script)
+                        ScriptExplainButton(objectLabel: title, script: script).fixedSize()
                     }
                     HStack {
-                        ScriptWriteButton(objectLabel: title, script: $script)
+                        ScriptWriteButton(objectLabel: title, script: $script).fixedSize()
                         Spacer()
                         expandButton
                     }
                 }
             }
-            .lineLimit(1)
             .buttonStyle(.borderless)
             if let checkResult {
                 checkResult.label
