@@ -25,3 +25,4 @@ Contrapt/WebEngine.zip
 
 # Local API keys (never commit)
 openAI api key.txt
+build/
