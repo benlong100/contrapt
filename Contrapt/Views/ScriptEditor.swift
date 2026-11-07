@@ -234,18 +234,32 @@ struct ScriptFormSection: View {
     var body: some View {
         Section(title) {
             ScriptEditor(script: $script)
-            HStack {
-                Button("Check Script", systemImage: "checkmark.seal") {
-                    checkResult = .checking(script)
+            // One row of actions where the column is wide enough (the macOS
+            // inspector); the narrow iPad column gets two rows — four
+            // buttons squeezed into one line wrapped their labels mid-word
+            // ("Ex-plain").
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    checkButton
+                    ScriptExplainButton(objectLabel: title, script: script)
+                    ScriptWriteButton(objectLabel: title, script: $script)
+                    Spacer()
+                    expandButton
                 }
-                ScriptExplainButton(objectLabel: title, script: script)
-                ScriptWriteButton(objectLabel: title, script: $script)
-                Spacer()
-                Button("Expand Editor", systemImage: "arrow.up.left.and.arrow.down.right") {
-                    onExpand()
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        checkButton
+                        Spacer()
+                        ScriptExplainButton(objectLabel: title, script: script)
+                    }
+                    HStack {
+                        ScriptWriteButton(objectLabel: title, script: $script)
+                        Spacer()
+                        expandButton
+                    }
                 }
-                .labelStyle(.iconOnly)
             }
+            .lineLimit(1)
             .buttonStyle(.borderless)
             if let checkResult {
                 checkResult.label
@@ -254,6 +268,19 @@ struct ScriptFormSection: View {
         .onChange(of: script) {
             checkResult = nil
         }
+    }
+
+    private var checkButton: some View {
+        Button("Check Script", systemImage: "checkmark.seal") {
+            checkResult = .checking(script)
+        }
+    }
+
+    private var expandButton: some View {
+        Button("Expand Editor", systemImage: "arrow.up.left.and.arrow.down.right") {
+            onExpand()
+        }
+        .labelStyle(.iconOnly)
     }
 }
 
