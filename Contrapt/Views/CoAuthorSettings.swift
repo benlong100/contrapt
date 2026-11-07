@@ -31,6 +31,13 @@ struct CoAuthorSettings: View {
                         Text(status).foregroundStyle(.secondary).font(.callout)
                     }
                 }
+                // An iOS Form makes the whole row one tap target under the
+                // automatic button style, firing EVERY button in it — tapping
+                // Save also ran Clear (caught on the iPad). Borderless
+                // restores per-button hit-testing; macOS keeps its default.
+                #if os(iOS)
+                .buttonStyle(.borderless)
+                #endif
             } header: {
                 Text("AI Co-author")
             } footer: {
