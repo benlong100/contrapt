@@ -923,6 +923,45 @@ import HyperTalk
 }
 
 @MainActor
+@Test func fileIOReadsAnAbsolutePathDirectly() async throws {
+    // The path `answer file` returns is absolute. It must open THAT file —
+    // not a fresh empty one in the sandbox store, which is what happened
+    // until 2026-11-07 (caught on the iPad: a picked GPX read as empty; the
+    // Mac behaved the same). A read-only open must also close cleanly: close
+    // only writes when the script changed the contents.
+    let external = FileManager.default.temporaryDirectory
+        .appendingPathComponent("contrapt-external-\(UUID().uuidString).gpx")
+    try "<gpx><trk>ridge walk</trk></gpx>".write(to: external, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(at: external) }
+    let before = try FileManager.default.attributesOfItem(atPath: external.path)[.modificationDate] as? Date
+
+    var stack = Stack.makeNew()
+    var index = 0
+    var shown: [String] = []
+    let host = DocumentScriptHost(
+        stack: Binding(get: { stack }, set: { stack = $0 }),
+        currentCardIndex: Binding(get: { index }, set: { index = $0 }),
+        onMessage: { shown.append($0) },
+        onAnswer: { _, buttons in buttons.first ?? "OK" },
+        onAsk: { _, initial in initial },
+        onNavigate: { i, _ in index = i }
+    )
+    let layers = try #require(host.scriptLayers(for: .thisCard))
+    try await HyperTalk.send("probeExternalRead", along: [ScriptLayer(name: "t", source: """
+    on probeExternalRead
+      open file "\(external.path)"
+      read from file "\(external.path)" until end
+      close file "\(external.path)"
+      put it
+    end probeExternalRead
+    """, object: .thisCard)] + layers, host: host)
+    #expect(shown.last == "<gpx><trk>ridge walk</trk></gpx>")
+    // The unchanged file wasn't rewritten by close.
+    let after = try FileManager.default.attributesOfItem(atPath: external.path)[.modificationDate] as? Date
+    #expect(before == after)
+}
+
+@MainActor
 @Test func scrollOfFieldRoundTrips() throws {
     // `the scroll of field` is modeled: set stores the offset on the field,
     // get reads it back, negatives clamp to 0, and buttons have no scroll.

@@ -1847,13 +1847,23 @@ final class DocumentScriptHost: HyperTalkHost {
         var characters: [Character]
         var mark: Int
         var url: URL
+        /// What the file held at open — close only writes when the script
+        /// changed something, so reading an external file (picked via
+        /// `answer file`, possibly read-only) never fails or rewrites on close.
+        var original: [Character]
     }
     private var openFiles: [String: OpenFile] = [:]
 
-    /// Where script-created files live: a "HyperTalk Files" folder in the
-    /// app's container (sandbox-safe, no user grant needed). A classic
-    /// colon path ("HD:Data:scores") maps to its last component.
+    /// Where a script path points. An absolute POSIX path to a file that
+    /// already exists is used directly — that's what `answer file` returns,
+    /// readable under the picker's grant. Everything else (classic colon
+    /// paths like "HD:Data:scores", bare names, absolute paths that don't
+    /// exist) maps to its last component inside a "HyperTalk Files" folder
+    /// in the app's container — sandbox-safe, no user grant needed.
     private func fileURL(for path: String) throws -> URL {
+        if path.hasPrefix("/"), FileManager.default.fileExists(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
         let name = path.split(separator: ":").last.map(String.init) ?? path
         let safe = name.replacingOccurrences(of: "/", with: "-")
         guard !safe.isEmpty else { throw HostError("Can't open that file.") }
@@ -1872,11 +1882,13 @@ final class DocumentScriptHost: HyperTalkHost {
             ?? (try? String(contentsOf: url, encoding: .macOSRoman)) ?? ""
         let text = raw.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-        openFiles[path] = OpenFile(characters: Array(text), mark: 0, url: url)
+        let characters = Array(text)
+        openFiles[path] = OpenFile(characters: characters, mark: 0, url: url, original: characters)
     }
 
     func fileClose(_ path: String) throws {
         guard let file = openFiles.removeValue(forKey: path) else { throw HostError("File not open.") }
+        guard file.characters != file.original else { return }
         try String(file.characters).write(to: file.url, atomically: true, encoding: .utf8)
     }
 
@@ -1908,10 +1920,11 @@ final class DocumentScriptHost: HyperTalkHost {
     }
 
     func fileExists(_ path: String) -> Bool {
-        // `there is a file X` — true when the app's file store already holds it
-        // (a file this stack created via `open/write file`). External files on
-        // the user's disk aren't reachable from the sandbox, so those read
-        // absent — the right answer for a stack probing a file Contrapt lacks.
+        // `there is a file X` — true when the app's file store already holds
+        // it (a file this stack created via `open/write file`), or when X is
+        // an absolute path the app can see (one `answer file` handed out).
+        // Other external paths read absent — the right answer for a stack
+        // probing a file Contrapt lacks.
         guard let url = try? fileURL(for: path) else { return false }
         return FileManager.default.fileExists(atPath: url.path)
     }
