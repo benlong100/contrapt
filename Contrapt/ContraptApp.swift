@@ -475,6 +475,7 @@ private enum ImportKind {
     case contraptStack   // open an existing .contrapt
     case legacyStack     // import a classic HyperCard stack (any file)
     case iconApp         // point at a HyperCard app for button icons
+    case homeStack       // replace this device's Home with a .contrapt
 }
 
 private struct RootView: View {
@@ -507,7 +508,8 @@ private struct RootView: View {
                                 learnHyperTalk: { startNew(.tutorial(), filename: "Learn HyperTalk") },
                                 open: { importKind = .contraptStack; isPickerPresented = true },
                                 importLegacy: { importKind = .legacyStack; isPickerPresented = true },
-                                setIconApp: { importKind = .iconApp; isPickerPresented = true }))
+                                setIconApp: { importKind = .iconApp; isPickerPresented = true },
+                                replaceHome: { importKind = .homeStack; isPickerPresented = true }))
             }
             // An opened stack simply appears over Home (an opaque layer, not
             // a sliding sheet), so it feels like being on that stack rather
@@ -523,7 +525,8 @@ private struct RootView: View {
         // view don't work — only the last presents — so they're unified here.)
         .fileImporter(
             isPresented: $isPickerPresented,
-            allowedContentTypes: importKind == .contraptStack ? [.contraptStack] : [.data, .item]
+            allowedContentTypes: importKind == .contraptStack || importKind == .homeStack
+                ? [.contraptStack] : [.data, .item]
         ) { result in
             guard case .success(let url) = result else { return }
             switch importKind {
@@ -537,6 +540,11 @@ private struct RootView: View {
                     chooseImportSize(for: url)
                 }
             case .iconApp: HyperCardAppReference.save(url)
+            case .homeStack:
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.4))
+                    confirmReplaceHome(with: url)
+                }
             }
         }
         // New stacks and the tutorial are created in Files, then opened.
@@ -610,6 +618,49 @@ private struct RootView: View {
         // can cross-navigate (`go … of stack "X"`) room to room in place.
         StackLibrary.shared.registerSiblings(of: url, actualSize: presentAtActualSize)
         openExternal(contrapt)
+    }
+
+    /// Confirms, then replaces this device's Home with the picked stack — a
+    /// UIKit alert, like the import-size dialog (a SwiftUI dialog on this
+    /// scene never presented).
+    private func confirmReplaceHome(with url: URL) {
+        guard let top = Self.topViewController() else { return }
+        let name = url.deletingPathExtension().lastPathComponent
+        let alert = UIAlertController(
+            title: "Replace Home?",
+            message: "This device's Home stack — including any edits made here — will be replaced with “\(name)”.",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Replace Home", style: .destructive) { _ in
+            replaceHome(with: url)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        top.present(alert, animated: true)
+    }
+
+    private func replaceHome(with url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        // Validate before overwriting: the bytes must decode as a stack
+        // archive, so a bad pick can't destroy the working Home.
+        guard let data = try? Data(contentsOf: url),
+              let entries = try? ZipArchive.extract(data),
+              let manifest = entries["stack.json"],
+              (try? Stack(fileData: manifest)) != nil else {
+            if let top = Self.topViewController() {
+                let alert = UIAlertController(
+                    title: "Couldn't Replace Home",
+                    message: "That file didn't open as a Contrapt stack.",
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                top.present(alert, animated: true)
+            }
+            return
+        }
+        // The debounced autosave still holds the old Home; cancel it so it
+        // can't write over the replacement.
+        saveTask?.cancel()
+        try? data.write(to: HomeStack.workingURL)
+        home.load(data)
     }
 
     /// The frontmost presented view controller, for imperative UIKit alerts.

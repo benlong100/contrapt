@@ -21,6 +21,9 @@ struct HomeStackActions {
     var open: () -> Void
     var importLegacy: () -> Void
     var setIconApp: () -> Void
+    /// Replace this device's Home with a picked `.contrapt` (Home is
+    /// per-device; this is how a Home authored elsewhere moves in).
+    var replaceHome: () -> Void
 }
 
 /// The document view. Browse mode shows the current card with live parts;
@@ -1087,6 +1090,8 @@ struct ContentView: View {
                     Button("Open…", systemImage: "folder", action: actions.open)
                     Button("Import HyperCard Stack…", systemImage: "tray.and.arrow.down", action: actions.importLegacy)
                     Button("Set HyperCard App for Icons…", systemImage: "app.badge", action: actions.setIconApp)
+                    Divider()
+                    Button("Replace Home Stack…", systemImage: "house", action: actions.replaceHome)
                 }
             }
             #endif
