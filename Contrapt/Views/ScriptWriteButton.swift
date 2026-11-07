@@ -27,6 +27,7 @@ struct ScriptWriteButton: View {
         case loading(String)
         case preview(script: String, check: ScriptCheckResult)
         case message(String)   // unavailable, or an error
+        case settings          // key entry, for platforms with no Settings window
     }
 
     var body: some View {
@@ -82,9 +83,27 @@ struct ScriptWriteButton: View {
                 case .preview(let generated, let check):
                     previewForm(generated: generated, check: check)
                 case .message(let message):
-                    ContentUnavailableView("Co-author unavailable",
-                                           systemImage: "exclamationmark.triangle",
-                                           description: Text(message))
+                    VStack(spacing: 12) {
+                        ContentUnavailableView("Co-author unavailable",
+                                               systemImage: "exclamationmark.triangle",
+                                               description: Text(message))
+                        #if os(iOS)
+                        // iOS has no Settings (⌘,) window, so the key form
+                        // lives right here instead.
+                        if CoAuthorKeychain.load() == nil {
+                            Button("Enter Claude API Key…") { phase = .settings }
+                                .buttonStyle(.borderedProminent)
+                                .padding(.bottom, 24)
+                        }
+                        #endif
+                    }
+                case .settings:
+                    VStack(spacing: 0) {
+                        CoAuthorSettings()
+                        Button("Continue") { open() }   // re-checks the key
+                            .buttonStyle(.borderedProminent)
+                            .padding(.bottom)
+                    }
                 }
             }
             .navigationTitle("Write with AI")

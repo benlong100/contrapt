@@ -40,7 +40,9 @@ struct CoAuthorSettings: View {
             }
         }
         .formStyle(.grouped)
+        #if os(macOS)
         .frame(width: 460)
+        #endif
         .onAppear { key = CoAuthorKeychain.load() ?? "" }
     }
 }

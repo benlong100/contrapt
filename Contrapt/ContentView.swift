@@ -144,6 +144,16 @@ struct ContentView: View {
     /// A pending `answer` / `ask` dialog and its text field's contents.
     @State private var scriptDialog: ScriptDialog?
     @State private var askFieldText = ""
+    #if os(iOS)
+    /// A pending `answer file`: the suspended script's resume, kept separate
+    /// from the presentation flag so dismissal can't drop the continuation.
+    @State private var answerFileCompletion: ((String?) -> Void)?
+    @State private var isAnswerFilePresented = false
+    /// Security-scoped URLs picked by `answer file`, held for the session so
+    /// the script can `open file` the path it was handed (the macOS open
+    /// panel's powerbox grants this implicitly; iOS scopes are manual).
+    @State private var answerFileGrants: [URL] = []
+    #endif
     /// How many mouse-driven handlers are running. HyperCard runs one at a
     /// time; while one is active, further browse clicks are absorbed (they feed
     /// `the mouseClick` / `the clickLine`) rather than launching competing
@@ -811,6 +821,31 @@ struct ContentView: View {
             }
         }
         .fileDialogMessage(fileDialogMessageText)
+        #if os(iOS)
+        // `answer file`'s picker, on its own background view: stacking
+        // multiple fileImporters on one view is the SwiftUI bug RootView
+        // documents (only the last presents), and this view already carries
+        // the stack locator.
+        .background {
+            Color.clear.fileImporter(
+                isPresented: $isAnswerFilePresented,
+                allowedContentTypes: [.item]
+            ) { result in
+                guard case .success(let url) = result else { return resumeAnswerFile(nil) }
+                if url.startAccessingSecurityScopedResource() { answerFileGrants.append(url) }
+                resumeAnswerFile(url.path)
+            }
+            .onChange(of: isAnswerFilePresented) { _, presented in
+                // Cancel dismisses without calling the completion; give a
+                // pick's completion a beat to land, then resume nil.
+                guard !presented else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.3))
+                    resumeAnswerFile(nil)
+                }
+            }
+        }
+        #endif
         .toolbar { mainToolbar }
         // ⌘↑ also jumps to the first card (the Go menu advertises ⌘1); a hidden
         // shortcut keeps the arrow binding without a duplicate menu item.
@@ -2331,10 +2366,11 @@ struct ContentView: View {
     }
 
     /// Presents `answer file`'s open panel and returns the chosen file's path,
-    /// or nil on cancel. macOS only; other platforms have no NSOpenPanel, so
-    /// the script sees a cancelled dialog. The classic `type` (e.g. "STAK") is
-    /// advisory — the panel accepts any file, as the import flow does, and the
-    /// handler validates afterwards.
+    /// or nil on cancel. The classic `type` (e.g. "STAK") is advisory — the
+    /// panel accepts any file, as the import flow does, and the handler
+    /// validates afterwards. On iOS the document picker can't show the prompt
+    /// (UIDocumentPicker has no message slot), so the script's wording is lost
+    /// there; the pick itself works the same.
     @MainActor
     private func presentOpenPanel(prompt: String, type: String?) async -> String? {
         #if os(macOS)
@@ -2346,9 +2382,22 @@ struct ContentView: View {
         panel.prompt = "Choose"
         return panel.runModal() == .OK ? panel.url?.path : nil
         #else
-        return nil
+        return await withCheckedContinuation { continuation in
+            answerFileCompletion = { continuation.resume(returning: $0) }
+            isAnswerFilePresented = true
+        }
         #endif
     }
+
+    #if os(iOS)
+    /// Resumes a pending `answer file` exactly once — the picker's completion
+    /// and the cancel-dismissal watcher can both fire.
+    private func resumeAnswerFile(_ path: String?) {
+        guard let complete = answerFileCompletion else { return }
+        answerFileCompletion = nil
+        complete(path)
+    }
+    #endif
 
     /// Within-stack navigation actions published to the Go menu.
     private var cardNavigation: CardNavigation {

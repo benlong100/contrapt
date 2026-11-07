@@ -134,8 +134,6 @@ this page is about classic compatibility.
   outline on import; condense/extend are dropped.
 - **Custom user properties** (`set the myThing of card …`) — deferred:
   no stack in the 4,842 uses them.
-- **`answer file` on iOS** — macOS only today (needs a mid-script
-  file picker on iOS).
 - **True layout reflow / Dynamic Type** — a HyperCard card is a fixed
   pixel canvas; Contrapt scales it uniformly (plus VoiceOver semantics),
   but doesn't reflow parts. Deliberate.
