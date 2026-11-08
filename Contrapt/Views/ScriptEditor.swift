@@ -35,7 +35,16 @@ struct ScriptEditor: View {
             .font(.system(.callout, design: .monospaced))
             .autocorrectionDisabled()
             .codeEntryTraits()
+            // iOS forms size a TextEditor to its content, so an unpinned
+            // height grows line by line as you type. Fix the height and the
+            // text scrolls inside it; Expand Editor is the route to more
+            // room. The macOS inspector constrains the editor externally,
+            // so a minimum suffices there.
+            #if os(iOS)
+            .frame(height: 260)
+            #else
             .frame(minHeight: 220)
+            #endif
             .onChange(of: selection) { _, _ in recomputeCaret() }
             .onAppear {
                 text = highlighted(AttributedString(script))
