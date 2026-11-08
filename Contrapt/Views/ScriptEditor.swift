@@ -234,35 +234,34 @@ struct ScriptFormSection: View {
     var body: some View {
         Section(title) {
             ScriptEditor(script: $script)
-            // One row of actions where the column is wide enough (the macOS
-            // inspector); the narrow iPad column gets two rows — four
-            // buttons squeezed into one line wrapped their labels mid-word
-            // ("Ex-plain"). Every labeled button is fixedSize so a candidate
-            // reports its honest width: without that, the HStack "fits" any
-            // width by truncating its labels and ViewThatFits never falls
-            // through.
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    checkButton.fixedSize()
-                    ScriptExplainButton(objectLabel: title, script: script).fixedSize()
-                    ScriptWriteButton(objectLabel: title, script: $script).fixedSize()
-                    Spacer()
-                    expandButton
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        checkButton.fixedSize()
-                        Spacer()
-                        ScriptExplainButton(objectLabel: title, script: script).fixedSize()
-                    }
-                    HStack {
-                        ScriptWriteButton(objectLabel: title, script: $script).fixedSize()
-                        Spacer()
-                        expandButton
-                    }
-                }
+            // The actions. One row fits the macOS inspector; the narrow iPad
+            // column gets two ordinary form rows instead — four buttons in
+            // one line wrapped their labels mid-word, and the adaptive
+            // alternatives (ViewThatFits, fixedSize) made iOS 26's list
+            // layout drop the labels entirely. Plain rows, no magic.
+            #if os(macOS)
+            HStack {
+                checkButton
+                ScriptExplainButton(objectLabel: title, script: script)
+                ScriptWriteButton(objectLabel: title, script: $script)
+                Spacer()
+                expandButton
             }
             .buttonStyle(.borderless)
+            #else
+            HStack {
+                checkButton
+                Spacer()
+                ScriptExplainButton(objectLabel: title, script: script)
+            }
+            .buttonStyle(.borderless)
+            HStack {
+                ScriptWriteButton(objectLabel: title, script: $script)
+                Spacer()
+                expandButton
+            }
+            .buttonStyle(.borderless)
+            #endif
             if let checkResult {
                 checkResult.label
             }
